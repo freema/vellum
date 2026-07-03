@@ -1,0 +1,48 @@
+{
+  "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
+  "name": "io.github.freema/vellum",
+  "title": "vellum",
+  "description": "Lightweight self-hosted MCP server over a folder of markdown files. One Go binary, embedded web UI, no database.",
+  "repository": {
+    "url": "https://github.com/freema/vellum",
+    "source": "github"
+  },
+  "version": "0.1.0",
+  "packages": [
+    {
+      "registryType": "oci",
+      "registryBaseUrl": "https://ghcr.io",
+      "identifier": "ghcr.io/freema/vellum",
+      "version": "0.1.0",
+      "transport": {
+        "type": "streamable-http",
+        "url": "https://{host}/mcp"
+      },
+      "environmentVariables": [
+        {
+          "name": "VELLUM_VAULT_PATH",
+          "description": "Directory with the markdown vault (mount a volume here)",
+          "default": "/vault",
+          "isRequired": true
+        },
+        {
+          "name": "AUTH_ENABLED",
+          "description": "Enable OAuth 2.1 (single client secret). Required for public deployments.",
+          "default": "true",
+          "isRequired": false
+        },
+        {
+          "name": "VELLUM_CLIENT_SECRET",
+          "description": "Access key for the OAuth flow (openssl rand -hex 32)",
+          "isRequired": true,
+          "isSecret": true
+        },
+        {
+          "name": "VELLUM_ISSUER_URL",
+          "description": "Public HTTPS URL when behind a reverse proxy",
+          "isRequired": false
+        }
+      ]
+    }
+  ]
+}

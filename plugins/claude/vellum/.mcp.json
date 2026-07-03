@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "vellum": {
+      "type": "http",
+      "url": "${VELLUM_URL:-http://localhost:8080}/mcp"
+    }
+  }
+}

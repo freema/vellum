@@ -1,0 +1,9 @@
+# Local development overlay: build the image from the working tree.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+services:
+  vellum:
+    build:
+      context: .
+      args:
+        VERSION: dev
+    image: vellum:dev

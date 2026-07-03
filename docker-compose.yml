@@ -1,10 +1,7 @@
 services:
   vellum:
-    build:
-      context: .
-      args:
-        VERSION: dev
-    image: vellum:dev
+    image: ${VELLUM_IMAGE:-ghcr.io/freema/vellum:latest}
+    container_name: vellum
     restart: unless-stopped
     ports:
       # host port is overridable via VELLUM_PORT (e.g. in .env) when 8080 is taken
@@ -17,3 +14,12 @@ services:
       VELLUM_VAULT_PATH: /vault
     volumes:
       - ./vault:/vault
+    # hardening (recycled from openclaw-mcp): the binary only ever writes
+    # into the mounted vault; the root filesystem stays read-only
+    read_only: true
+    security_opt:
+      - no-new-privileges
+    deploy:
+      resources:
+        limits:
+          memory: 256M

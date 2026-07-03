@@ -1,0 +1,10 @@
+{
+  "name": "vellum",
+  "description": "Connect Claude to your self-hosted vellum markdown vault: read, write, search, tags, tasks and backlinks.",
+  "version": "0.1.0",
+  "author": {
+    "name": "Tomas Grasl"
+  },
+  "repository": "https://github.com/freema/vellum",
+  "license": "MIT"
+}

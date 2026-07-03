@@ -37,9 +37,9 @@ tasks:
       - docker build --build-arg VERSION={{.VERSION}} -t vellum:local .
 
   docker-run:
-    desc: Build and start via docker compose
+    desc: Build and start via docker compose (dev overlay builds locally)
     cmds:
-      - docker compose up -d --build
+      - docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 
   docker-stop:
     desc: Stop the compose stack

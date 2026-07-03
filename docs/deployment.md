@@ -19,6 +19,18 @@ the shared Caddy reverse proxy from the openclaw stack. Public URL:
   No watchtower — we always know which version runs (pin it in `.env` via
   `VELLUM_IMAGE`).
 
+## Reverse proxy gotchas (learned the hard way in openclaw-mcp)
+
+- **`VELLUM_ISSUER_URL` must be the public HTTPS URL.** Without it the
+  OAuth metadata advertises `http://localhost:<port>` and every client
+  fails after the authorize step.
+- **`TRUST_PROXY=1` behind Caddy/Traefik/nginx.** Rate limiting keys on
+  the client IP; behind a proxy that means reading `X-Forwarded-For`,
+  which is only safe (and only done) when this flag is set.
+- **The connector URL must end with `/mcp`.** The bare domain is not the
+  MCP endpoint — connecting Claude to `https://host/` instead of
+  `https://host/mcp` yields a 404 after OAuth.
+
 ## Release → server cycle
 
 1. Tag `v*` → GitHub Actions builds the multi-arch image → GHCR.
