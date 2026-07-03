@@ -62,6 +62,14 @@ func main() {
 		}
 	}
 
+	index := vault.NewIndex(v)
+	start := time.Now()
+	if err := index.Build(); err != nil {
+		logger.Error("build metadata index", "error", err)
+		os.Exit(1)
+	}
+	logger.Info("metadata index built", "notes", index.Len(), "took", time.Since(start).String())
+
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
 		Handler:           httpapi.NewRouter(version),
