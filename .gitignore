@@ -1,0 +1,23 @@
+# Binaries
+/bin/
+/vellum
+*.exe
+
+# Test & coverage
+*.out
+coverage.html
+
+# Local vault data (compose volume)
+/vault/
+
+# Env
+.env
+
+# Node / SPA build (embedded via go:embed later)
+node_modules/
+web/dist/
+
+# Editor / OS
+.DS_Store
+.idea/
+.vscode/
