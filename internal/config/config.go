@@ -2,7 +2,10 @@
 // vellum has no config database: everything is env (and later vellum.yaml).
 package config
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // Config holds the runtime configuration.
 type Config struct {
@@ -19,6 +22,10 @@ type Config struct {
 	InboxDir    string
 	ProjectsDir string
 	ArchiveDir  string
+
+	// AllowedOrigins are browser origins allowed to reach /mcp
+	// (env VELLUM_ALLOWED_ORIGINS, comma-separated).
+	AllowedOrigins []string
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -30,7 +37,23 @@ func Load() Config {
 		InboxDir:      getenv("VELLUM_INBOX_DIR", "inbox"),
 		ProjectsDir:   getenv("VELLUM_PROJECTS_DIR", "projects"),
 		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
+		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
+			[]string{"https://claude.ai", "https://claude.com"}),
 	}
+}
+
+func getlist(key string, fallback []string) []string {
+	raw := os.Getenv(key)
+	if raw == "" {
+		return fallback
+	}
+	var out []string
+	for _, s := range strings.Split(raw, ",") {
+		if s = strings.TrimSpace(s); s != "" {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 func getenv(key, fallback string) string {

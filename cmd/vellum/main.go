@@ -14,8 +14,11 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/modelcontextprotocol/go-sdk/mcp"
+
 	"github.com/freema/vellum/internal/config"
 	"github.com/freema/vellum/internal/httpapi"
+	"github.com/freema/vellum/internal/mcpserver"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -25,6 +28,7 @@ var version = "dev"
 func main() {
 	healthcheck := flag.Bool("healthcheck", false, "probe the running server's /healthz and exit (used by Docker HEALTHCHECK)")
 	showVersion := flag.Bool("version", false, "print version and exit")
+	mcpStdio := flag.Bool("mcp-stdio", false, "serve MCP over stdio instead of HTTP (for local `claude mcp add`)")
 	flag.Parse()
 
 	if *showVersion {
@@ -70,9 +74,33 @@ func main() {
 	}
 	logger.Info("metadata index built", "notes", index.Len(), "took", time.Since(start).String())
 
+	mcpSrv := mcpserver.New(mcpserver.Deps{
+		Vault:    v,
+		Index:    index,
+		Searcher: vault.NewScanSearcher(v, index),
+		Structure: vault.Structure{
+			Inbox:    cfg.InboxDir,
+			Projects: cfg.ProjectsDir,
+			Archive:  cfg.ArchiveDir,
+		},
+		Version: version,
+	})
+
+	if *mcpStdio {
+		logger.Info("serving MCP over stdio", "vault", cfg.VaultPath)
+		if err := mcpSrv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
+			logger.Error("mcp stdio server failed", "error", err)
+			os.Exit(1)
+		}
+		return
+	}
+
 	srv := &http.Server{
-		Addr:              ":" + cfg.Port,
-		Handler:           httpapi.NewRouter(version),
+		Addr: ":" + cfg.Port,
+		Handler: httpapi.NewRouter(version, httpapi.Options{
+			MCPHandler:     mcpserver.Handler(mcpSrv),
+			AllowedOrigins: cfg.AllowedOrigins,
+		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}
 
