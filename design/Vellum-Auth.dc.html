@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<meta name="design_doc_mode" content="canvas">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body { background:#E7E1D6; }
+  ::selection { background:#F1EAE0; color:#2A2622; }
+</style>
+</helmet>
+
+<div style="display:flex; gap:44px; padding:52px; font-family:'Inter',system-ui,sans-serif; color:#2A2622; -webkit-font-smoothing:antialiased; align-items:flex-start;">
+
+  <!-- ============ 1a · CONNECT / LOGIN ============ -->
+  <section id="1a" style="flex:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFFFFF; background:#8B6F47; border-radius:5px; padding:2px 8px;">1a</span>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#6E665B;">connect / login</span>
+    </div>
+    <div style="width:440px; background:#FAF7F2; border:1px solid #E0D9CD; border-radius:12px; padding:48px 44px; display:flex; flex-direction:column; align-items:center;">
+      <!-- mark -->
+      <div style="position:relative; width:52px; height:52px; margin-bottom:22px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:10px;"></div>
+        <div style="position:absolute; top:0; right:0; width:18px; height:18px; background:#FAF7F2; border-bottom-left-radius:7px;"></div>
+        <div style="position:absolute; top:0; right:0; width:18px; height:18px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:5px;"><span style="font-family:'Newsreader',serif; font-size:30px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <div style="font-family:'Newsreader',serif; font-size:30px; font-weight:500; letter-spacing:-0.01em; margin-bottom:6px;">vellum</div>
+      <div style="font-size:13.5px; color:#7A7266; margin-bottom:32px;">Connect to your vault</div>
+
+      <div style="width:100%; margin-bottom:16px;">
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Client secret</label>
+        <div style="display:flex; align-items:center; gap:8px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:11px 13px;">
+          <span style="color:#9A938A; font-size:13px;">⚿</span>
+          <span style="flex:1; font-family:'JetBrains Mono',monospace; font-size:14px; color:#2A2622; letter-spacing:0.18em;">••••••••••••••••</span>
+          <span style="color:#9A938A; font-size:12px; cursor:pointer;">show</span>
+        </div>
+      </div>
+
+      <button style="width:100%; font-family:inherit; font-size:14px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:7px; padding:11px 0; cursor:pointer; margin-bottom:22px;" style-hover="background:#7A6039; border-color:#7A6039;">Connect</button>
+
+      <div style="width:100%; border-top:1px solid #EDE6DB; padding-top:18px;">
+        <div style="font-size:11px; color:#9A938A; margin-bottom:8px;">Or register this host with the agent</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; color:#6E665B; background:#F2ECE2; border:1px solid #E8E2D8; border-radius:6px; padding:11px 12px;">claude mcp add --transport http \<br>&nbsp;&nbsp;vellum https://your-host/mcp</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ 1b · OAUTH2 AUTHORIZE + TOOL SELECTION ============ -->
+  <section id="1b" style="flex:none;">
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#FFFFFF; background:#8B6F47; border-radius:5px; padding:2px 8px;">1b</span>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#6E665B;">oauth2 · authorize session &amp; pick tools</span>
+    </div>
+    <div style="width:520px; background:#FAF7F2; border:1px solid #E0D9CD; border-radius:12px; overflow:hidden;">
+      <!-- header -->
+      <div style="padding:30px 34px 22px; border-bottom:1px solid #EDE6DB;">
+        <div style="display:flex; align-items:center; justify-content:center; gap:16px; margin-bottom:22px;">
+          <!-- vellum mark -->
+          <div style="position:relative; width:40px; height:40px;">
+            <div style="position:absolute; inset:0; background:#8B6F47; border-radius:8px;"></div>
+            <div style="position:absolute; top:0; right:0; width:14px; height:14px; background:#FAF7F2; border-bottom-left-radius:5px;"></div>
+            <div style="position:absolute; top:0; right:0; width:14px; height:14px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+            <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:4px;"><span style="font-family:'Newsreader',serif; font-size:23px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+          </div>
+          <span style="color:#CFC6B7; font-family:'JetBrains Mono',monospace; font-size:14px;">←→</span>
+          <!-- agent chip -->
+          <div style="width:40px; height:40px; border-radius:8px; background:#FFFFFF; border:1px solid #E0D9CD; display:flex; align-items:center; justify-content:center; font-family:'Newsreader',serif; font-size:20px; color:#7A7266;">✳</div>
+        </div>
+        <div style="text-align:center; font-family:'Newsreader',serif; font-size:21px; font-weight:500; line-height:1.3;">Authorize <span style="font-style:italic;">Claude</span> to connect</div>
+        <div style="text-align:center; font-size:13px; color:#7A7266; margin-top:6px;">Signed in as <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">vault@localhost</span></div>
+      </div>
+
+      <!-- tool selection -->
+      <div style="padding:22px 34px 8px;">
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
+          <div style="font-size:13px; font-weight:600;">Tools for this session</div>
+          <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">{{ selectedCount }} of {{ totalCount }}</div>
+        </div>
+        <div style="font-size:12px; color:#7A7266; margin-bottom:16px; line-height:1.5;">Choose which vault tools the agent may call. You can change this on the next connection.</div>
+
+        <sc-for list="{{ tools }}" as="t" hint-placeholder-count="6">
+          <div onClick="{{ t.toggle }}" style="display:flex; align-items:center; gap:13px; padding:11px 12px; border:1px solid {{ t.borderColor }}; background:{{ t.bg }}; border-radius:8px; margin-bottom:8px; cursor:pointer;">
+            <span style="width:18px; height:18px; border-radius:5px; border:1.5px solid {{ t.boxBorder }}; background:{{ t.boxBg }}; color:#FFFFFF; display:inline-flex; align-items:center; justify-content:center; font-size:11px; flex:none;">{{ t.check }}</span>
+            <div style="flex:1; min-width:0;">
+              <div style="display:flex; align-items:center; gap:9px;">
+                <span style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#2A2622;">{{ t.name }}</span>
+                <span style="font-family:'JetBrains Mono',monospace; font-size:9.5px; color:{{ t.kindColor }}; background:{{ t.kindBg }}; border-radius:4px; padding:1px 6px; text-transform:uppercase; letter-spacing:0.04em;">{{ t.kind }}</span>
+              </div>
+              <div style="font-size:12px; color:#7A7266; margin-top:3px;">{{ t.desc }}</div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+
+      <!-- scopes note -->
+      <div style="padding:6px 34px 20px;">
+        <div style="display:flex; align-items:center; gap:8px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">
+          <span>scope:</span>
+          <span style="color:#8B6F47;">vault.read</span>
+          <span style="color:{{ writeScopeColor }};">vault.write</span>
+          <span style="color:{{ deleteScopeColor }};">vault.delete</span>
+        </div>
+      </div>
+
+      <!-- actions -->
+      <div style="display:flex; gap:12px; padding:18px 34px; border-top:1px solid #EDE6DB; background:#F6F1E8;">
+        <button style="flex:none; font-family:inherit; font-size:13.5px; font-weight:500; color:#7A7266; background:transparent; border:1px solid #E0D9CD; border-radius:7px; padding:10px 18px; cursor:pointer;" style-hover="background:#EEE7DC;">Deny</button>
+        <button style="flex:1; font-family:inherit; font-size:13.5px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:7px; padding:10px 0; cursor:pointer;" style-hover="background:#7A6039; border-color:#7A6039;">Authorize {{ selectedCount }} tool{{ plural }} · start session</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    tools: [
+      { name: "read_note",   kind: "read",   desc: "Read any note in the vault" },
+      { name: "search",      kind: "read",   desc: "Fulltext + tag search across the vault" },
+      { name: "list_folder", kind: "read",   desc: "List folders and note metadata" },
+      { name: "write_note",  kind: "write",  desc: "Create and edit notes, set status & tags" },
+      { name: "move_note",   kind: "write",  desc: "Move notes between folders" },
+      { name: "delete_note", kind: "delete", desc: "Permanently remove a note" },
+    ],
+    on: [true, true, true, true, false, false],
+  };
+
+  renderVals() {
+    const { tools, on } = this.state;
+    const kindStyle = {
+      read:   { color: "#4A714A", bg: "#E9F0E7" },
+      write:  { color: "#976A28", bg: "#F7EEDD" },
+      delete: { color: "#8A3E29", bg: "#F7ECE8" },
+    };
+    const rows = tools.map((t, i) => {
+      const active = on[i];
+      const ks = kindStyle[t.kind];
+      return {
+        name: t.name, desc: t.desc, kind: t.kind,
+        kindColor: ks.color, kindBg: ks.bg,
+        check: active ? "✓" : "",
+        bg: active ? "#FFFFFF" : "#F4EFE6",
+        borderColor: active ? "#E0D4C1" : "#EAE3D7",
+        boxBorder: active ? "#8B6F47" : "#CFC6B7",
+        boxBg: active ? "#8B6F47" : "transparent",
+        toggle: () => this.setState(s => {
+          const next = s.on.slice(); next[i] = !next[i]; return { on: next };
+        }),
+      };
+    });
+    const selectedCount = on.filter(Boolean).length;
+    const anyWrite = on[3] || on[4];
+    const anyDelete = on[5];
+    return {
+      tools: rows,
+      selectedCount,
+      totalCount: tools.length,
+      plural: selectedCount === 1 ? "" : "s",
+      writeScopeColor: anyWrite ? "#8B6F47" : "#CFC6B7",
+      deleteScopeColor: anyDelete ? "#8B6F47" : "#CFC6B7",
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body { background: #EFEAE1; }
+  ::selection { background: #F1EAE0; color: #2A2622; }
+</style>
+</helmet>
+
+<div style="background:#EFEAE1; min-height:100vh; font-family:'Inter',system-ui,sans-serif; color:#2A2622; -webkit-font-smoothing:antialiased; padding:56px 0 96px;">
+<div style="max-width:1040px; margin:0 auto; padding:0 40px;">
+
+  <!-- ===== MASTHEAD ===== -->
+  <header style="display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid #E8E2D8; padding-bottom:28px; margin-bottom:8px;">
+    <div>
+      <div style="font-family:'Newsreader',serif; font-size:46px; font-weight:500; letter-spacing:-0.01em; line-height:1;">vellum</div>
+      <div style="font-size:14px; color:#7A7266; margin-top:12px; max-width:440px; line-height:1.5;">Design system for a self-hosted markdown notes server. Paper and ink — calm, warm, quiet.</div>
+    </div>
+    <div style="text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; line-height:1.8;">
+      <div>v0.1 · foundations</div>
+      <div style="color:#8B6F47;">light + midnight ink</div>
+    </div>
+  </header>
+
+  <!-- section index -->
+  <div style="display:flex; flex-wrap:wrap; gap:6px 18px; margin:24px 0 64px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">
+    <span>01 · color</span><span>02 · type</span><span>03 · buttons</span><span>04 · inputs</span><span>05 · tags &amp; status</span><span>06 · lists &amp; tree</span><span>07 · search</span><span>08 · markdown</span><span>09 · feedback</span><span>10 · midnight ink</span>
+  </div>
+
+  <!-- ===== 01 COLOR ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">01</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Color</h2>
+      <span style="font-size:13px; color:#7A7266;">90% neutral. Accent used sparingly.</span>
+    </div>
+
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">Surface &amp; ink</div>
+    <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:12px; margin-bottom:32px;">
+      <div><div style="height:72px; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">bg</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#FAF7F2</div></div>
+      <div><div style="height:72px; background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">bg-panel</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#FFFFFF</div></div>
+      <div><div style="height:72px; background:#2A2622; border:1px solid #E8E2D8; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">ink</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#2A2622</div></div>
+      <div><div style="height:72px; background:#7A7266; border:1px solid #E8E2D8; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">ink-muted</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#7A7266</div></div>
+      <div><div style="height:72px; background:#E8E2D8; border:1px solid #E0D9CD; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">line</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#E8E2D8</div></div>
+      <div><div style="height:72px; background:#F1EAE0; border:1px solid #E8E2D8; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">accent-soft</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#F1EAE0</div></div>
+    </div>
+
+    <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">Accent &amp; status</div>
+    <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:12px;">
+      <div><div style="height:72px; background:#8B6F47; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">accent</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#8B6F47</div></div>
+      <div><div style="height:72px; background:#9A938A; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">backlog</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#9A938A</div></div>
+      <div><div style="height:72px; background:#C08A3E; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">in-progress</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#C08A3E</div></div>
+      <div><div style="height:72px; background:#5F8D5F; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">done</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#5F8D5F</div></div>
+      <div><div style="height:72px; background:#B3543D; border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">danger</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#B3543D</div></div>
+      <div><div style="height:72px; background:linear-gradient(135deg,#16141F 50%,#1E1B29 50%); border-radius:8px;"></div><div style="font-size:12px; margin-top:8px; font-weight:500;">midnight</div><div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">#16141F</div></div>
+    </div>
+  </section>
+
+  <!-- ===== 02 TYPE ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">02</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Typography</h2>
+      <span style="font-size:13px; color:#7A7266;">Newsreader · Inter · JetBrains Mono</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:28px 30px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Newsreader — titles</div>
+        <div style="font-family:'Newsreader',serif; font-size:34px; font-weight:500; letter-spacing:-0.01em; line-height:1.15; margin-bottom:8px;">The quiet margins of a page</div>
+        <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:400; font-style:italic; color:#7A7266;">Serif carries the parchment character</div>
+      </div>
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:28px 30px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:18px;">Inter — interface</div>
+        <div style="font-size:16px; font-weight:600; margin-bottom:6px;">Semibold 16 — section labels</div>
+        <div style="font-size:14px; line-height:1.6; margin-bottom:6px;">Regular 14 — list and body copy set in the interface, sized between 13 and 16 pixels.</div>
+        <div style="font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B6F47;">projects/vellum/roadmap.md</div>
+      </div>
+    </div>
+    <div style="display:flex; gap:32px; margin-top:20px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; flex-wrap:wrap;">
+      <span>H1 / 34 · Newsreader 500</span><span>Body / 15 · Inter 400</span><span>List / 13–14 · Inter</span><span>Code / 13 · JetBrains Mono</span><span>line-height 1.6</span>
+    </div>
+  </section>
+
+  <!-- ===== 03 BUTTONS ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">03</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Buttons</h2>
+    </div>
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:32px; display:flex; align-items:center; gap:14px; flex-wrap:wrap;">
+      <button style="font-family:inherit; font-size:13.5px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:6px; padding:9px 16px; cursor:pointer;" style-hover="background:#7A6039; border-color:#7A6039;">Save note</button>
+      <button style="font-family:inherit; font-size:13.5px; font-weight:500; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:9px 16px; cursor:pointer;" style-hover="background:#FAF7F2; border-color:#CFC6B7;">Move to…</button>
+      <button style="font-family:inherit; font-size:13.5px; font-weight:500; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; padding:9px 14px; cursor:pointer;" style-hover="background:#F1EAE0; color:#2A2622;">Cancel</button>
+      <button style="font-family:inherit; font-size:13.5px; font-weight:500; color:#B3543D; background:transparent; border:1px solid #E5CCC4; border-radius:6px; padding:9px 16px; cursor:pointer;" style-hover="background:#F7ECE8;">Delete</button>
+      <div style="width:1px; height:32px; background:#E8E2D8; margin:0 6px;"></div>
+      <button style="font-family:inherit; font-size:15px; color:#7A7266; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; width:34px; height:34px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#FAF7F2; color:#2A2622;">＋</button>
+      <button style="font-family:inherit; font-size:15px; color:#7A7266; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; width:34px; height:34px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#FAF7F2; color:#2A2622;">⋯</button>
+    </div>
+    <div style="display:flex; gap:24px; margin-top:14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">
+      <span>primary</span><span>secondary</span><span>ghost</span><span>danger</span><span>icon</span>
+    </div>
+  </section>
+
+  <!-- ===== 04 INPUTS ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">04</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Inputs</h2>
+    </div>
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:32px; display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+      <div>
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Text field</label>
+        <input value="roadmap" style="width:100%; font-family:inherit; font-size:14px; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:9px 12px;" style-focus="border-color:#8B6F47; outline:none;">
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Search — with shortcut hint</label>
+        <div style="display:flex; align-items:center; gap:8px; background:#FAF7F2; border:1px solid #E0D9CD; border-radius:6px; padding:9px 12px;">
+          <span style="color:#9A938A; font-size:14px;">⌕</span>
+          <span style="flex:1; font-size:14px; color:#9A938A;">Search notes…</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FFFFFF; border:1px solid #E8E2D8; border-radius:4px; padding:2px 6px;">⌘K</span>
+        </div>
+      </div>
+      <div style="grid-column:1 / -1;">
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Textarea</label>
+        <textarea style="width:100%; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.6; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:12px; resize:none; height:80px;" style-focus="border-color:#8B6F47; outline:none;">## Notes
+- self-hosted, single binary
+- MCP over http</textarea>
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Select — move to folder</label>
+        <div style="display:flex; align-items:center; justify-content:space-between; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:9px 12px; cursor:pointer; font-size:14px;">
+          <span>projects / vellum</span><span style="color:#9A938A; font-size:11px;">▾</span>
+        </div>
+      </div>
+      <div>
+        <label style="display:block; font-size:12px; color:#7A7266; margin-bottom:8px;">Select — status</label>
+        <div style="display:flex; align-items:center; justify-content:space-between; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:9px 12px; cursor:pointer; font-size:14px;">
+          <span style="display:inline-flex; align-items:center; gap:8px;"><span style="width:8px; height:8px; border-radius:50%; background:#C08A3E;"></span>In progress</span><span style="color:#9A938A; font-size:11px;">▾</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 05 TAGS & STATUS ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">05</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Tags &amp; status</h2>
+      <span style="font-size:13px; color:#7A7266;">every note is a task or knowledge</span>
+    </div>
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:28px; margin-bottom:24px;">
+      <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:16px;">Note type</div>
+      <div style="display:flex; gap:32px; flex-wrap:wrap;">
+        <div style="display:flex; align-items:center; gap:11px;">
+          <span style="width:9px; height:9px; border-radius:50%; background:#C08A3E; flex:none;"></span>
+          <div><div style="font-size:14px; font-weight:500;">task</div><div style="font-size:12px; color:#7A7266;">round dot · carries a status &amp; can be filtered</div></div>
+        </div>
+        <div style="width:1px; align-self:stretch; background:#EFE9DF;"></div>
+        <div style="display:flex; align-items:center; gap:11px;">
+          <span style="width:10px; height:10px; border-radius:2px; background:#C4BBA9; flex:none;"></span>
+          <div><div style="font-size:14px; font-weight:500;">knowledge</div><div style="font-size:12px; color:#7A7266;">rounded square · reference note, no status</div></div>
+        </div>
+      </div>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:28px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:16px;">Tag chips</div>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <span style="display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:4px 8px;">#go</span>
+          <span style="display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:4px 8px;">#mcp</span>
+          <span style="display:inline-flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#2A2622; background:#F1EAE0; border:1px solid #E0D4C1; border-radius:5px; padding:4px 6px 4px 8px;">#roadmap<span style="color:#9A938A; cursor:pointer; font-size:13px;">×</span></span>
+        </div>
+        <div style="font-size:12px; color:#7A7266; margin-top:14px;">Default · removable · clickable filter</div>
+      </div>
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:28px;">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:16px;">Task status</div>
+        <div style="display:flex; gap:10px; flex-wrap:wrap; margin-bottom:16px;">
+          <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#6E6A62; background:#F3F1EC; border-radius:5px; padding:4px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:#9A938A;"></span>Backlog</span>
+          <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#976A28; background:#F7EEDD; border-radius:5px; padding:4px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E;"></span>In progress</span>
+          <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#4A714A; background:#E9F0E7; border-radius:5px; padding:4px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:#5F8D5F;"></span>Done</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:18px;">
+          <span style="display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#7A7266;"><span style="width:8px; height:8px; border-radius:50%; background:#9A938A;"></span>dot</span>
+          <span style="display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#7A7266;"><span style="width:8px; height:8px; border-radius:50%; background:#C08A3E;"></span>dot</span>
+          <span style="display:inline-flex; align-items:center; gap:7px; font-size:12px; color:#7A7266;"><span style="width:8px; height:8px; border-radius:50%; background:#5F8D5F;"></span>dot</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 06 LISTS & TREE ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">06</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Tree &amp; note list</h2>
+    </div>
+    <div style="display:grid; grid-template-columns:240px 1fr; gap:24px;">
+      <!-- tree -->
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:14px 12px;">
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer;">
+          <span style="color:#9A938A; font-size:12px;">▾</span><span style="color:#9A938A;">▢</span><span style="flex:1;">Inbox</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#FFFFFF; background:#8B6F47; border-radius:9px; padding:1px 7px;">12</span>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer; background:#F1EAE0; color:#2A2622;">
+          <span style="color:#8B6F47; font-size:12px;">▾</span><span style="color:#8B6F47;">▤</span><span style="flex:1; font-weight:500;">Projects</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">28</span>
+        </div>
+        <div style="padding-left:22px;">
+          <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:#8B6F47; background:#F7F2EA;"><span>▤</span><span style="flex:1; font-weight:500;">vellum</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">9</span></div>
+          <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:#7A7266;"><span>▤</span><span style="flex:1;">physiohub</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">14</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer; color:#7A7266;">
+          <span style="font-size:12px;">▸</span><span>▢</span><span style="flex:1;">Archive</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">63</span>
+        </div>
+      </div>
+      <!-- note list -->
+      <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; overflow:hidden;">
+        <div style="padding:16px 20px; border-bottom:1px solid #F0EBE2; cursor:pointer;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:16px; font-weight:500;">Roadmap — Q3 milestones</div></div>
+          <div style="font-size:13px; color:#7A7266; line-height:1.5; margin-bottom:8px;">Ship the MCP write tools and the embedded SPA. Wire folder move plus the command palette before…</div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#go</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#mcp</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">2d</span></div>
+        </div>
+        <div style="padding:16px 20px; border-bottom:1px solid #F0EBE2; cursor:pointer; background:#FCFAF6;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#5F8D5F; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:16px; font-weight:500;">Embedded SPA build</div></div>
+          <div style="font-size:13px; color:#7A7266; line-height:1.5; margin-bottom:8px;">go:embed the dist folder, serve index at root, fall through to the API router for /mcp…</div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#build</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">5d</span></div>
+        </div>
+        <div style="padding:16px 20px; cursor:pointer;">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#9A938A; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:16px; font-weight:500;">Frontmatter schema</div></div>
+          <div style="font-size:13px; color:#7A7266; line-height:1.5; margin-bottom:8px;">Decide the minimal YAML: title, tags, status, created. Everything else stays in the body…</div>
+          <div style="display:flex; align-items:center; gap:8px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#spec</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">1w</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 07 SEARCH / COMMAND PALETTE ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">07</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Command palette</h2>
+      <span style="font-size:13px; color:#7A7266;">⌘K — fulltext + tag filter</span>
+    </div>
+    <div style="background:#EEE9E0; border:1px solid #E8E2D8; border-radius:10px; padding:44px; display:flex; justify-content:center;">
+      <div style="width:520px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:10px; box-shadow:0 12px 40px -12px rgba(42,38,34,0.22); overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid #F0EBE2;">
+          <span style="color:#9A938A; font-size:15px;">⌕</span>
+          <span style="flex:1; font-size:15px; color:#2A2622;">roadmap</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:4px; padding:2px 6px;">esc</span>
+        </div>
+        <div style="padding:6px;">
+          <div style="padding:10px 12px; border-radius:7px; background:#F1EAE0; cursor:pointer;">
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-family:'Newsreader',serif; font-size:15px; font-weight:500;">Roadmap — Q3 milestones</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">projects/vellum</span></div>
+            <div style="font-size:12.5px; color:#7A7266; margin-top:3px;">Ship the MCP write tools and the embedded SPA. Wire folder move plus the <span style="background:#E6D6B8; color:#5E4A23; border-radius:3px; padding:0 2px;">roadmap</span>…</div>
+          </div>
+          <div style="padding:10px 12px; border-radius:7px; cursor:pointer;">
+            <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-family:'Newsreader',serif; font-size:15px; font-weight:500;">2025 planning notes</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">archive</span></div>
+            <div style="font-size:12.5px; color:#7A7266; margin-top:3px;">Quarterly <span style="background:#E6D6B8; color:#5E4A23; border-radius:3px; padding:0 2px;">roadmap</span> review — carry the write-path work into…</div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid #F0EBE2; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">
+          <span>↑↓ navigate</span><span>↵ open</span><span>#tag filter</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 08 MARKDOWN ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">08</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Markdown preview</h2>
+    </div>
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:40px 44px; max-width:720px;">
+      <h1 style="font-family:'Newsreader',serif; font-size:30px; font-weight:600; margin:0 0 6px; letter-spacing:-0.01em;">Vellum roadmap</h1>
+      <p style="font-size:15px; line-height:1.7; color:#3A342E; margin:0 0 18px;">A calm window into a folder of markdown. The interface stays out of the way while an <a href="#" style="color:#8B6F47; text-decoration:none; border-bottom:1px solid #D8C9AF;">agent</a> does most of the writing.</p>
+      <h2 style="font-family:'Newsreader',serif; font-size:21px; font-weight:600; margin:26px 0 10px;">Near term</h2>
+      <ul style="font-size:15px; line-height:1.75; color:#3A342E; margin:0 0 16px; padding-left:22px;">
+        <li>Embedded SPA served from the binary</li>
+        <li>Command palette over the vault</li>
+      </ul>
+      <div style="margin:0 0 16px;">
+        <div style="font-size:15px; line-height:1.9; color:#3A342E; display:flex; align-items:center; gap:9px;"><span style="width:16px; height:16px; border:1.5px solid #5F8D5F; border-radius:4px; background:#5F8D5F; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px;">✓</span>Frontmatter schema locked</div>
+        <div style="font-size:15px; line-height:1.9; color:#3A342E; display:flex; align-items:center; gap:9px;"><span style="width:16px; height:16px; border:1.5px solid #CFC6B7; border-radius:4px; display:inline-block;"></span>Write tools over MCP</div>
+      </div>
+      <blockquote style="margin:0 0 16px; padding:4px 0 4px 18px; border-left:2px solid #D8C9AF; color:#7A7266; font-family:'Newsreader',serif; font-style:italic; font-size:15.5px;">The tool should feel like paper you can search.</blockquote>
+      <p style="font-size:15px; line-height:1.7; color:#3A342E; margin:0 0 12px;">Link a note with <a href="#" style="color:#8B6F47; text-decoration:none; background:#F1EAE0; border-radius:4px; padding:1px 5px; font-family:'JetBrains Mono',monospace; font-size:13px;">[[frontmatter schema]]</a> and it resolves in the vault.</p>
+      <pre style="font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.6; background:#FAF7F2; border:1px solid #EFE8DC; border-radius:6px; padding:14px 16px; overflow:auto; margin:0 0 18px; color:#4A443C;">claude mcp add --transport http \
+  vellum https://localhost:8080/mcp</pre>
+      <table style="width:100%; border-collapse:collapse; font-size:14px;">
+        <thead><tr><th style="text-align:left; padding:8px 12px; border-bottom:1.5px solid #E0D9CD; font-weight:600; color:#2A2622;">Field</th><th style="text-align:left; padding:8px 12px; border-bottom:1.5px solid #E0D9CD; font-weight:600; color:#2A2622;">Type</th></tr></thead>
+        <tbody>
+          <tr><td style="padding:8px 12px; border-bottom:1px solid #F0EBE2; font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B6F47;">status</td><td style="padding:8px 12px; border-bottom:1px solid #F0EBE2; color:#7A7266;">enum</td></tr>
+          <tr><td style="padding:8px 12px; font-family:'JetBrains Mono',monospace; font-size:13px; color:#8B6F47;">tags</td><td style="padding:8px 12px; color:#7A7266;">string[]</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===== 09 FEEDBACK ===== -->
+  <section style="margin-bottom:88px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">09</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Feedback</h2>
+      <span style="font-size:13px; color:#7A7266;">toast · modal · empty state · breadcrumb · status bar</span>
+    </div>
+    <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; align-items:start;">
+      <!-- toasts -->
+      <div style="display:flex; flex-direction:column; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:8px; padding:12px 14px; font-size:13.5px;"><span style="width:8px; height:8px; border-radius:50%; background:#5F8D5F;"></span>Note saved <span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">⌘S</span></div>
+        <div style="display:flex; align-items:center; gap:10px; background:#F7ECE8; border:1px solid #E5CCC4; border-radius:8px; padding:12px 14px; font-size:13.5px; color:#8A3E29;"><span style="width:8px; height:8px; border-radius:50%; background:#B3543D;"></span>Couldn't write to vault — check permissions</div>
+        <!-- breadcrumb + status bar -->
+        <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:8px; padding:14px 16px;">
+          <div style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#7A7266;"><span style="color:#9A938A;">projects</span> / <span style="color:#9A938A;">vellum</span> / <span style="color:#8B6F47;">roadmap.md</span></div>
+        </div>
+        <div style="display:flex; align-items:center; gap:14px; background:#F3F1EC; border:1px solid #E8E2D8; border-radius:8px; padding:9px 16px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#7A7266;">
+          <span>projects/vellum/roadmap.md</span><span style="flex:1;"></span><span>128 notes</span><span style="color:#5F8D5F;">Saved ✓</span>
+        </div>
+      </div>
+      <!-- modal + empty -->
+      <div style="display:flex; flex-direction:column; gap:24px;">
+        <div style="background:#FFFFFF; border:1px solid #E0D9CD; border-radius:10px; padding:24px; box-shadow:0 12px 40px -16px rgba(42,38,34,0.2);">
+          <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:500; margin-bottom:8px;">Delete this note?</div>
+          <div style="font-size:13.5px; color:#7A7266; line-height:1.55; margin-bottom:20px;"><span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47;">roadmap.md</span> will be removed from the vault. This can't be undone.</div>
+          <div style="display:flex; justify-content:flex-end; gap:10px;">
+            <button style="font-family:inherit; font-size:13px; font-weight:500; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; padding:8px 14px; cursor:pointer;">Cancel</button>
+            <button style="font-family:inherit; font-size:13px; font-weight:500; color:#FFFFFF; background:#B3543D; border:1px solid #B3543D; border-radius:6px; padding:8px 16px; cursor:pointer;">Delete</button>
+          </div>
+        </div>
+        <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:10px; padding:40px 24px; text-align:center;">
+          <div style="font-family:'Newsreader',serif; font-size:30px; color:#D8C9AF; margin-bottom:12px;">∅</div>
+          <div style="font-family:'Newsreader',serif; font-size:17px; font-weight:500; margin-bottom:6px;">Inbox zero</div>
+          <div style="font-size:13px; color:#7A7266; line-height:1.5;">Nothing to process. New captures land here.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== 10 MIDNIGHT INK ===== -->
+  <section style="margin-bottom:40px;">
+    <div style="display:flex; align-items:baseline; gap:14px; margin-bottom:28px;">
+      <span style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47;">10</span>
+      <h2 style="font-family:'Newsreader',serif; font-weight:500; font-size:26px; margin:0;">Midnight ink</h2>
+      <span style="font-size:13px; color:#7A7266;">dark mode — never pure black</span>
+    </div>
+    <div style="background:#16141F; border:1px solid #2E2A3A; border-radius:10px; padding:36px; display:grid; grid-template-columns:1fr 1fr; gap:24px;">
+      <div>
+        <div style="font-family:'Newsreader',serif; font-size:24px; font-weight:500; color:#E8E4DC; margin-bottom:6px;">Roadmap — Q3</div>
+        <div style="font-size:13.5px; color:#8F8A9B; line-height:1.6; margin-bottom:16px;">Ship the MCP write tools and the embedded SPA before the folder-move work lands.</div>
+        <div style="display:flex; gap:8px; margin-bottom:20px;">
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#C2A878; background:#2A2433; border-radius:5px; padding:3px 7px;">#go</span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#C2A878; background:#2A2433; border-radius:5px; padding:3px 7px;">#mcp</span>
+        </div>
+        <div style="display:flex; gap:10px;">
+          <button style="font-family:inherit; font-size:13px; font-weight:500; color:#16141F; background:#C2A878; border:none; border-radius:6px; padding:8px 15px; cursor:pointer;">Save</button>
+          <button style="font-family:inherit; font-size:13px; font-weight:500; color:#E8E4DC; background:transparent; border:1px solid #2E2A3A; border-radius:6px; padding:8px 15px; cursor:pointer;">Cancel</button>
+        </div>
+      </div>
+      <div style="background:#1E1B29; border:1px solid #2E2A3A; border-radius:8px; padding:16px 14px;">
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13px; color:#8F8A9B;"><span>▢</span><span style="flex:1;">Inbox</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#16141F; background:#C2A878; border-radius:9px; padding:1px 7px;">12</span></div>
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13px; color:#E8E4DC; background:#2A2433;"><span style="color:#C2A878;">▤</span><span style="flex:1; font-weight:500;">Projects</span></div>
+        <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13px; color:#8F8A9B;"><span>▢</span><span style="flex:1;">Archive</span></div>
+        <div style="height:1px; background:#2E2A3A; margin:10px 4px;"></div>
+        <div style="display:flex; align-items:center; gap:14px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#8F8A9B; padding:0 6px;">
+          <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E;"></span>2</span>
+          <span style="display:inline-flex; align-items:center; gap:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#5F8D5F;"></span>7</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer style="border-top:1px solid #E8E2D8; padding-top:20px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A; display:flex; justify-content:space-between;">
+    <span>vellum design system</span><span>paper · ink · quiet</span>
+  </footer>
+
+</div>
+</div>
+</x-dc>
+</body>
+</html>

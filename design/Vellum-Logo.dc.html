@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing:border-box; }
+  html, body { margin:0; padding:0; }
+  body { background:#EFEAE1; }
+  ::selection { background:#F1EAE0; color:#2A2622; }
+</style>
+</helmet>
+
+<div style="background:#EFEAE1; min-height:100vh; font-family:'Inter',system-ui,sans-serif; color:#2A2622; -webkit-font-smoothing:antialiased; padding:56px 0 96px;">
+<div style="max-width:1040px; margin:0 auto; padding:0 40px;">
+
+  <!-- masthead -->
+  <header style="display:flex; align-items:flex-end; justify-content:space-between; border-bottom:1px solid #E8E2D8; padding-bottom:24px; margin-bottom:56px;">
+    <div>
+      <div style="font-family:'Newsreader',serif; font-size:32px; font-weight:500; letter-spacing:-0.01em; line-height:1;">vellum — logo</div>
+      <div style="font-size:14px; color:#7A7266; margin-top:10px;">Wordmark, mark &amp; lockups. Paper and ink.</div>
+    </div>
+    <div style="text-align:right; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; line-height:1.8;">
+      <div>Newsreader 500</div>
+      <div style="color:#8B6F47;">the folded leaf</div>
+    </div>
+  </header>
+
+  <!-- ===== HERO MARK ===== -->
+  <section style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:12px; padding:64px; display:flex; align-items:center; gap:56px; margin-bottom:28px;">
+    <!-- the mark: page tile with folded corner -->
+    <div style="position:relative; width:132px; height:132px; flex:none;">
+      <div style="position:absolute; inset:0; background:#8B6F47; border-radius:20px;"></div>
+      <div style="position:absolute; top:0; right:0; width:44px; height:44px; background:#EFEAE1; border-bottom-left-radius:16px;"></div>
+      <div style="position:absolute; top:0; right:0; width:44px; height:44px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+      <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:14px;"><span style="font-family:'Newsreader',serif; font-size:74px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+    </div>
+    <div>
+      <div style="font-family:'Newsreader',serif; font-size:84px; font-weight:500; letter-spacing:-0.02em; line-height:0.9;">vellum</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47; margin-top:18px; letter-spacing:0.02em;">a calm window into a folder of markdown</div>
+    </div>
+  </section>
+
+  <!-- ===== MARK CONSTRUCTION NOTE ===== -->
+  <div style="display:flex; gap:14px; align-items:center; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; margin-bottom:56px; padding:0 4px;">
+    <span>mark = a leaf of parchment with a turned corner</span><span style="color:#CFC6B7;">·</span><span>serif “v” for vellum</span><span style="color:#CFC6B7;">·</span><span>radius 20 · fold 1/3</span>
+  </div>
+
+  <!-- ===== LOCKUPS ===== -->
+  <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">Lockups</div>
+  <div style="display:grid; grid-template-columns:1fr 1fr; gap:24px; margin-bottom:56px;">
+    <!-- horizontal -->
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:10px; padding:36px; display:flex; align-items:center; gap:16px;">
+      <div style="position:relative; width:44px; height:44px; flex:none;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:8px;"></div>
+        <div style="position:absolute; top:0; right:0; width:15px; height:15px; background:#FFFFFF; border-bottom-left-radius:6px;"></div>
+        <div style="position:absolute; top:0; right:0; width:15px; height:15px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:5px;"><span style="font-family:'Newsreader',serif; font-size:26px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'Newsreader',serif; font-size:36px; font-weight:500; letter-spacing:-0.01em;">vellum</span>
+    </div>
+    <!-- stacked -->
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:10px; padding:32px; display:flex; flex-direction:column; align-items:center; gap:12px;">
+      <div style="position:relative; width:48px; height:48px; flex:none;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:9px;"></div>
+        <div style="position:absolute; top:0; right:0; width:16px; height:16px; background:#FFFFFF; border-bottom-left-radius:6px;"></div>
+        <div style="position:absolute; top:0; right:0; width:16px; height:16px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:5px;"><span style="font-family:'Newsreader',serif; font-size:28px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'Newsreader',serif; font-size:28px; font-weight:500; letter-spacing:-0.01em;">vellum</span>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; letter-spacing:0.14em; text-transform:uppercase;">markdown notes</span>
+    </div>
+  </div>
+
+  <!-- ===== MARK ON SURFACES ===== -->
+  <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:14px;">The mark on surfaces</div>
+  <div style="display:grid; grid-template-columns:repeat(4,1fr); gap:20px; margin-bottom:56px;">
+    <!-- paper -->
+    <div style="background:#FAF7F2; border:1px solid #E8E2D8; border-radius:10px; padding:28px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="position:relative; width:64px; height:64px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:11px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#FAF7F2; border-bottom-left-radius:8px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:7px;"><span style="font-family:'Newsreader',serif; font-size:38px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A;">on paper</span>
+    </div>
+    <!-- white -->
+    <div style="background:#FFFFFF; border:1px solid #E8E2D8; border-radius:10px; padding:28px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="position:relative; width:64px; height:64px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:11px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#FFFFFF; border-bottom-left-radius:8px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:7px;"><span style="font-family:'Newsreader',serif; font-size:38px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A;">on panel</span>
+    </div>
+    <!-- midnight -->
+    <div style="background:#16141F; border:1px solid #2E2A3A; border-radius:10px; padding:28px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="position:relative; width:64px; height:64px;">
+        <div style="position:absolute; inset:0; background:#C2A878; border-radius:11px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#16141F; border-bottom-left-radius:8px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#9E8351; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:7px;"><span style="font-family:'Newsreader',serif; font-size:38px; font-weight:500; color:#16141F; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#8F8A9B;">midnight</span>
+    </div>
+    <!-- solid accent -->
+    <div style="background:#8B6F47; border:1px solid #7A6039; border-radius:10px; padding:28px; display:flex; flex-direction:column; align-items:center; gap:14px;">
+      <div style="position:relative; width:64px; height:64px;">
+        <div style="position:absolute; inset:0; background:#FBF7F0; border-radius:11px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#8B6F47; border-bottom-left-radius:8px;"></div>
+        <div style="position:absolute; top:0; right:0; width:22px; height:22px; background:#D8CBB4; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:7px;"><span style="font-family:'Newsreader',serif; font-size:38px; font-weight:500; color:#8B6F47; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#EBDFC9;">reversed</span>
+    </div>
+  </div>
+
+  <!-- favicon sizes -->
+  <div style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; text-transform:uppercase; letter-spacing:0.06em; margin:52px 0 14px;">Favicon &amp; app tile</div>
+  <div style="display:flex; align-items:flex-end; gap:28px; background:#FFFFFF; border:1px solid #E8E2D8; border-radius:10px; padding:34px 36px;">
+    <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+      <div style="position:relative; width:16px; height:16px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:3px;"></div>
+        <div style="position:absolute; top:0; right:0; width:6px; height:6px; background:#FFFFFF; border-bottom-left-radius:2px;"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center;"><span style="font-family:'Newsreader',serif; font-size:11px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A;">16</span>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+      <div style="position:relative; width:32px; height:32px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:6px;"></div>
+        <div style="position:absolute; top:0; right:0; width:11px; height:11px; background:#FFFFFF; border-bottom-left-radius:4px;"></div>
+        <div style="position:absolute; top:0; right:0; width:11px; height:11px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:2px;"><span style="font-family:'Newsreader',serif; font-size:20px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A;">32</span>
+    </div>
+    <div style="display:flex; flex-direction:column; align-items:center; gap:10px;">
+      <div style="position:relative; width:56px; height:56px;">
+        <div style="position:absolute; inset:0; background:#8B6F47; border-radius:10px;"></div>
+        <div style="position:absolute; top:0; right:0; width:19px; height:19px; background:#FFFFFF; border-bottom-left-radius:7px;"></div>
+        <div style="position:absolute; top:0; right:0; width:19px; height:19px; background:#6F5836; clip-path:polygon(0 0, 100% 100%, 0 100%);"></div>
+        <div style="position:absolute; inset:0; display:flex; align-items:center; justify-content:center; padding-top:5px;"><span style="font-family:'Newsreader',serif; font-size:33px; font-weight:500; color:#FBF7F0; line-height:1;">v</span></div>
+      </div>
+      <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A;">56</span>
+    </div>
+  </div>
+
+  <footer style="border-top:1px solid #E8E2D8; padding-top:20px; margin-top:40px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A; display:flex; justify-content:space-between;">
+    <span>vellum wordmark &amp; mark</span><span>Newsreader · accent #8B6F47</span>
+  </footer>
+
+</x-dc>
+</body>
+</html>
