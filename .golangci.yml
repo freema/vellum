@@ -2,3 +2,8 @@ version: "2"
 
 linters:
   default: standard
+  settings:
+    errcheck:
+      exclude-functions:
+        # deferred Close on HTTP response bodies is idiomatic
+        - (io.ReadCloser).Close
