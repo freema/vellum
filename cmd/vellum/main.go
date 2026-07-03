@@ -16,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/freema/vellum/internal/auth"
 	"github.com/freema/vellum/internal/config"
 	"github.com/freema/vellum/internal/httpapi"
 	"github.com/freema/vellum/internal/mcpserver"
@@ -95,11 +96,33 @@ func main() {
 		return
 	}
 
+	var authProvider *auth.Provider
+	if cfg.AuthEnabled {
+		authProvider, err = auth.NewProvider(auth.Config{
+			Enabled:      true,
+			ClientID:     cfg.ClientID,
+			ClientSecret: cfg.ClientSecret,
+			IssuerURL:    cfg.IssuerURL,
+			RedirectURIs: cfg.RedirectURIs,
+			TrustProxy:   cfg.TrustProxy,
+		})
+		if err != nil {
+			logger.Error("auth configuration invalid", "error", err)
+			os.Exit(1)
+		}
+		defer authProvider.Close()
+		logger.Info("oauth enabled", "client_id", cfg.ClientID, "issuer", authProvider.Issuer())
+	} else {
+		logger.Warn("AUTH IS DISABLED — /mcp is open to anyone who can reach it")
+	}
+
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: httpapi.NewRouter(version, httpapi.Options{
 			MCPHandler:     mcpserver.Handler(mcpSrv),
 			AllowedOrigins: cfg.AllowedOrigins,
+			Auth:           authProvider,
+			CORSOrigins:    cfg.CORSOrigins,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

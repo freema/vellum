@@ -24,15 +24,18 @@ func TestHealthz(t *testing.T) {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 
-	var body map[string]string
+	var body map[string]any
 	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
 		t.Fatalf("decode body: %v", err)
 	}
 	if body["status"] != "ok" {
-		t.Errorf(`status = %q, want "ok"`, body["status"])
+		t.Errorf(`status = %v, want "ok"`, body["status"])
 	}
 	if body["version"] != "1.2.3" {
-		t.Errorf(`version = %q, want "1.2.3"`, body["version"])
+		t.Errorf(`version = %v, want "1.2.3"`, body["version"])
+	}
+	if body["auth"] != false {
+		t.Errorf(`auth = %v, want false (no auth in this test)`, body["auth"])
 	}
 }
 

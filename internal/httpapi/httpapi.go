@@ -5,6 +5,8 @@ package httpapi
 import (
 	"encoding/json"
 	"net/http"
+
+	"github.com/freema/vellum/internal/auth"
 )
 
 // Options configure the router.
@@ -14,16 +16,28 @@ type Options struct {
 	// AllowedOrigins are the browser origins allowed to call /mcp.
 	// Requests without an Origin header (CLI clients) always pass.
 	AllowedOrigins []string
+	// Auth, when set, mounts the OAuth endpoints and guards /mcp with
+	// bearer verification. Nil = auth disabled, everything open.
+	Auth *auth.Provider
+	// CORSOrigins get CORS response headers (browser clients).
+	CORSOrigins []string
 }
 
 // NewRouter returns the root HTTP handler.
 func NewRouter(version string, opts Options) http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", handleHealthz(version))
+	mux.HandleFunc("GET /healthz", handleHealthz(version, opts.Auth != nil))
 	if opts.MCPHandler != nil {
-		mux.Handle("/mcp", originCheck(opts.AllowedOrigins, opts.MCPHandler))
+		h := opts.MCPHandler
+		if opts.Auth != nil {
+			h = opts.Auth.RequireBearer(h)
+		}
+		mux.Handle("/mcp", originCheck(opts.AllowedOrigins, h))
 	}
-	return mux
+	if opts.Auth != nil {
+		opts.Auth.Routes(mux)
+	}
+	return auth.CORS(opts.CORSOrigins, mux)
 }
 
 // originCheck rejects browser cross-origin requests whose Origin is not
@@ -43,12 +57,13 @@ func originCheck(allowed []string, next http.Handler) http.Handler {
 	})
 }
 
-func handleHealthz(version string) http.HandlerFunc {
+func handleHealthz(version string, authEnabled bool) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"status":  "ok",
 			"version": version,
+			"auth":    authEnabled,
 		})
 	}
 }

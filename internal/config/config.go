@@ -26,11 +26,23 @@ type Config struct {
 	// AllowedOrigins are browser origins allowed to reach /mcp
 	// (env VELLUM_ALLOWED_ORIGINS, comma-separated).
 	AllowedOrigins []string
+
+	// CORSOrigins get CORS response headers (env CORS_ORIGINS; defaults to
+	// AllowedOrigins). Kept separate to recycle openclaw-mcp env names.
+	CORSOrigins []string
+
+	// OAuth (PHY-112, env names recycled from openclaw-mcp).
+	AuthEnabled  bool     // AUTH_ENABLED (default false — warn loudly)
+	ClientID     string   // VELLUM_CLIENT_ID (default "vellum")
+	ClientSecret string   // VELLUM_CLIENT_SECRET (>= 32 chars when auth on)
+	IssuerURL    string   // VELLUM_ISSUER_URL (public URL behind a proxy)
+	RedirectURIs []string // VELLUM_REDIRECT_URIS (empty = allow any)
+	TrustProxy   bool     // TRUST_PROXY (behind Caddy/Traefik)
 }
 
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
-	return Config{
+	cfg := Config{
 		Port:          getenv("PORT", "8080"),
 		VaultPath:     getenv("VELLUM_VAULT_PATH", "./vault"),
 		InitStructure: getbool("VELLUM_INIT_STRUCTURE", true),
@@ -39,7 +51,20 @@ func Load() Config {
 		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
 			[]string{"https://claude.ai", "https://claude.com"}),
+		AuthEnabled:  getbool("AUTH_ENABLED", false),
+		ClientID:     getenv("VELLUM_CLIENT_ID", "vellum"),
+		ClientSecret: os.Getenv("VELLUM_CLIENT_SECRET"),
+		IssuerURL:    os.Getenv("VELLUM_ISSUER_URL"),
+		RedirectURIs: getlist("VELLUM_REDIRECT_URIS", nil),
+		TrustProxy:   getbool("TRUST_PROXY", false),
 	}
+	cfg.CORSOrigins = getlist("CORS_ORIGINS", cfg.AllowedOrigins)
+	if cfg.IssuerURL == "" {
+		// Without a public URL the OAuth metadata can only point at
+		// localhost — fine for local use, must be overridden behind a proxy.
+		cfg.IssuerURL = "http://localhost:" + cfg.Port
+	}
+	return cfg
 }
 
 func getlist(key string, fallback []string) []string {
