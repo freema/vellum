@@ -20,6 +20,8 @@ type Deps struct {
 	Searcher  vault.Searcher
 	Structure vault.Structure
 	Version   string
+	// Curator registers the suggest_*/find_* context tools (VELLUM_CURATOR).
+	Curator bool
 }
 
 // New builds the MCP server with all vellum tools registered.
@@ -30,6 +32,9 @@ func New(d Deps) *mcp.Server {
 		Version: d.Version,
 	}, nil)
 	registerTools(server, d)
+	if d.Curator {
+		registerCuratorTools(server, d)
+	}
 	return server
 }
 

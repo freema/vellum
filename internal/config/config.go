@@ -23,6 +23,10 @@ type Config struct {
 	ProjectsDir string
 	ArchiveDir  string
 
+	// Curator enables the suggest_*/find_* MCP tools
+	// (env VELLUM_CURATOR=on|off, default off).
+	Curator bool
+
 	// AllowedOrigins are browser origins allowed to reach /mcp
 	// (env VELLUM_ALLOWED_ORIGINS, comma-separated).
 	AllowedOrigins []string
@@ -49,6 +53,7 @@ func Load() Config {
 		InboxDir:      getenv("VELLUM_INBOX_DIR", "inbox"),
 		ProjectsDir:   getenv("VELLUM_PROJECTS_DIR", "projects"),
 		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
+		Curator:       getenv("VELLUM_CURATOR", "off") == "on",
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
 			[]string{"https://claude.ai", "https://claude.com"}),
 		AuthEnabled:  getbool("AUTH_ENABLED", false),

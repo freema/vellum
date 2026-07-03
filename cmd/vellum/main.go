@@ -85,6 +85,7 @@ func main() {
 			Archive:  cfg.ArchiveDir,
 		},
 		Version: version,
+		Curator: cfg.Curator,
 	})
 
 	if *mcpStdio {

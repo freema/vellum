@@ -15,7 +15,7 @@ import (
 // newSession spins up the full MCP server over an in-memory transport and
 // returns a connected client session — the same wire format as production,
 // minus the network.
-func newSession(t *testing.T) *mcp.ClientSession {
+func newSession(t *testing.T, mutate ...func(*Deps)) *mcp.ClientSession {
 	t.Helper()
 	v, err := vault.New(t.TempDir())
 	if err != nil {
@@ -25,13 +25,17 @@ func newSession(t *testing.T) *mcp.ClientSession {
 	if err := ix.Build(); err != nil {
 		t.Fatal(err)
 	}
-	server := New(Deps{
+	deps := Deps{
 		Vault:     v,
 		Index:     ix,
 		Searcher:  vault.NewScanSearcher(v, ix),
 		Structure: vault.DefaultStructure(),
 		Version:   "test",
-	})
+	}
+	for _, m := range mutate {
+		m(&deps)
+	}
+	server := New(deps)
 
 	st, ct := mcp.NewInMemoryTransports()
 	ctx := context.Background()
@@ -116,6 +120,48 @@ func TestToolSurface(t *testing.T) {
 	}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Errorf("tools = %v\nwant %v", names, want)
+	}
+}
+
+func TestCuratorToolsBehindFlag(t *testing.T) {
+	// Off by default: no curator tools.
+	s := newSession(t)
+	res, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if strings.HasPrefix(tool.Name, "suggest_") || strings.HasPrefix(tool.Name, "find_") {
+			t.Errorf("curator tool %s registered without the flag", tool.Name)
+		}
+	}
+
+	// On: all six appear and return structured context.
+	sc := newSession(t, func(d *Deps) { d.Curator = true })
+	res, err = sc.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	count := 0
+	for _, tool := range res.Tools {
+		if strings.HasPrefix(tool.Name, "suggest_") || strings.HasPrefix(tool.Name, "find_") {
+			count++
+		}
+	}
+	if count != 6 {
+		t.Fatalf("curator tools = %d, want 6", count)
+	}
+
+	call(t, sc, "write_note", map[string]any{"path": "inbox/lonely.md", "content": "# Lonely\n"}, nil)
+	var found struct{ Notes []struct{ Path string } }
+	call(t, sc, "find_untagged", nil, &found)
+	if len(found.Notes) != 1 || found.Notes[0].Path != "inbox/lonely.md" {
+		t.Errorf("find_untagged = %+v", found)
+	}
+	var sugg struct{ Suggestions []struct{ Dir string } }
+	call(t, sc, "suggest_location", map[string]any{"content": "# X\n"}, &sugg)
+	if len(sugg.Suggestions) == 0 || sugg.Suggestions[len(sugg.Suggestions)-1].Dir != "inbox" {
+		t.Errorf("suggest_location = %+v", sugg)
 	}
 }
 
