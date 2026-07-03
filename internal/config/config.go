@@ -10,19 +10,42 @@ type Config struct {
 	Port string
 	// VaultPath is the root directory of the markdown vault (env VELLUM_VAULT_PATH).
 	VaultPath string
+
+	// InitStructure creates inbox/projects/archive in an empty vault at
+	// startup (env VELLUM_INIT_STRUCTURE, default true).
+	InitStructure bool
+	// InboxDir, ProjectsDir, ArchiveDir name the conventional directories
+	// (env VELLUM_INBOX_DIR / VELLUM_PROJECTS_DIR / VELLUM_ARCHIVE_DIR).
+	InboxDir    string
+	ProjectsDir string
+	ArchiveDir  string
 }
 
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
 	return Config{
-		Port:      getenv("PORT", "8080"),
-		VaultPath: getenv("VELLUM_VAULT_PATH", "./vault"),
+		Port:          getenv("PORT", "8080"),
+		VaultPath:     getenv("VELLUM_VAULT_PATH", "./vault"),
+		InitStructure: getbool("VELLUM_INIT_STRUCTURE", true),
+		InboxDir:      getenv("VELLUM_INBOX_DIR", "inbox"),
+		ProjectsDir:   getenv("VELLUM_PROJECTS_DIR", "projects"),
+		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
 	}
 }
 
 func getenv(key, fallback string) string {
 	if v := os.Getenv(key); v != "" {
 		return v
+	}
+	return fallback
+}
+
+func getbool(key string, fallback bool) bool {
+	switch os.Getenv(key) {
+	case "1", "true", "TRUE", "True", "yes", "on":
+		return true
+	case "0", "false", "FALSE", "False", "no", "off":
+		return false
 	}
 	return fallback
 }

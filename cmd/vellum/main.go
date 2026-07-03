@@ -16,6 +16,7 @@ import (
 
 	"github.com/freema/vellum/internal/config"
 	"github.com/freema/vellum/internal/httpapi"
+	"github.com/freema/vellum/internal/vault"
 )
 
 // version is injected at build time via -ldflags "-X main.version=...".
@@ -38,6 +39,28 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	v, err := openVault(cfg)
+	if err != nil {
+		logger.Error("open vault", "error", err)
+		os.Exit(1)
+	}
+	if cfg.InitStructure {
+		structure := vault.Structure{
+			Inbox:    cfg.InboxDir,
+			Projects: cfg.ProjectsDir,
+			Archive:  cfg.ArchiveDir,
+		}
+		created, err := v.InitStructure(structure)
+		if err != nil {
+			logger.Error("init vault structure", "error", err)
+			os.Exit(1)
+		}
+		if created {
+			logger.Info("initialized empty vault", "dirs",
+				[]string{cfg.InboxDir, cfg.ProjectsDir, cfg.ArchiveDir})
+		}
+	}
 
 	srv := &http.Server{
 		Addr:              ":" + cfg.Port,
@@ -68,6 +91,14 @@ func main() {
 		logger.Error("shutdown failed", "error", err)
 		os.Exit(1)
 	}
+}
+
+// openVault creates the vault directory if needed and opens it.
+func openVault(cfg config.Config) (*vault.Vault, error) {
+	if err := os.MkdirAll(cfg.VaultPath, 0o755); err != nil {
+		return nil, err
+	}
+	return vault.New(cfg.VaultPath)
 }
 
 // runHealthcheck hits the local /healthz endpoint. It exists so the distroless
