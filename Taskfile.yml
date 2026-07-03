@@ -1,0 +1,47 @@
+version: "3"
+
+vars:
+  VERSION:
+    sh: git describe --tags --always --dirty 2>/dev/null || echo dev
+  LDFLAGS: -s -w -X main.version={{.VERSION}}
+
+tasks:
+  build:
+    desc: Build the vellum binary into bin/
+    cmds:
+      - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/vellum ./cmd/vellum
+
+  run:
+    desc: Run vellum locally
+    cmds:
+      - go run -ldflags "{{.LDFLAGS}}" ./cmd/vellum
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  tidy:
+    desc: go mod tidy
+    cmds:
+      - go mod tidy
+
+  docker-build:
+    desc: Build the Docker image (vellum:local)
+    cmds:
+      - docker build --build-arg VERSION={{.VERSION}} -t vellum:local .
+
+  docker-run:
+    desc: Build and start via docker compose
+    cmds:
+      - docker compose up -d --build
+
+  docker-stop:
+    desc: Stop the compose stack
+    cmds:
+      - docker compose down

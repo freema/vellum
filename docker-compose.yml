@@ -1,0 +1,17 @@
+services:
+  vellum:
+    build:
+      context: .
+      args:
+        VERSION: dev
+    image: vellum:dev
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      VELLUM_VAULT_PATH: /vault
+    volumes:
+      - ./vault:/vault
