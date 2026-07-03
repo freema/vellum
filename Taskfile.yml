@@ -57,3 +57,11 @@ tasks:
     desc: Stop the compose stack
     cmds:
       - docker compose down
+
+  e2e:
+    desc: Start compose with the fixture vault for Chrome DevTools MCP e2e runs (docs/e2e.md)
+    cmds:
+      - mkdir -p vault
+      - rsync -a --delete testdata/vault/ vault/
+      - docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+      - echo 'e2e stack ready on http://localhost:{{.VELLUM_PORT | default "8090"}} — scenarios in docs/e2e.md'
