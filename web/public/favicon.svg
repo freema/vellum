@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- vellum mark, 32px construction from design/Vellum-Logo.dc.html:
+       tile #8B6F47 r6, fold 11px (#6F5836 triangle, notch cut out), serif v #FBF7F0 -->
+  <path d="M6 0 H21 L32 11 V26 A6 6 0 0 1 26 32 H6 A6 6 0 0 1 0 26 V6 A6 6 0 0 1 6 0 Z" fill="#8B6F47"/>
+  <path d="M21 0 L32 11 L21 11 Z" fill="#6F5836"/>
+  <text x="16" y="25" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="20" font-weight="500" fill="#FBF7F0">v</text>
+</svg>

@@ -1,0 +1,113 @@
+/* Design tokens — 1:1 from DESIGN.md + design/*.dc.html (binding).
+   Light = "paper", dark = "midnight ink" via [data-theme="dark"]. */
+
+:root {
+  /* surfaces */
+  --canvas: #EFEAE1; /* page canvas behind panels (design-system stage) */
+  --bg: #FAF7F2;
+  --bg-panel: #FFFFFF;
+  --bg-list: #FCFAF6;
+  --bg-statusbar: #F3F1EC;
+  --bg-segmented: #F1EDE5;
+  --bg-active-child: #F7F2EA; /* active tree child row */
+
+  /* ink */
+  --ink: #2A2622;
+  --ink-body: #3A342E;
+  --ink-code: #4A443C;
+  --ink-muted: #7A7266;
+  --ink-faint: #9A938A;
+
+  /* lines */
+  --line: #E8E2D8;
+  --line-input: #E0D9CD;
+  --line-soft: #F0EBE2;
+  --line-chip: #E0D4C1; /* removable tag border */
+  --line-hover: #CFC6B7; /* secondary button hover border, unchecked box */
+
+  /* accent */
+  --accent: #8B6F47;
+  --accent-hover: #7A6039;
+  --accent-soft: #F1EAE0;
+  --on-accent: #FFFFFF; /* text on accent surfaces (dark: #16141F) */
+
+  /* search highlight */
+  --highlight-bg: #E6D6B8;
+  --highlight-text: #5E4A23;
+
+  /* wikilink underline / blockquote border / empty-state glyph */
+  --wikilink: #D8C9AF;
+
+  /* status colors (identical in dark mode by design) */
+  --status-backlog: #9A938A;
+  --status-backlog-soft: #F3F1EC;
+  --status-backlog-text: #6E6A62;
+  --status-inprogress: #C08A3E;
+  --status-inprogress-soft: #F7EEDD;
+  --status-inprogress-text: #976A28;
+  --status-done: #5F8D5F;
+  --status-done-soft: #E9F0E7;
+  --status-done-text: #4A714A;
+  --danger: #B3543D;
+  --danger-soft: #F7ECE8;
+  --danger-border: #E5CCC4;
+  --danger-text: #8A3E29;
+  --knowledge: #C4BBA9;
+
+  /* logo */
+  --logo-fold: #6F5836;
+  --logo-fold-midnight: #9E8351;
+  --logo-fold-reversed: #D8CBB4;
+  --logo-v: #FBF7F0;
+
+  /* typography */
+  --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+  --font-ui: 'Inter Variable', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* radius */
+  --radius-kbd: 4px;
+  --radius-chip: 5px;
+  --radius-control: 6px;
+  --radius-result: 7px;
+  --radius-panel: 8px;
+  --radius-badge: 9px;
+  --radius-modal: 10px;
+  --radius-auth: 12px;
+  --radius-logo: 20px;
+
+  /* shadows — hairline borders elsewhere */
+  --shadow-palette: 0 12px 40px -12px rgba(42, 38, 34, 0.22);
+  --shadow-modal: 0 12px 40px -16px rgba(42, 38, 34, 0.2);
+  --active-item-inset: inset 3px 0 0 var(--accent);
+}
+
+/* Midnight ink. Values listed in the design's dark section; tokens the
+   design does not show in dark reuse the specified dark palette (no new
+   colors invented). Status colors deliberately unchanged. */
+[data-theme='dark'] {
+  --canvas: #16141F;
+  --bg: #16141F;
+  --bg-panel: #1E1B29;
+  --bg-list: #1E1B29;
+  --bg-statusbar: #1E1B29;
+  --bg-segmented: #2A2433;
+  --bg-active-child: #2A2433;
+
+  --ink: #E8E4DC;
+  --ink-body: #E8E4DC;
+  --ink-code: #E8E4DC;
+  --ink-muted: #8F8A9B;
+  --ink-faint: #8F8A9B;
+
+  --line: #2E2A3A;
+  --line-input: #2E2A3A;
+  --line-soft: #2E2A3A;
+  --line-chip: #2E2A3A;
+  --line-hover: #8F8A9B;
+
+  --accent: #C2A878;
+  --accent-hover: #C2A878;
+  --accent-soft: #2A2433;
+  --on-accent: #16141F;
+}

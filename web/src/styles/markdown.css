@@ -1,0 +1,125 @@
+/* Markdown preview (design section 08) — scope with .v-markdown */
+
+.v-markdown h1 {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 600;
+  margin: 0 0 6px;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.v-markdown h2 {
+  font-family: var(--font-serif);
+  font-size: 21px;
+  font-weight: 600;
+  margin: 26px 0 10px;
+  color: var(--ink);
+}
+.v-markdown p {
+  font-size: 15px;
+  line-height: 1.7;
+  color: var(--ink-body);
+  margin: 0 0 18px;
+}
+.v-markdown a {
+  color: var(--accent);
+  text-decoration: none;
+  border-bottom: 1px solid var(--wikilink);
+}
+.v-markdown ul,
+.v-markdown ol {
+  font-size: 15px;
+  line-height: 1.75;
+  color: var(--ink-body);
+  margin: 0 0 16px;
+  padding-left: 22px;
+}
+.v-markdown .v-task-list {
+  margin: 0 0 16px;
+  padding: 0;
+  list-style: none;
+}
+.v-markdown .v-task-list li {
+  font-size: 15px;
+  line-height: 1.9;
+  color: var(--ink-body);
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+.v-markdown .v-checkbox {
+  width: 16px;
+  height: 16px;
+  border: 1.5px solid var(--line-hover);
+  border-radius: 4px;
+  display: inline-block;
+  flex: none;
+}
+.v-markdown .v-checkbox--checked {
+  border-color: var(--status-done);
+  background: var(--status-done);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+.v-markdown blockquote {
+  margin: 0 0 16px;
+  padding: 4px 0 4px 18px;
+  border-left: 2px solid var(--wikilink);
+  color: var(--ink-muted);
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 15.5px;
+}
+.v-markdown .v-wikilink {
+  color: var(--accent);
+  text-decoration: none;
+  background: var(--accent-soft);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  border-bottom: none;
+  cursor: pointer;
+}
+.v-markdown pre {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  background: var(--bg);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-control);
+  padding: 14px 16px;
+  overflow: auto;
+  margin: 0 0 18px;
+  color: var(--ink-code);
+}
+.v-markdown code {
+  font-family: var(--font-mono);
+}
+.v-markdown table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+.v-markdown th {
+  text-align: left;
+  padding: 8px 12px;
+  border-bottom: 1.5px solid var(--line-input);
+  font-weight: 600;
+  color: var(--ink);
+}
+.v-markdown td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+}
+.v-markdown td code {
+  font-size: 13px;
+  color: var(--accent);
+}
+.v-markdown tr:last-child td {
+  border-bottom: none;
+}
