@@ -4,7 +4,9 @@ package httpapi
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/freema/vellum/internal/auth"
 )
@@ -13,11 +15,18 @@ import (
 type Options struct {
 	// MCPHandler, when set, is mounted at /mcp behind the origin check.
 	MCPHandler http.Handler
-	// AllowedOrigins are the browser origins allowed to call /mcp.
-	// Requests without an Origin header (CLI clients) always pass.
+	// API, when set, mounts the JSON REST surface under /api/*.
+	API *API
+	// SPA, when set, serves static files with an index.html fallback for
+	// anything that is not /api/*, /mcp or an OAuth route (PHY-116 supplies
+	// the embedded dist).
+	SPA fs.FS
+	// AllowedOrigins are the browser origins allowed to call /mcp and
+	// /api. Same-origin requests and requests without an Origin header
+	// (CLI clients) always pass.
 	AllowedOrigins []string
-	// Auth, when set, mounts the OAuth endpoints and guards /mcp with
-	// bearer verification. Nil = auth disabled, everything open.
+	// Auth, when set, mounts the OAuth endpoints and guards /mcp + /api
+	// with bearer verification. Nil = auth disabled, everything open.
 	Auth *auth.Provider
 	// CORSOrigins get CORS response headers (browser clients).
 	CORSOrigins []string
@@ -25,36 +34,74 @@ type Options struct {
 
 // NewRouter returns the root HTTP handler.
 func NewRouter(version string, opts Options) http.Handler {
+	apiVersion = version
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", handleHealthz(version, opts.Auth != nil))
-	if opts.MCPHandler != nil {
-		h := opts.MCPHandler
+	guard := func(h http.Handler) http.Handler {
 		if opts.Auth != nil {
 			h = opts.Auth.RequireBearer(h)
 		}
-		mux.Handle("/mcp", originCheck(opts.AllowedOrigins, h))
+		return originCheck(opts.AllowedOrigins, h)
+	}
+	if opts.MCPHandler != nil {
+		mux.Handle("/mcp", guard(opts.MCPHandler))
+	}
+	if opts.API != nil {
+		apiMux := http.NewServeMux()
+		opts.API.routes(apiMux)
+		mux.Handle("/api/", guard(apiMux))
 	}
 	if opts.Auth != nil {
 		opts.Auth.Routes(mux)
 	}
+	if opts.SPA != nil {
+		mux.Handle("/", spaHandler(opts.SPA))
+	}
 	return auth.CORS(opts.CORSOrigins, mux)
 }
 
+// spaHandler serves the embedded SPA: real files as-is, everything else
+// falls back to index.html for client-side routing.
+func spaHandler(dist fs.FS) http.Handler {
+	fileServer := http.FileServerFS(dist)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/")
+		if path != "" {
+			if f, err := dist.Open(path); err == nil {
+				_ = f.Close()
+				fileServer.ServeHTTP(w, r)
+				return
+			}
+		}
+		http.ServeFileFS(w, r, dist, "index.html")
+	})
+}
+
 // originCheck rejects browser cross-origin requests whose Origin is not
-// allowlisted. Non-browser clients (no Origin header) are unaffected;
-// authentication is a separate layer (PHY-112).
+// allowlisted. Same-origin requests (the embedded SPA) and non-browser
+// clients (no Origin header) are unaffected; authentication is separate.
 func originCheck(allowed []string, next http.Handler) http.Handler {
 	set := map[string]bool{}
 	for _, o := range allowed {
 		set[o] = true
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if origin := r.Header.Get("Origin"); origin != "" && !set[origin] {
+		origin := r.Header.Get("Origin")
+		if origin != "" && !set[origin] && !sameOrigin(origin, r.Host) {
 			http.Error(w, "origin not allowed", http.StatusForbidden)
 			return
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// sameOrigin reports whether the Origin header points at this server.
+func sameOrigin(origin, host string) bool {
+	rest, ok := strings.CutPrefix(origin, "https://")
+	if !ok {
+		rest, ok = strings.CutPrefix(origin, "http://")
+	}
+	return ok && rest == host
 }
 
 func handleHealthz(version string, authEnabled bool) http.HandlerFunc {

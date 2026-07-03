@@ -120,7 +120,17 @@ func main() {
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: httpapi.NewRouter(version, httpapi.Options{
-			MCPHandler:     mcpserver.Handler(mcpSrv),
+			MCPHandler: mcpserver.Handler(mcpSrv),
+			API: &httpapi.API{
+				Vault:    v,
+				Index:    index,
+				Searcher: vault.NewScanSearcher(v, index),
+				Structure: vault.Structure{
+					Inbox:    cfg.InboxDir,
+					Projects: cfg.ProjectsDir,
+					Archive:  cfg.ArchiveDir,
+				},
+			},
 			AllowedOrigins: cfg.AllowedOrigins,
 			Auth:           authProvider,
 			CORSOrigins:    cfg.CORSOrigins,
