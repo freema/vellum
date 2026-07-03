@@ -266,6 +266,38 @@ func TestFullOAuthFlow(t *testing.T) {
 	}
 }
 
+func TestClientCredentialsGrant(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+
+	body, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"client_credentials"},
+		"client_id":  {"vellum"}, "client_secret": {testSecret},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("client_credentials = %d: %v", status, body)
+	}
+	access := body["access_token"].(string)
+
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("bearer from client_credentials = %d", resp.StatusCode)
+	}
+
+	// Wrong secret still 401s.
+	if _, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"client_credentials"},
+		"client_id":  {"vellum"}, "client_secret": {"wrong-secret-wrong-secret-wrong!"},
+	}); status != http.StatusUnauthorized {
+		t.Errorf("bad secret = %d, want 401", status)
+	}
+}
+
 func TestTokenRejectsBadClientAndPKCE(t *testing.T) {
 	srv := newAuthServer(t, newTestProvider(t))
 	verifier, challenge := pkce()

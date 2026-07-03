@@ -55,12 +55,27 @@ func apiError(w http.ResponseWriter, err error) {
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }
 
+// handleList serves listings from the metadata index — rich entries
+// (tags, type/status, excerpt) without touching the disk.
 func (a *API) handleList(w http.ResponseWriter, r *http.Request) {
-	recursive := r.URL.Query().Get("recursive") == "true"
-	notes, err := a.Vault.List(r.URL.Query().Get("dir"), recursive)
-	if err != nil {
-		apiError(w, err)
-		return
+	q := r.URL.Query()
+	dir := strings.Trim(q.Get("dir"), "/")
+	recursive := q.Get("recursive") == "true"
+
+	notes := []vault.Entry{}
+	for _, e := range a.Index.All() {
+		rel := e.Path
+		if dir != "" {
+			var ok bool
+			rel, ok = strings.CutPrefix(e.Path, dir+"/")
+			if !ok {
+				continue
+			}
+		}
+		if !recursive && strings.Contains(rel, "/") {
+			continue
+		}
+		notes = append(notes, e)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"notes": notes})
 }

@@ -11,14 +11,15 @@ import (
 // Entry is the indexed metadata of a single note. Raw link targets are kept
 // as written; resolution to vault paths happens in the index maps.
 type Entry struct {
-	Path    string
-	Title   string
-	Tags    []string
-	Links   []string // raw targets as written in the note
-	Type    string   // frontmatter `type` (task|knowledge), empty if unset
-	Status  string   // frontmatter `status` for tasks
-	ModTime int64
-	Size    int64
+	Path    string   `json:"path"`
+	Title   string   `json:"title"`
+	Excerpt string   `json:"excerpt,omitempty"` // first body line, for list views
+	Tags    []string `json:"tags,omitempty"`
+	Links   []string `json:"links,omitempty"` // raw targets as written in the note
+	Type    string   `json:"type,omitempty"`  // frontmatter `type` (task|knowledge)
+	Status  string   `json:"status,omitempty"`
+	ModTime int64    `json:"modTime"`
+	Size    int64    `json:"size"`
 }
 
 // Index is the in-memory metadata index: tags and backlinks as instant
@@ -103,6 +104,7 @@ func (v *Vault) entryOf(path string) (*Entry, error) {
 	e := &Entry{
 		Path:    note.Path,
 		Title:   note.Title,
+		Excerpt: excerptOf(note.Body),
 		Tags:    note.Tags,
 		Links:   note.Links,
 		ModTime: note.ModTime.Unix(),
@@ -115,6 +117,22 @@ func (v *Vault) entryOf(path string) (*Entry, error) {
 		e.Status = s
 	}
 	return e, nil
+}
+
+// excerptOf returns the first non-heading, non-blank body text, capped for
+// list views.
+func excerptOf(body string) string {
+	for _, line := range strings.Split(body, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") || line == "---" {
+			continue
+		}
+		if len(line) > 160 {
+			return line[:160] + "…"
+		}
+		return line
+	}
+	return ""
 }
 
 // Update re-reads a single note after a write (or first write) and refreshes

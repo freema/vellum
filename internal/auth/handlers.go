@@ -35,7 +35,7 @@ func (p *Provider) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 		"revocation_endpoint":    p.issuer + "/revoke",
 		"scopes_supported":       Scopes,
 		"response_types_supported":                  []string{"code"},
-		"grant_types_supported":                     []string{"authorization_code", "refresh_token"},
+		"grant_types_supported":                     []string{"authorization_code", "refresh_token", "client_credentials"},
 		"token_endpoint_auth_methods_supported":     []string{"client_secret_post", "client_secret_basic"},
 		"revocation_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic"},
 		"code_challenge_methods_supported":          []string{"S256"},
@@ -180,6 +180,17 @@ func (p *Provider) handleToken(w http.ResponseWriter, r *http.Request) {
 	var scopes []string
 	var err error
 	switch r.PostForm.Get("grant_type") {
+	case "client_credentials":
+		// Direct secret-for-token exchange — used by the embedded SPA's
+		// connect screen (design artboard 1a). Client auth above is the gate.
+		var requested []string
+		if s := r.PostForm.Get("scope"); s != "" {
+			requested = strings.Fields(s)
+		}
+		if len(requested) == 0 {
+			requested = Scopes
+		}
+		access, refresh, scopes, err = p.grantDirect(requested)
 	case "authorization_code":
 		access, refresh, scopes, err = p.exchangeCode(
 			r.PostForm.Get("code"),

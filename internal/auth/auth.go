@@ -286,6 +286,15 @@ func (p *Provider) issueTokensLocked(scopes []string) (access, refresh string) {
 	return access, refresh
 }
 
+// grantDirect issues a token pair for the client_credentials grant. The
+// caller must have authenticated the client secret already.
+func (p *Provider) grantDirect(scopes []string) (access, refresh string, granted []string, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	access, refresh = p.issueTokensLocked(scopes)
+	return access, refresh, scopes, nil
+}
+
 // VerifyAccessToken implements Authenticator.
 func (p *Provider) VerifyAccessToken(token string) (*TokenInfo, error) {
 	p.mu.Lock()
