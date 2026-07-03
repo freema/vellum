@@ -7,9 +7,21 @@ vars:
 
 tasks:
   build:
-    desc: Build the vellum binary into bin/
+    desc: Build the vellum binary into bin/ (no SPA embed — see build-full)
     cmds:
       - go build -trimpath -ldflags "{{.LDFLAGS}}" -o bin/vellum ./cmd/vellum
+
+  build-web:
+    desc: Build the SPA into web/dist
+    dir: web
+    cmds:
+      - npm run build
+
+  build-full:
+    desc: Build the SPA and embed it into the binary
+    deps: [build-web]
+    cmds:
+      - go build -trimpath -tags embedspa -ldflags "{{.LDFLAGS}}" -o bin/vellum ./cmd/vellum
 
   run:
     desc: Run vellum locally

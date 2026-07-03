@@ -14,6 +14,11 @@ services:
       VELLUM_VAULT_PATH: /vault
     volumes:
       - ./vault:/vault
+    # Coolify/Traefik: attach labels here when deploying behind Traefik, e.g.
+    #   labels:
+    #     - traefik.enable=true
+    #     - traefik.http.routers.vellum.rule=Host(`vellum.example.com`)
+    #     - traefik.http.services.vellum.loadbalancer.server.port=8080
     # hardening (recycled from openclaw-mcp): the binary only ever writes
     # into the mounted vault; the root filesystem stays read-only
     read_only: true

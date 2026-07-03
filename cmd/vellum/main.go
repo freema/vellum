@@ -16,6 +16,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	vellum "github.com/freema/vellum"
 	"github.com/freema/vellum/internal/auth"
 	"github.com/freema/vellum/internal/config"
 	"github.com/freema/vellum/internal/httpapi"
@@ -131,6 +132,7 @@ func main() {
 					Archive:  cfg.ArchiveDir,
 				},
 			},
+			SPA:            vellum.DistFS(),
 			AllowedOrigins: cfg.AllowedOrigins,
 			Auth:           authProvider,
 			CORSOrigins:    cfg.CORSOrigins,
