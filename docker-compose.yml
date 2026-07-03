@@ -7,11 +7,13 @@ services:
     image: vellum:dev
     restart: unless-stopped
     ports:
-      - "8080:8080"
+      # host port is overridable via VELLUM_PORT (e.g. in .env) when 8080 is taken
+      - "${VELLUM_PORT:-8080}:8080"
     env_file:
       - path: .env
         required: false
     environment:
+      PORT: "8080"
       VELLUM_VAULT_PATH: /vault
     volumes:
       - ./vault:/vault
