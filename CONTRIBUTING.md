@@ -15,12 +15,22 @@ that keep that spirit are very welcome.
 ## Development setup
 
 ```sh
-# Go 1.23+ and Node 20+ (Node only for the web UI)
+# Go 1.23+ and Node 20+ (Node only for the web UI / MCP Inspector)
 task            # list available tasks (Taskfile.yml)
-go test ./...   # backend tests
+task test       # backend tests (go test ./...)
+task run        # run the server locally
+task inspector  # debug the MCP tools in the MCP Inspector — UI at http://localhost:6274
 cd web && npm install && npm run build   # build the SPA
 go build -tags embedspa ./cmd/vellum     # binary with the UI embedded
 ```
+
+### Debugging the MCP tools
+
+`task inspector` launches the [MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+over the **stdio** transport (it spawns `vellum --mcp-stdio` against the fixture
+vault, no OAuth needed) and opens the UI at <http://localhost:6274>. To inspect a
+running HTTP server instead, start one (`AUTH_ENABLED=false task run`) and use
+`task inspector-http`, then point the Inspector at `http://localhost:8080/mcp`.
 
 `go build` (no tags) stays node-free; the SPA is only embedded with the
 `embedspa` tag.

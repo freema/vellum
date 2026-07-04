@@ -28,6 +28,32 @@ tasks:
     cmds:
       - go run -ldflags "{{.LDFLAGS}}" ./cmd/vellum
 
+  inspector:
+    desc: 'Debug the MCP tools in the MCP Inspector (stdio, no auth) — UI opens at http://localhost:6274'
+    env:
+      VELLUM_VAULT_PATH: '{{.VELLUM_VAULT_PATH | default "testdata/vault"}}'
+      VELLUM_CURATOR: "on"
+      VELLUM_INIT_STRUCTURE: "false"
+    cmds:
+      - |
+        echo "MCP Inspector → http://localhost:6274"
+        echo "Transport : stdio (spawns 'vellum --mcp-stdio', no OAuth needed)"
+        echo "Vault     : $VELLUM_VAULT_PATH"
+        echo "Tools     : 15 core + 6 curator (VELLUM_CURATOR=on)"
+        echo ""
+        npx -y @modelcontextprotocol/inspector go run -ldflags "{{.LDFLAGS}}" ./cmd/vellum --mcp-stdio
+
+  inspector-http:
+    desc: 'MCP Inspector for the Streamable HTTP transport — start a server first (e.g. AUTH_ENABLED=false task run)'
+    cmds:
+      - |
+        echo "MCP Inspector → http://localhost:6274"
+        echo "Transport : Streamable HTTP"
+        echo "MCP URL   : http://localhost:{{.PORT | default \"8080\"}}/mcp"
+        echo "            (add a Bearer token if the server has AUTH_ENABLED=true)"
+        echo ""
+        npx -y @modelcontextprotocol/inspector
+
   test:
     desc: Run all tests
     cmds:
