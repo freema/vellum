@@ -1,10 +1,10 @@
-# Deployment: <your-server> (test server)
+# Deployment (self-hosted, behind a reverse proxy)
 
-vellum runs on the test VPS `<your-server>` (<YOUR_SERVER_IP>, Ubuntu 24.04) behind
-the shared Caddy reverse proxy from the openclaw stack. Public URL:
+vellum runs on a small VPS behind a reverse proxy (this example uses Caddy).
+Public URL — substitute your own domain:
 
-> **https://vellum.example.com** (sslip.io — no DNS needed, swap for
-> a real subdomain anytime by changing the Caddy site + `VELLUM_ISSUER_URL`)
+> **https://vellum.example.com** (point a subdomain at the box; set the Caddy
+> site + `VELLUM_ISSUER_URL` to match)
 
 ## Layout
 
