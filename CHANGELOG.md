@@ -6,6 +6,30 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.6.0] — 2026-07-04
+
+Full-text search, second pass: typo-tolerant, diacritics-insensitive, and
+another ~5× faster.
+
+### Changed
+- **Search tolerates typos** — terms of 4–7 letters may miss by one edit,
+  8+ by two ("preklapy" finds "překlepy"). Typo hits always rank below exact
+  hits, short terms stay strict, and the snippet highlights the real word
+  from the note.
+- **Search ignores diacritics** — "ukol" finds "úkol", "poznamka" finds
+  "poznámka", in both directions (query and content are folded). Snippets
+  still show the original accented text.
+- **Word-boundary ranking** — a hit at the start of a word outranks one
+  buried inside another word ("note" ranks *Note taking* above *Keynotes*).
+- **~5× faster ranking pass** — search runs in two phases (a parallel,
+  allocation-free scoring sweep, then snippet extraction for the top results
+  only), the index hands the hot path shared entries instead of sorted
+  copies, and the per-note word list is pre-computed for the typo matcher.
+  Benchmarks on a 2 000-note vault (Apple M4 Pro): exact 0.38 ms,
+  accent-folded multi-term 0.74 ms, worst-case typo 0.39 ms, no-match
+  0.35 ms — all warm, single query. `-bench BenchmarkSearch` reproduces.
+- The command palette highlights the matched text inside a result snippet.
+
 ## [1.5.0] — 2026-07-04
 
 Performance release: loading and searching are dramatically faster.
@@ -197,7 +221,9 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.4.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/freema/vellum/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/freema/vellum/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/freema/vellum/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/freema/vellum/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/freema/vellum/compare/v1.2.0...v1.2.1

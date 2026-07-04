@@ -238,3 +238,115 @@ func TestSearchCacheInvalidatedByWrite(t *testing.T) {
 		t.Errorf("stale cache: old content still found, got %+v", r)
 	}
 }
+
+func TestSearchDiacriticsInsensitive(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/ukoly.md", "# Úkoly na týden\n\nDodělat přílohy a poznámky.\n")
+	mustWrite(t, v, "inbox/plain.md", "# Plain\n\nnothing here\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	// ASCII query finds the accented note…
+	results, err := s.Search("ukoly", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Path != "inbox/ukoly.md" {
+		t.Fatalf("ascii→accented = %+v", results)
+	}
+	// …and the snippet keeps the original diacritics.
+	if results[0].Snippets[0].Match != "Úkoly" {
+		t.Errorf("match = %q, want Úkoly with original diacritics", results[0].Snippets[0].Match)
+	}
+
+	// The accented query works too (both sides are folded).
+	if r, _ := s.Search("přílohy", SearchOpts{}); len(r) != 1 {
+		t.Errorf("accented query = %+v, want 1", r)
+	}
+	if r, _ := s.Search("poznamky", SearchOpts{}); len(r) != 1 {
+		t.Errorf("poznamky→poznámky = %+v, want 1", r)
+	}
+}
+
+func TestSearchWordBoundaryBeatsInfix(t *testing.T) {
+	v := newTestVault(t)
+	// "note" at a word start vs. buried inside "keynotes".
+	mustWrite(t, v, "a/infix.md", "# Keynotes summary\n\nkeynotes keynotes\n")
+	mustWrite(t, v, "b/boundary.md", "# Note taking\n\nnote here\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	results, err := s.Search("note", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 || results[0].Path != "b/boundary.md" {
+		t.Errorf("word-boundary ranking = %+v, want b/boundary.md first", results)
+	}
+}
+
+func TestSearchTypoTolerance(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/preklepy.md", "# Překlepy v textu\n\nOpravit všechny překlepy do pátku.\n")
+	mustWrite(t, v, "inbox/other.md", "# Other\n\nnothing relevant\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	// One typo ("překlApy") — still found, diacritics-insensitively too.
+	results, err := s.Search("preklapy", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Path != "inbox/preklepy.md" {
+		t.Fatalf("typo search = %+v, want inbox/preklepy.md", results)
+	}
+	// The snippet highlights the real word from the text.
+	if len(results[0].Snippets) == 0 || !strings.Contains(strings.ToLower(fold(results[0].Snippets[0].Match)), "preklepy") {
+		t.Errorf("typo snippet = %+v, want a highlighted 'překlepy'", results[0].Snippets)
+	}
+
+	// Short terms stay strict: "cat" must not fuzzy-match "car".
+	mustWrite(t, v, "inbox/car.md", "# Car\n\ncar stuff\n")
+	if err := ix.Update("inbox/car.md"); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.Search("cat", SearchOpts{}); len(r) != 0 {
+		t.Errorf("short-term fuzzy leak: %+v", r)
+	}
+}
+
+func TestSearchExactBeatsFuzzy(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "a/exact.md", "# Notes\n\nplanning the planning session\n")
+	mustWrite(t, v, "b/fuzzy.md", "# Misc\n\nplanting a tree\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	results, err := s.Search("planning", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) < 1 || results[0].Path != "a/exact.md" {
+		t.Fatalf("exact-vs-fuzzy = %+v, want a/exact.md first", results)
+	}
+	for _, r := range results[1:] {
+		if r.Path == "b/fuzzy.md" {
+			return // fuzzy result present but ranked below — perfect
+		}
+	}
+	// fuzzy result may also be absent only if distance > budget; "planning"
+	// vs "planting" is distance 2 within budget 2, so it must be there.
+	t.Errorf("fuzzy result missing: %+v", results)
+}

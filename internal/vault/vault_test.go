@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-func newTestVault(t *testing.T, opts ...Option) *Vault {
+func newTestVault(t testing.TB, opts ...Option) *Vault {
 	t.Helper()
 	v, err := New(t.TempDir(), opts...)
 	if err != nil {
@@ -20,7 +20,7 @@ func newTestVault(t *testing.T, opts ...Option) *Vault {
 	return v
 }
 
-func mustWrite(t *testing.T, v *Vault, path, content string) {
+func mustWrite(t testing.TB, v *Vault, path, content string) {
 	t.Helper()
 	if err := v.Write(path, content, WriteOptions{Overwrite: true}); err != nil {
 		t.Fatalf("Write(%s): %v", path, err)

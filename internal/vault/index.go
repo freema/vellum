@@ -269,6 +269,20 @@ func (ix *Index) Len() int {
 	return len(ix.entries)
 }
 
+// snapshot returns the current entries as shared pointers, unsorted. Safe to
+// hold across the lock: Update/Build replace entry pointers wholesale and
+// never mutate an *Entry in place. Used by the search hot path, which sorts
+// by score anyway — All() below stays for callers wanting sorted copies.
+func (ix *Index) snapshot() []*Entry {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+	out := make([]*Entry, 0, len(ix.entries))
+	for _, e := range ix.entries {
+		out = append(out, e)
+	}
+	return out
+}
+
 // All returns a snapshot of all entries, sorted by path.
 func (ix *Index) All() []Entry {
 	ix.mu.RLock()
