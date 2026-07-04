@@ -272,7 +272,7 @@ func registerTools(s *mcp.Server, d Deps) {
 
 	mcp.AddTool(s, &mcp.Tool{
 		Name:        "search_notes",
-		Description: "Full-text search with optional tag AND-filter and directory scope. Returns snippets with context; empty query lists notes matching the filters.",
+		Description: "Ranked full-text search (title > tag > path > body), case-, diacritics- and typo-insensitive, with optional tag AND-filter and directory scope. Returns snippets with context; empty query lists notes matching the filters.",
 	}, func(ctx context.Context, req *mcp.CallToolRequest, in searchNotesIn) (*mcp.CallToolResult, searchNotesOut, error) {
 		results, err := d.Searcher.Search(in.Query, vault.SearchOpts{
 			Tags:       in.Tags,

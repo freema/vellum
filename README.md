@@ -146,8 +146,12 @@ task e2e          # compose stack with the fixture vault (docs/e2e.md)
 
 ### Design decisions kept deliberately simple
 
-- **Search = parallel scan, not bleve.** The metadata index narrows by
-  tag/dir first; scanning the rest takes ~13 ms for 1 200 notes. Zero
+- **Search = ranked RAM scan, not bleve.** The metadata index narrows by
+  tag/dir, content is matched from an in-memory cache invalidated precisely
+  by the index (modTime+size), and results are ranked (title > tag > path >
+  body, word starts beat mid-word). Matching is case-, diacritics- and
+  typo-insensitive — "preklapy" finds "překlepy". A query over a 2 000-note
+  vault takes ~0.4 ms warm ([docs/search.md](docs/search.md)). Zero heavy
   dependencies, no index to corrupt, no warm-up. The `Searcher` interface
   exists so bleve can slot in *if it ever hurts*.
 - **Plain CSS custom properties, not Tailwind.** The design system is a
