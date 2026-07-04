@@ -14,6 +14,7 @@ import {
   type Connection,
   type ConnectionsData,
   type ActivityData,
+  type ActivityEvent,
   type Notification,
 } from '../lib/api'
 import { CommandPalette, PaletteItem, Highlight } from '../components/palette'
@@ -157,7 +158,9 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const [unread, setUnread] = useState(0)
   const [activityOpen, setActivityOpen] = useState(false)
   const [activityData, setActivityData] = useState<ActivityData | null>(null)
-  const [activityFilter, setActivityFilter] = useState<'all' | 'curator' | 'mcp'>('all')
+  const [activityFilter, setActivityFilter] = useState<'all' | 'mcp' | 'curator' | 'errors'>('all')
+  const [activitySearch, setActivitySearch] = useState('')
+  const [errorCount, setErrorCount] = useState(0)
   const [starCount, setStarCount] = useState<number | null>(null)
 
   const rootRef = useRef<HTMLDivElement>(null)
@@ -188,7 +191,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     toastTimer.current = window.setTimeout(() => setToast(null), 2400)
   }, [])
 
-  // notification badge on load
+  // notification + error badges on load
   useEffect(() => {
     api
       .notifications()
@@ -196,6 +199,10 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         setNotifs(n.notifications)
         setUnread(n.unread)
       })
+      .catch(() => {})
+    api
+      .activity('all')
+      .then((d) => setErrorCount(d.errorCount))
       .catch(() => {})
   }, [api])
 
@@ -218,11 +225,23 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     setConnOpen(true)
     api.connections().then(setConnData).catch(() => {})
   }, [api])
+  const loadActivity = useCallback(
+    (f: 'all' | 'mcp' | 'curator' | 'errors') => {
+      api
+        .activity(f)
+        .then((d) => {
+          setActivityData(d)
+          setErrorCount(d.errorCount)
+        })
+        .catch(() => {})
+    },
+    [api],
+  )
   const openActivity = useCallback(() => {
     setActivityOpen(true)
     setNotifOpen(false)
-    api.activity(activityFilter).then(setActivityData).catch(() => {})
-  }, [api, activityFilter])
+    loadActivity(activityFilter)
+  }, [loadActivity, activityFilter])
   const openNotifications = useCallback(() => {
     setNotifOpen((o) => !o)
     api
@@ -257,11 +276,11 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     }
   }, [api, activityFilter, showToast])
   const changeActivityFilter = useCallback(
-    (f: 'all' | 'curator' | 'mcp') => {
+    (f: 'all' | 'mcp' | 'curator' | 'errors') => {
       setActivityFilter(f)
-      api.activity(f).then(setActivityData).catch(() => {})
+      loadActivity(f)
     },
-    [api],
+    [loadActivity],
   )
   const markAllRead = useCallback(() => {
     setNotifs((ns) => ns.map((n) => ({ ...n, read: true })))
@@ -507,6 +526,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         unreadCount={unread}
         onOpenNotifications={openNotifications}
         onOpenActivity={openActivity}
+        errorCount={errorCount}
       />
       <div className="ws-body">
         <TreePanel
@@ -621,9 +641,12 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           data={activityData}
           filter={activityFilter}
           totalNotes={entries.length}
+          search={activitySearch}
+          onSearch={setActivitySearch}
           onFilter={changeActivityFilter}
           onRunCurator={runCurator}
           onClose={() => setActivityOpen(false)}
+          showToast={showToast}
         />
       )}
       {helpOpen && (
@@ -662,6 +685,7 @@ function TopBar({
   unreadCount,
   onOpenNotifications,
   onOpenActivity,
+  errorCount,
 }: {
   version: string
   activeTags: string[]
@@ -675,6 +699,7 @@ function TopBar({
   unreadCount: number
   onOpenNotifications: () => void
   onOpenActivity: () => void
+  errorCount: number
 }) {
   return (
     <header className="ws-topbar">
@@ -734,11 +759,12 @@ function TopBar({
       </button>
       <button
         id="activityBtn"
-        className="ws-icon-btn"
+        className="ws-icon-btn ws-activity-btn"
         onClick={onOpenActivity}
-        title="Activity & curator log"
+        title="Activity, errors & curator log"
       >
         <Icon name="activity" size={16} />
+        {errorCount > 0 && <span className="ws-activity-btn__badge">{errorCount}</span>}
       </button>
       <button id="tourHelp" className="ws-icon-btn" onClick={onOpenHelp} title="Help & tour">
         <Icon name="help" size={16} />
@@ -2215,33 +2241,125 @@ const ACT_DOT: Record<string, string> = {
   read: 'var(--status-done)',
   search: 'var(--status-done)',
   delete: 'var(--danger)',
+  error: 'var(--danger)',
+}
+
+function ActivityErrorRow({
+  ev,
+  onCopy,
+}: {
+  ev: ActivityEvent
+  onCopy: (text: string, label: string) => void
+}) {
+  const [open, setOpen] = useState(false)
+  const json = JSON.stringify(
+    {
+      id: ev.id,
+      level: ev.level ?? 'error',
+      tool: ev.tool,
+      status: ev.status,
+      message: ev.detail,
+      actor: ev.actor,
+      session: ev.session,
+      time: ev.time,
+    },
+    null,
+    2,
+  )
+  return (
+    <div className={`ws-err${open ? ' ws-err--open' : ''}`}>
+      <div className="ws-err__head" onClick={() => setOpen((o) => !o)}>
+        <span className="ws-activity__dot" style={{ background: 'var(--danger)' }} />
+        <div className="ws-err__main">
+          <div className="ws-err__tags">
+            <span className="ws-err__level">{ev.level ?? 'error'}</span>
+            {ev.tool && <span className="ws-err__tool">{ev.tool}</span>}
+            {ev.status ? <span className="ws-err__status">{ev.status}</span> : null}
+          </div>
+          <div className="ws-err__msg">{ev.detail}</div>
+          <div className="ws-err__meta">
+            {ev.actor} · {ev.session ?? 'server'}
+          </div>
+        </div>
+        <div className="ws-err__aside">
+          <span className="ws-activity__time">{ev.time}</span>
+          <span className="ws-err__chev">{open ? '▾' : '▸'}</span>
+        </div>
+      </div>
+      {open && (
+        <div className="ws-err__body">
+          <div className="ws-err__label">Details</div>
+          <pre className="ws-err__pre vscroll">{ev.detail}</pre>
+          <div className="ws-err__actions">
+            <button className="ws-err__export" onClick={() => onCopy(json, 'Error JSON')}>
+              ⤓ Export error → JSON
+            </button>
+            <button
+              className="ws-err__fix"
+              onClick={() =>
+                onCopy(
+                  `Fix this vellum MCP error — tool ${ev.tool ?? '?'}, status ${ev.status ?? '?'}: ${ev.detail}`,
+                  'Fix prompt',
+                )
+              }
+            >
+              ✦ Fix with Claude Code
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function ActivityDrawer({
   data,
   filter,
   totalNotes,
+  search,
+  onSearch,
   onFilter,
   onRunCurator,
   onClose,
+  showToast,
 }: {
   data: ActivityData | null
-  filter: 'all' | 'curator' | 'mcp'
+  filter: 'all' | 'mcp' | 'curator' | 'errors'
   totalNotes: number
-  onFilter: (f: 'all' | 'curator' | 'mcp') => void
+  search: string
+  onSearch: (q: string) => void
+  onFilter: (f: 'all' | 'mcp' | 'curator' | 'errors') => void
   onRunCurator: () => void
   onClose: () => void
+  showToast: (text: string, tone?: 'ok' | 'danger') => void
 }) {
-  const events = data?.events ?? []
   const cur = data?.curator
+  const errorCount = data?.errorCount ?? 0
+  const q = search.trim().toLowerCase()
+  const events = (data?.events ?? []).filter((ev) => {
+    if (!q) return true
+    return [ev.actor, ev.verb, ev.target, ev.detail, ev.tool].some((s) => s?.toLowerCase().includes(q))
+  })
+  const copy = (text: string, label: string) => {
+    void navigator.clipboard?.writeText(text).then(
+      () => showToast(`${label} copied`),
+      () => showToast('Copy failed', 'danger'),
+    )
+  }
+  const TABS: [typeof filter, string][] = [
+    ['all', 'All'],
+    ['mcp', 'MCP'],
+    ['curator', 'Curator'],
+    ['errors', 'Errors'],
+  ]
   return (
     <div className="ws-drawer-scrim" onClick={onClose}>
       <div className="ws-drawer ws-drawer--wide vscroll" onClick={(e) => e.stopPropagation()}>
         <div className="ws-drawer__head">
           <div className="ws-drawer__head-row">
             <div>
-              <div className="ws-drawer__title">Activity</div>
-              <div className="ws-drawer__sub">What the curator and connected clients did.</div>
+              <div className="ws-drawer__title">Activity &amp; errors</div>
+              <div className="ws-drawer__sub">Curator, client calls and anything that broke in MCP.</div>
             </div>
             <button className="ws-drawer__esc" onClick={onClose}>
               esc
@@ -2275,38 +2393,57 @@ function ActivityDrawer({
               <span>watching {cur?.watching ?? totalNotes} notes</span>
             </div>
           </div>
+          <div className="ws-activity__search">
+            <Icon name="search" size={14} className="ws-activity__search-icon" />
+            <input
+              className="ws-activity__search-input"
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              placeholder="Search activity, errors, tools…"
+            />
+            {search && (
+              <span className="ws-activity__search-clear" onClick={() => onSearch('')}>
+                ×
+              </span>
+            )}
+          </div>
           <div className="ws-segmented ws-activity__filter">
-            {(['all', 'curator', 'mcp'] as const).map((f) => (
+            {TABS.map(([f, label]) => (
               <button
                 key={f}
                 className={`ws-segmented__item${filter === f ? ' ws-segmented__item--active' : ''}`}
                 onClick={() => onFilter(f)}
               >
-                {f === 'all' ? 'All' : f === 'curator' ? 'Curator' : 'MCP'}
+                {label}
+                {f === 'errors' && errorCount > 0 && <span className="ws-activity__err-count">{errorCount}</span>}
               </button>
             ))}
           </div>
         </div>
         <div className="ws-drawer__body ws-activity__timeline">
-          {events.map((ev) => (
-            <div key={ev.id} className={`ws-activity__row${ev.pending ? ' ws-activity__row--pending' : ''}`}>
-              <span className="ws-activity__dot" style={{ background: ACT_DOT[ev.kind] ?? 'var(--accent)' }} />
-              <div className="ws-activity__main">
-                <div className="ws-activity__line">
-                  <span
-                    className={`ws-activity__actor${ev.source === 'curator' ? ' ws-activity__actor--curator' : ''}`}
-                  >
-                    {ev.actor}
-                  </span>
-                  <span className="ws-activity__verb"> {ev.verb} </span>
-                  <span className="ws-activity__target">{ev.target}</span>
+          {events.map((ev) =>
+            ev.isError ? (
+              <ActivityErrorRow key={ev.id} ev={ev} onCopy={copy} />
+            ) : (
+              <div key={ev.id} className={`ws-activity__row${ev.pending ? ' ws-activity__row--pending' : ''}`}>
+                <span className="ws-activity__dot" style={{ background: ACT_DOT[ev.kind] ?? 'var(--accent)' }} />
+                <div className="ws-activity__main">
+                  <div className="ws-activity__line">
+                    <span
+                      className={`ws-activity__actor${ev.source === 'curator' ? ' ws-activity__actor--curator' : ''}`}
+                    >
+                      {ev.actor}
+                    </span>
+                    <span className="ws-activity__verb"> {ev.verb} </span>
+                    <span className="ws-activity__target">{ev.target}</span>
+                  </div>
+                  {ev.detail && <div className="ws-activity__detail">{ev.detail}</div>}
+                  {ev.pending && <span className="ws-activity__review">needs review →</span>}
                 </div>
-                {ev.detail && <div className="ws-activity__detail">{ev.detail}</div>}
-                {ev.pending && <span className="ws-activity__review">needs review →</span>}
+                <span className="ws-activity__time">{ev.time}</span>
               </div>
-              <span className="ws-activity__time">{ev.time}</span>
-            </div>
-          ))}
+            ),
+          )}
           {events.length === 0 && (
             <div className="ws-drawer__empty">
               <div className="ws-drawer__empty-glyph">∅</div>

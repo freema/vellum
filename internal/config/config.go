@@ -31,6 +31,11 @@ type Config struct {
 	// default off). SMTP_* settings are read by the notify package.
 	Notify bool
 
+	// Sentry error reporting (off unless SENTRY_DSN is set). SentryEnvironment
+	// tags events (env SENTRY_ENVIRONMENT, default "production").
+	SentryDSN         string
+	SentryEnvironment string
+
 	// AllowedOrigins are browser origins allowed to reach /mcp
 	// (env VELLUM_ALLOWED_ORIGINS, comma-separated).
 	AllowedOrigins []string
@@ -59,6 +64,8 @@ func Load() Config {
 		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
 		Curator:       getenv("VELLUM_CURATOR", "off") == "on",
 		Notify:        getbool("VELLUM_NOTIFY", false),
+		SentryDSN:         os.Getenv("SENTRY_DSN"),
+		SentryEnvironment: getenv("SENTRY_ENVIRONMENT", "production"),
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
 			[]string{"https://claude.ai", "https://claude.com"}),
 		AuthEnabled:  getbool("AUTH_ENABLED", false),

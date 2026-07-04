@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/freema/vellum/internal/activity"
+	"github.com/freema/vellum/internal/obs"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -68,6 +69,9 @@ func apiError(w http.ResponseWriter, err error) {
 		status = http.StatusBadRequest
 	case errors.Is(err, vault.ErrTooLarge):
 		status = http.StatusRequestEntityTooLarge
+	}
+	if status == http.StatusInternalServerError {
+		obs.Capture(err, map[string]string{"layer": "rest"})
 	}
 	writeJSON(w, status, map[string]string{"error": err.Error()})
 }

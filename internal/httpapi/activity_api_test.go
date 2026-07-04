@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/freema/vellum/internal/activity"
@@ -112,6 +113,61 @@ func TestConnectionsAndActivity(t *testing.T) {
 	resp, _ = doReq(t, http.MethodDelete, srv.URL+"/api/connections/sk-abc", "", nil)
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("revoke status = %d", resp.StatusCode)
+	}
+}
+
+func TestRecoverRecordsErrorInActivity(t *testing.T) {
+	v, err := vault.New(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	ix := vault.NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	rec := activity.New()
+	panicky := http.HandlerFunc(func(http.ResponseWriter, *http.Request) { panic("boom in tool") })
+	srv := httptest.NewServer(NewRouter("test", Options{
+		MCPHandler: panicky,
+		API: &API{
+			Vault:     v,
+			Index:     ix,
+			Searcher:  vault.NewScanSearcher(v, ix),
+			Structure: vault.DefaultStructure(),
+			Activity:  rec,
+		},
+		Activity: rec,
+	}))
+	t.Cleanup(srv.Close)
+
+	// A panic in the handler is recovered as a 500…
+	resp, err := http.Post(srv.URL+"/mcp", "application/json", strings.NewReader("{}"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusInternalServerError {
+		t.Fatalf("panic route = %d, want 500", resp.StatusCode)
+	}
+
+	// …and surfaces in the Activity feed under the errors filter.
+	_, body := doReq(t, http.MethodGet, srv.URL+"/api/activity?filter=errors", "", nil)
+	var got struct {
+		Events []struct {
+			IsError bool   `json:"isError"`
+			Tool    string `json:"tool"`
+			Level   string `json:"level"`
+		} `json:"events"`
+		ErrorCount int `json:"errorCount"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.ErrorCount != 1 || len(got.Events) != 1 || !got.Events[0].IsError {
+		t.Fatalf("errors payload = %s", body)
+	}
+	if got.Events[0].Tool != "/mcp" || got.Events[0].Level != "error" {
+		t.Errorf("error event = %+v", got.Events[0])
 	}
 }
 

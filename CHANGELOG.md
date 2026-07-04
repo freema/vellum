@@ -6,6 +6,31 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.3.0] — 2026-07-04
+
+### Fixed
+- **MCP clients can finally connect.** Implemented OAuth 2.0 Dynamic Client
+  Registration (RFC 7591): a `POST /register` endpoint, `registration_endpoint`
+  in the discovery metadata, and public (PKCE-only, no client secret)
+  authorization-code / refresh flows. Previously vellum only accepted the fixed
+  confidential client and demanded the shared secret on every grant, so the MCP
+  Inspector, claude.ai, Cursor, etc. could not authenticate at all. Verified
+  end-to-end via the MCP Inspector over HTTP (register → authorize → token →
+  list/read/write tools).
+
+### Added
+- **Sentry error reporting** (`getsentry/sentry-go`), off unless `SENTRY_DSN`
+  is set. Panics and internal 5xx are captured and also recorded as error
+  events in the workspace **Activity** panel. See `docs/observability.md`.
+- **Activity & errors** panel: an error-count badge on the activity button, an
+  **Errors** filter, a search box, and expandable error rows (level, tool,
+  status, message) with *Export → JSON* and *Fix with Claude Code*.
+- **MCP Inspector** dev tasks: `task inspector` (stdio) and `task inspector-http`
+  (Streamable HTTP), UI at `http://localhost:6274`.
+
+### Changed
+- `.env.example` documents the SMTP digest and Sentry settings.
+
 ## [1.2.1] — 2026-07-04
 
 ### Added
@@ -127,7 +152,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.2.1...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/freema/vellum/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/freema/vellum/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/freema/vellum/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/freema/vellum/compare/v1.0.1...v1.1.0

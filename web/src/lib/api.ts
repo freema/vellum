@@ -62,7 +62,7 @@ export interface ConnectionsData {
 
 export interface ActivityEvent {
   id: string
-  source: 'mcp' | 'curator' | 'user'
+  source: 'mcp' | 'curator' | 'user' | 'system'
   actor: string
   kind: string
   verb: string
@@ -70,6 +70,12 @@ export interface ActivityEvent {
   detail: string
   pending?: boolean
   time: string
+  // error events (kind === "error")
+  isError?: boolean
+  level?: string
+  tool?: string
+  status?: number
+  session?: string
 }
 
 export interface CuratorStatus {
@@ -82,6 +88,7 @@ export interface CuratorStatus {
 export interface ActivityData {
   curator: CuratorStatus
   events: ActivityEvent[]
+  errorCount: number
 }
 
 export interface Notification {

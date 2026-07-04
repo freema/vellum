@@ -70,7 +70,7 @@
       </span>
       <sc-if value="{{ hasUnread }}" hint-placeholder-val="{{ true }}"><span style="position:absolute; top:5px; right:5px; width:7px; height:7px; border-radius:50%; background:#B3543D; border:1.5px solid #FAF7F2;"></span></sc-if>
     </button>
-    <button id="activityBtn" onClick="{{ openActivity }}" title="Activity & curator log" style="font-family:inherit; font-size:15px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">≣</button>
+    <button id="activityBtn" onClick="{{ openActivity }}" title="Activity, errors &amp; curator log" style="position:relative; font-family:inherit; font-size:15px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">≣<sc-if value="{{ hasErrors }}" hint-placeholder-val="{{ false }}"><span style="position:absolute; top:4px; right:4px; min-width:14px; height:14px; padding:0 3px; border-radius:7px; background:#B3543D; color:#FFFFFF; border:1.5px solid #FAF7F2; font-family:'JetBrains Mono',monospace; font-size:9px; font-weight:600; display:inline-flex; align-items:center; justify-content:center;">{{ errorCount }}</span></sc-if></button>
     <button id="tourHelp" onClick="{{ openHelp }}" title="Help & tour" style="font-family:inherit; font-size:14px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">?</button>
     <button style="font-family:inherit; font-size:15px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">⚙</button>
   </header>
@@ -381,8 +381,8 @@
         <div style="flex:none; padding:22px 24px 18px; border-bottom:1px solid #E8E2D8;">
           <div style="display:flex; align-items:flex-start; justify-content:space-between;">
             <div>
-              <div style="font-family:'Newsreader',serif; font-size:22px; font-weight:500; letter-spacing:-0.01em;">Activity</div>
-              <div style="font-size:12.5px; color:#7A7266; margin-top:4px;">What the curator and connected clients did.</div>
+              <div style="font-family:'Newsreader',serif; font-size:22px; font-weight:500; letter-spacing:-0.01em;">Activity &amp; errors</div>
+              <div style="font-size:12.5px; color:#7A7266; margin-top:4px;">Curator, client calls and anything that broke in MCP.</div>
             </div>
             <span onClick="{{ closeActivity }}" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FFFFFF; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; cursor:pointer;">esc</span>
           </div>
@@ -406,28 +406,89 @@
             </div>
           </div>
 
+          <!-- search -->
+          <div style="display:flex; align-items:center; gap:9px; margin-top:14px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:7px 11px;">
+            <span style="color:#9A938A; font-size:14px;">⌕</span>
+            <input value="{{ activitySearch }}" onInput="{{ onActivitySearch }}" placeholder="Search activity, errors, tools…" class="vtitle" style="flex:1; min-width:0; font-family:inherit; font-size:13px; color:#2A2622; background:transparent;">
+            <sc-if value="{{ hasActivitySearch }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearActivitySearch }}" style="color:#9A938A; cursor:pointer; font-size:14px; line-height:1;">×</span></sc-if>
+          </div>
           <!-- filter -->
-          <div style="display:flex; gap:2px; background:#F1EDE5; border:1px solid #E8E2D8; border-radius:7px; padding:2px; margin-top:14px;">
+          <div style="display:flex; gap:2px; background:#F1EDE5; border:1px solid #E8E2D8; border-radius:7px; padding:2px; margin-top:10px;">
             <span onClick="{{ setAfAll }}" style="{{ afAllStyle }}">All</span>
-            <span onClick="{{ setAfCurator }}" style="{{ afCuratorStyle }}">Curator</span>
             <span onClick="{{ setAfMcp }}" style="{{ afMcpStyle }}">MCP</span>
+            <span onClick="{{ setAfCurator }}" style="{{ afCuratorStyle }}">Curator</span>
+            <span onClick="{{ setAfErrors }}" style="{{ afErrStyle }}">Errors<sc-if value="{{ hasErrors }}" hint-placeholder-val="{{ true }}"><span style="{{ errBadgeStyle }}">{{ errorCount }}</span></sc-if></span>
           </div>
         </div>
 
         <!-- timeline -->
         <div class="vscroll" style="flex:1; overflow-y:auto; padding:6px 22px 20px;">
           <sc-for list="{{ activityItems }}" as="ev" hint-placeholder-count="6">
-            <div style="{{ ev.style }}">
-              <div style="display:flex; align-items:flex-start; gap:11px;">
-                <span style="{{ ev.dotStyle }}"></span>
-                <div style="flex:1; min-width:0;">
-                  <div style="font-size:13px; line-height:1.45;"><span style="{{ ev.actorStyle }}">{{ ev.actor }}</span><span style="color:#9A938A;"> {{ ev.verb }} </span><span style="font-weight:500; color:#2A2622;">{{ ev.target }}</span></div>
-                  <div style="font-size:12px; color:#7A7266; margin-top:3px;">{{ ev.detail }}</div>
-                  <sc-if value="{{ ev.pending }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#976A28; background:#F7EEDD; border-radius:5px; padding:2px 8px; cursor:pointer;">needs review →</span></sc-if>
+            <sc-if value="{{ ev.isNormal }}" hint-placeholder-val="{{ true }}">
+              <div style="{{ ev.style }}">
+                <div style="display:flex; align-items:flex-start; gap:11px;">
+                  <span style="{{ ev.dotStyle }}"></span>
+                  <div style="flex:1; min-width:0;">
+                    <div style="font-size:13px; line-height:1.45;"><span style="{{ ev.actorStyle }}">{{ ev.actor }}</span><span style="color:#9A938A;"> {{ ev.verb }} </span><span style="font-weight:500; color:#2A2622;">{{ ev.target }}</span></div>
+                    <div style="font-size:12px; color:#7A7266; margin-top:3px;">{{ ev.detail }}</div>
+                    <sc-if value="{{ ev.pending }}" hint-placeholder-val="{{ false }}"><span style="display:inline-block; margin-top:8px; font-family:'JetBrains Mono',monospace; font-size:10px; color:#976A28; background:#F7EEDD; border-radius:5px; padding:2px 8px; cursor:pointer;">needs review →</span></sc-if>
+                  </div>
+                  <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A; flex:none; margin-top:1px;">{{ ev.time }}</span>
                 </div>
-                <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A; flex:none; margin-top:1px;">{{ ev.time }}</span>
               </div>
-            </div>
+            </sc-if>
+            <sc-if value="{{ ev.isError }}" hint-placeholder-val="{{ false }}">
+              <div style="{{ ev.wrapStyle }}">
+                <div onClick="{{ ev.onToggle }}" style="display:flex; align-items:flex-start; gap:11px; cursor:pointer;">
+                  <span style="{{ ev.dotStyle }}"></span>
+                  <div style="flex:1; min-width:0;">
+                    <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                      <span style="{{ ev.levelStyle }}">{{ ev.levelLabel }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 7px;">{{ ev.tool }}</span>
+                      <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">{{ ev.status }}</span>
+                    </div>
+                    <div style="{{ ev.msgStyle }}">{{ ev.message }}</div>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A; margin-top:5px;">{{ ev.actor }} · {{ ev.session }}</div>
+                  </div>
+                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:6px; flex:none;">
+                    <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">{{ ev.time }}</span>
+                    <span style="{{ ev.chevStyle }}">{{ ev.chev }}</span>
+                  </div>
+                </div>
+                <sc-if value="{{ ev.expanded }}" hint-placeholder-val="{{ false }}">
+                  <div style="margin-top:13px; padding-left:20px;">
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:7px;">Stack trace</div>
+                    <pre class="vscroll" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.65; color:#4A443C; background:#FAF7F2; border:1px solid #EFE8DC; border-radius:7px; padding:12px 14px; margin:0 0 14px; overflow-x:auto; white-space:pre;">{{ ev.detailText }}</pre>
+                    <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:7px;">Payload</div>
+                    <pre class="vscroll" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.6; color:#6E665B; background:#FAF7F2; border:1px solid #EFE8DC; border-radius:7px; padding:12px 14px; margin:0 0 15px; overflow-x:auto; white-space:pre;">{{ ev.payloadText }}</pre>
+                    <div style="display:flex; gap:8px; flex-wrap:wrap;">
+                      <button onClick="{{ ev.onExportJson }}" style="font-family:inherit; font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;" style-hover="background:#F1EAE0; border-color:#CFC6B7;">⤓ Export error → JSON</button>
+                      <button onClick="{{ ev.onToggleFix }}" style="font-family:inherit; font-size:12px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:7px; padding:7px 12px; cursor:pointer; display:inline-flex; align-items:center; gap:7px;" style-hover="background:#7A6039;">✦ Fix with Claude Code</button>
+                    </div>
+                    <sc-if value="{{ ev.showFix }}" hint-placeholder-val="{{ false }}">
+                      <div style="margin-top:13px; background:#FCFAF6; border:1px solid #EFE8DC; border-radius:9px; padding:14px;">
+                        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; margin-bottom:8px;">Error endpoint</div>
+                        <div style="display:flex; align-items:center; gap:9px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:8px 11px; margin-bottom:15px;">
+                          <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8B6F47; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ ev.endpoint }}</span>
+                          <button onClick="{{ ev.copyEndpoint }}" style="flex:none; font-family:inherit; font-size:11px; font-weight:500; color:#7A7266; background:#FAF7F2; border:1px solid #E0D9CD; border-radius:6px; padding:4px 10px; cursor:pointer;" style-hover="background:#F1EAE0; color:#2A2622;">Copy</button>
+                        </div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px;">
+                          <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em;">Hand to Claude Code</span>
+                          <button onClick="{{ ev.copyCmd }}" style="flex:none; font-family:inherit; font-size:11px; font-weight:500; color:#7A7266; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:4px 10px; cursor:pointer;" style-hover="background:#F1EAE0; color:#2A2622;">Copy command</button>
+                        </div>
+                        <pre class="vscroll" style="font-family:'JetBrains Mono',monospace; font-size:11.5px; line-height:1.7; color:#4A443C; background:#F4F0E8; border:1px solid #EFE8DC; border-radius:7px; padding:12px 14px; margin:0; overflow-x:auto; white-space:pre;">{{ ev.cmd }}</pre>
+                        <div style="display:flex; align-items:center; gap:9px; margin-top:12px;">
+                          <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; flex:none;">key</span>
+                          <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#6E665B; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ ev.keyShown }}</span>
+                          <span onClick="{{ ev.toggleRevealKey }}" style="flex:none; font-size:11px; font-weight:500; color:#8B6F47; cursor:pointer;" style-hover="color:#6F5836;">{{ ev.revealLabel }}</span>
+                        </div>
+                        <div style="font-size:11px; color:#9A938A; margin-top:9px; line-height:1.55;">The command reads <span style="font-family:'JetBrains Mono',monospace; color:#8B6F47;">$VELLUM_MCP_KEY</span> from your shell — the key is never written into the copied text.</div>
+                      </div>
+                    </sc-if>
+                  </div>
+                </sc-if>
+              </div>
+            </sc-if>
           </sc-for>
           <sc-if value="{{ activityEmpty }}" hint-placeholder-val="{{ false }}">
             <div style="padding:48px 24px; text-align:center;">
@@ -680,6 +741,28 @@ class Component extends DCLogic {
         { id:'a10', source:'curator', actor:'Curator',        kind:'summary',  target:'Training block — July',   detail:'wrote a weekly digest',              time:'5h' },
         { id:'a11', source:'curator', actor:'Curator',        kind:'organize', target:'4 notes',                 detail:'normalized frontmatter',             time:'5h' },
       ],
+      activitySearch: '',
+      expandedError: null,
+      showFixFor: null,
+      revealKey: false,
+      errors: [
+        { id:'err_4a2f', level:'error', actor:'Claude Code', tool:'write_note', status:500, code:'EACCES', session:'sk-9f2a', time:'2m',
+          message:'write_note failed — permission denied opening /vault/specs/frontmatter.md',
+          payload:{ path:'specs/frontmatter.md', bytes:1284, mode:'0444' },
+          stack:['at writeNote (mcp/tools/write.go:88)','at (*Dispatcher).call (mcp/router.go:214)','at (*Session).handle (mcp/session.go:141)','at (*Server).serveHTTP (mcp/server.go:96)'] },
+        { id:'err_1c7d', level:'warning', actor:'claude.ai', tool:'search', status:429, code:'RATE_LIMIT', session:'sk-41de', time:'14m',
+          message:'rate limit exceeded — 60 req/min on /mcp, retry after 22s',
+          payload:{ query:'mcp write path', window:'60s', limit:60, seen:63 },
+          stack:['at rateLimit (mcp/middleware.go:52)','at (*Server).serveHTTP (mcp/server.go:88)'] },
+        { id:'err_9b03', level:'error', actor:'Claude Desktop', tool:'read_note', status:404, code:'ENOENT', session:'sk-b7c1', time:'1h',
+          message:'note not found — drafts/old-dark-mode.md was moved or deleted',
+          payload:{ path:'drafts/old-dark-mode.md' },
+          stack:['at readNote (mcp/tools/read.go:41)','at (*Dispatcher).call (mcp/router.go:214)'] },
+        { id:'err_2e58', level:'error', actor:'Curator', tool:'auto_link', status:500, code:'PANIC', session:'curator', time:'3h',
+          message:'nil map access while linking [[MCP tool inventory]] into Roadmap',
+          payload:{ note:'roadmap', link:'MCP tool inventory' },
+          stack:['at (*Curator).link (curator/link.go:120)','at (*Curator).tick (curator/loop.go:77)','at (*Curator).run (curator/loop.go:34)'] },
+      ],
     };
     this._onKey = this._onKey.bind(this);
     this.rawRef = React.createRef();
@@ -749,6 +832,19 @@ class Component extends DCLogic {
   revokeConn(id){ this.setState(s=>({ connections:s.connections.filter(c=>c.id!==id) })); this.setToast('Session revoked', 'danger'); }
   copyText(text){ try{ if(navigator.clipboard) navigator.clipboard.writeText(text); }catch(e){} this.setToast('Copied to clipboard', 'ok'); }
   runCurator(){ this.setToast('Curator run queued', 'ok'); }
+  toggleErrorExpand(id){ this.setState(s=>({ expandedError: s.expandedError===id?null:id, showFixFor:null, revealKey:false })); }
+  toggleFix(id){ this.setState(s=>({ showFixFor: s.showFixFor===id?null:id, revealKey:false })); }
+  toggleRevealKey(){ this.setState(s=>({ revealKey:!s.revealKey })); }
+  exportErrorJson(err){
+    const json = JSON.stringify({
+      id:err.id, level:err.level, code:err.code, status:err.status, tool:err.tool,
+      message:err.message, actor:err.actor, session:err.session, at:err.time,
+      endpoint:'https://vellum.example.com/api/errors/'+err.id,
+      payload:err.payload, stack:err.stack,
+    }, null, 2);
+    try{ if(navigator.clipboard) navigator.clipboard.writeText(json); }catch(e){}
+    this.setToast('Error exported as JSON — copied', 'ok');
+  }
   markAllRead(){ this.setState(s=>({ notifications:s.notifications.map(n=>({...n,read:true})) })); }
   dismissNotif(id){ this.setState(s=>({ notifications:s.notifications.filter(n=>n.id!==id) })); }
   paletteMatches(){
@@ -978,14 +1074,55 @@ class Component extends DCLogic {
     const afSeg = (a) => a
       ? 'flex:1; text-align:center; font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; border-radius:6px; padding:6px 0; box-shadow:0 1px 2px rgba(42,38,34,0.05); cursor:pointer;'
       : 'flex:1; text-align:center; font-size:12px; color:#7A7266; padding:6px 0; cursor:pointer;';
-    const evShown = S.activityFilter==='all' ? S.events : S.events.filter(e=>e.source===S.activityFilter);
-    const activityItems = evShown.map(e=>{ const k=ACTKIND[e.kind]||ACTKIND.write; const cur=e.source==='curator'; return {
-      key:e.id, actor:e.actor, verb:k.label, target:e.target, detail:e.detail, time:e.time, pending:!!e.pending,
-      dotStyle:'width:9px; height:9px; border-radius:50%; background:'+k.dot+'; flex:none; margin-top:5px;',
-      actorStyle:'font-weight:500; color:'+(cur?'#8B6F47':'#6E665B')+';',
-      style:'padding:14px 4px; border-bottom:1px solid #F0EBE2;'+(e.pending?' background:#FCFAF6;':''),
-    }; });
+    const toMins = (t)=>{ if(!t) return 0; const m=/^([\d.]+)\s*(s|m|h|d|w|y)$/.exec((''+t).trim()); if(!m) return 0; const n=parseFloat(m[1]); const u={s:1/60,m:1,h:60,d:1440,w:10080,y:525600}[m[2]]||1; return n*u; };
+    const errorList = S.errors;
+    const errorCount = errorList.length;
+    // build the source set for the active filter
+    let baseEvents;
+    if(S.activityFilter==='errors') baseEvents = errorList.map(e=>({...e,_err:true}));
+    else if(S.activityFilter==='mcp' || S.activityFilter==='curator') baseEvents = S.events.filter(e=>e.source===S.activityFilter);
+    else baseEvents = [...errorList.map(e=>({...e,_err:true})), ...S.events].sort((a,b)=>toMins(a.time)-toMins(b.time));
+    // free-text search
+    const aq=(S.activitySearch||'').trim().toLowerCase();
+    const inText=(e)=>{ const hay = e._err ? [e.message,e.tool,e.code,e.actor,e.status,e.session].join(' ') : [e.actor,e.target,e.detail,e.kind].join(' '); return hay.toLowerCase().includes(aq); };
+    const shown = aq ? baseEvents.filter(inText) : baseEvents;
+
+    const LEVEL={ error:{ color:'#B3543D', bg:'#F7ECE8', dot:'#B3543D', label:'error' }, warning:{ color:'#976A28', bg:'#F7EEDD', dot:'#C08A3E', label:'warning' } };
+    const activityItems = shown.map(e=>{
+      if(e._err){
+        const lv=LEVEL[e.level]||LEVEL.error; const expanded=S.expandedError===e.id; const showFix=S.showFixFor===e.id;
+        const endpoint='https://vellum.example.com/api/errors/'+e.id;
+        const cmd=mb('claude -p "Diagnose and fix this Vellum MCP error" \\','  --mcp-error '+endpoint+' \\','  --header "Authorization: Bearer $VELLUM_MCP_KEY"');
+        const maskedKey='sk-ant-api03-'+'•'.repeat(18)+e.session.slice(-4);
+        const realKey='sk-ant-api03-Vq7Kf2Rn8xTbW3'+e.session.slice(-4);
+        return {
+          key:e.id, isError:true, isNormal:false,
+          dotStyle:'width:9px; height:9px; border-radius:50%; background:'+lv.dot+'; flex:none; margin-top:5px;',
+          levelLabel:lv.label,
+          levelStyle:'font-family:'+"'JetBrains Mono',monospace"+'; font-size:10px; text-transform:uppercase; letter-spacing:0.06em; color:'+lv.color+'; background:'+lv.bg+'; border-radius:5px; padding:2px 7px;',
+          tool:e.tool, status:'HTTP '+e.status, message:e.message, actor:e.actor, session:e.session, time:e.time,
+          msgStyle:'font-size:13px; color:#3A342E; line-height:1.5; margin-top:6px;'+(expanded?'':' overflow:hidden; text-overflow:ellipsis; white-space:nowrap;'),
+          wrapStyle:'padding:14px 4px 14px 12px; border-bottom:1px solid #F0EBE2; border-left:2px solid '+lv.dot+'; margin-left:-2px; background:'+(expanded?'#FCFAF6':'transparent')+';',
+          chev: expanded?'▾':'▸', chevStyle:'font-size:11px; color:#9A938A;',
+          expanded,
+          detailText: e.code+'  ·  '+e.tool+'\n\n'+e.message+'\n\n'+(e.stack||[]).join('\n'),
+          payloadText: JSON.stringify(e.payload||{}, null, 2),
+          onToggle:()=>this.toggleErrorExpand(e.id),
+          onExportJson:()=>this.exportErrorJson(e),
+          showFix, onToggleFix:()=>this.toggleFix(e.id),
+          endpoint, cmd, copyEndpoint:()=>this.copyText(endpoint), copyCmd:()=>this.copyText(cmd),
+          keyShown: S.revealKey?realKey:maskedKey, revealLabel: S.revealKey?'Hide':'Reveal', toggleRevealKey:()=>this.toggleRevealKey(),
+        };
+      }
+      const k=ACTKIND[e.kind]||ACTKIND.write; const cur=e.source==='curator';
+      return { key:e.id, isError:false, isNormal:true, actor:e.actor, verb:k.label, target:e.target, detail:e.detail, time:e.time, pending:!!e.pending,
+        dotStyle:'width:9px; height:9px; border-radius:50%; background:'+k.dot+'; flex:none; margin-top:5px;',
+        actorStyle:'font-weight:500; color:'+(cur?'#8B6F47':'#6E665B')+';',
+        style:'padding:14px 4px; border-bottom:1px solid #F0EBE2;'+(e.pending?' background:#FCFAF6;':''),
+      };
+    });
     const curatorChanges = S.events.filter(e=>e.source==='curator').length;
+    const errBadgeStyle='display:inline-flex; align-items:center; justify-content:center; min-width:16px; height:15px; margin-left:5px; padding:0 4px; border-radius:8px; background:#B3543D; color:#FFFFFF; font-family:'+"'JetBrains Mono',monospace"+'; font-size:9.5px; font-weight:600;';
 
     // ----- onboarding tour geometry
     const tourOn = S.tourStep!=null;
@@ -1108,8 +1245,10 @@ class Component extends DCLogic {
 
       activityOpen:S.activityOpen, openActivity:()=>this.setState({activityOpen:true, notifOpen:false}), closeActivity:()=>this.setState({activityOpen:false}),
       activityItems, activityEmpty: activityItems.length===0, curatorChanges,
-      afAllStyle:afSeg(S.activityFilter==='all'), afCuratorStyle:afSeg(S.activityFilter==='curator'), afMcpStyle:afSeg(S.activityFilter==='mcp'),
-      setAfAll:()=>this.setState({activityFilter:'all'}), setAfCurator:()=>this.setState({activityFilter:'curator'}), setAfMcp:()=>this.setState({activityFilter:'mcp'}),
+      afAllStyle:afSeg(S.activityFilter==='all'), afMcpStyle:afSeg(S.activityFilter==='mcp'), afCuratorStyle:afSeg(S.activityFilter==='curator'), afErrStyle:afSeg(S.activityFilter==='errors'),
+      setAfAll:()=>this.setState({activityFilter:'all'}), setAfMcp:()=>this.setState({activityFilter:'mcp'}), setAfCurator:()=>this.setState({activityFilter:'curator'}), setAfErrors:()=>this.setState({activityFilter:'errors'}),
+      activitySearch:S.activitySearch, onActivitySearch:e=>this.setState({activitySearch:e.target.value}), clearActivitySearch:()=>this.setState({activitySearch:''}), hasActivitySearch: !!(S.activitySearch||'').trim(),
+      errorCount, hasErrors: errorCount>0, errBadgeStyle,
       runCurator:()=>this.runCurator(),
 
       tourOn, spotlightStyle, tooltipStyle, tourTitle, tourBody, tourIndexLabel, tourNextLabel, tourCanBack,

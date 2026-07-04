@@ -145,6 +145,7 @@ var kindVerb = map[string]string{
 	"read": "read", "write": "wrote", "search": "searched", "move": "moved",
 	"delete": "deleted", "tag": "tagged", "link": "linked",
 	"organize": "organized", "archive": "archived", "summary": "summarized",
+	"error": "hit an error in",
 }
 
 func kindToVerb(kind string) string {
@@ -201,7 +202,9 @@ func (a *API) handleRevoke(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) handleActivity(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
-	events := a.Activity.Events(r.URL.Query().Get("filter"))
+	filter := r.URL.Query().Get("filter")
+	all := a.Activity.Events("all")
+
 	type ev struct {
 		ID      string `json:"id"`
 		Source  string `json:"source"`
@@ -212,22 +215,51 @@ func (a *API) handleActivity(w http.ResponseWriter, r *http.Request) {
 		Detail  string `json:"detail"`
 		Pending bool   `json:"pending,omitempty"`
 		Time    string `json:"time"`
+		// error fields (only for kind == "error")
+		IsError bool   `json:"isError,omitempty"`
+		Level   string `json:"level,omitempty"`
+		Tool    string `json:"tool,omitempty"`
+		Status  int    `json:"status,omitempty"`
+		Session string `json:"session,omitempty"`
 	}
-	out := make([]ev, 0, len(events))
-	for _, e := range events {
-		out = append(out, ev{
+
+	errorCount := 0
+	out := []ev{}
+	lastRun := "never"
+	for _, e := range all {
+		isErr := e.Kind == "error"
+		if isErr {
+			errorCount++
+		}
+		if e.Source == "curator" && lastRun == "never" {
+			lastRun = reltime(now.Sub(e.At))
+		}
+		switch filter {
+		case "", "all":
+		case "errors":
+			if !isErr {
+				continue
+			}
+		default: // mcp | curator | user
+			if e.Source != filter {
+				continue
+			}
+		}
+		item := ev{
 			ID: e.ID, Source: e.Source, Actor: e.Actor, Kind: e.Kind, Verb: kindToVerb(e.Kind),
 			Target: a.prettyTarget(e.Target), Detail: e.Detail, Pending: e.Pending,
 			Time: reltime(now.Sub(e.At)),
-		})
-	}
-	lastRun := "never"
-	for _, e := range events {
-		if e.Source == "curator" {
-			lastRun = reltime(now.Sub(e.At))
-			break
 		}
+		if isErr {
+			item.IsError = true
+			item.Level = "error"
+			item.Tool = e.Target
+			item.Status = http.StatusInternalServerError
+			item.Session = e.Actor
+		}
+		out = append(out, item)
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"curator": map[string]any{
 			"enabled":  a.Curator,
@@ -235,7 +267,8 @@ func (a *API) handleActivity(w http.ResponseWriter, r *http.Request) {
 			"watching": a.Index.Len(),
 			"lastRun":  lastRun,
 		},
-		"events": out,
+		"events":     out,
+		"errorCount": errorCount,
 	})
 }
 

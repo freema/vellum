@@ -4,12 +4,14 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"strings"
 
 	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/auth"
+	"github.com/freema/vellum/internal/obs"
 )
 
 // Options configure the router.
@@ -60,7 +62,31 @@ func NewRouter(version string, opts Options) http.Handler {
 	if opts.SPA != nil {
 		mux.Handle("/", spaHandler(opts.SPA))
 	}
-	return auth.CORS(opts.CORSOrigins, mux)
+	return auth.CORS(opts.CORSOrigins, recoverAndReport(opts.Activity, mux))
+}
+
+// recoverAndReport turns a panic into a 500, reports it to Sentry (when
+// enabled) and records an error event into the activity feed so operators see
+// MCP/API breakage in the workspace UI, not only in the Sentry dashboard.
+func recoverAndReport(rec *activity.Recorder, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		defer func() {
+			if v := recover(); v != nil {
+				err := fmt.Errorf("panic on %s %s: %v", r.Method, r.URL.Path, v)
+				obs.Capture(err, map[string]string{"path": r.URL.Path, "method": r.Method})
+				if rec != nil {
+					rec.Record(activity.Event{
+						Source: "system", Actor: "vellum", Kind: "error",
+						Target: r.URL.Path, Detail: fmt.Sprintf("%v", v),
+					})
+				}
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				_, _ = w.Write([]byte(`{"error":"internal error"}`))
+			}
+		}()
+		next.ServeHTTP(w, r)
+	})
 }
 
 // spaHandler serves the embedded SPA: real files as-is, everything else

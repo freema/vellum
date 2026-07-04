@@ -24,6 +24,7 @@ import (
 	"github.com/freema/vellum/internal/httpapi"
 	"github.com/freema/vellum/internal/mcpserver"
 	"github.com/freema/vellum/internal/notify"
+	"github.com/freema/vellum/internal/obs"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -48,6 +49,19 @@ func main() {
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
+
+	flushSentry, err := obs.Init(obs.Config{
+		DSN:         cfg.SentryDSN,
+		Environment: cfg.SentryEnvironment,
+		Release:     version,
+	})
+	if err != nil {
+		logger.Warn("sentry init failed", "error", err)
+	}
+	defer flushSentry()
+	if obs.Enabled() {
+		logger.Info("sentry error reporting enabled", "environment", cfg.SentryEnvironment)
+	}
 
 	v, err := openVault(cfg)
 	if err != nil {
