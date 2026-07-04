@@ -425,7 +425,7 @@
   border-radius: 7px;
   padding: 11px 13px;
 }
-.connect-card__key { color: var(--ink-faint); font-size: 13px; }
+.connect-card__key { color: var(--ink-faint); flex: none; }
 .connect-card__input {
   flex: 1;
   font-family: var(--font-mono);

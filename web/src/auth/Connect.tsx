@@ -35,7 +35,22 @@ export default function Connect({ api, onConnected }: { api: ApiClient; onConnec
         <div className="connect-card__field">
           <label className="v-label">Client secret</label>
           <div className="connect-card__input-row">
-            <span className="connect-card__key">⚿</span>
+            <svg
+              className="connect-card__key"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <circle cx="7.5" cy="15.5" r="4.5" />
+              <path d="m11 12 10-10" />
+              <path d="m16 7 3 3" />
+            </svg>
             <input
               className="connect-card__input"
               type={show ? 'text' : 'password'}

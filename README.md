@@ -2,6 +2,12 @@
 
 > *a calm window into a folder of markdown*
 
+[![Release](https://img.shields.io/github/v/release/freema/vellum)](https://github.com/freema/vellum/releases)
+[![CI](https://github.com/freema/vellum/actions/workflows/ci.yml/badge.svg)](https://github.com/freema/vellum/actions/workflows/ci.yml)
+[![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)](go.mod)
+[![License: MIT](https://img.shields.io/badge/license-MIT-brown.svg)](LICENSE)
+[![GHCR](https://img.shields.io/badge/ghcr.io-freema%2Fvellum-8B6F47)](https://github.com/freema/vellum/pkgs/container/vellum)
+
 A lightweight, **self-hosted MCP server** over a folder of markdown files.
 One static Go binary with an embedded web UI, one ~24 MB Docker image,
 ~5 MB idle RAM. `docker compose up -d` and you're done.
@@ -151,6 +157,23 @@ task e2e          # compose stack with the fixture vault (docs/e2e.md)
   clients silently re-authorize; no signing keys to manage.
 - **No database, ever (v1).** Tags, backlinks and task states live in an
   in-RAM index rebuilt in ~50 ms at startup.
+
+## Why vellum and not …?
+
+- **Obsidian + plugins** — vellum doesn't replace your editor; it happily
+  serves the same vault folder to your agent while you keep editing
+  anywhere. No sync, no plugin sandbox, no Electron on the server.
+- **Notion/Anytype-style apps** — those own your data. vellum's "database"
+  is `ls` and `grep`-able markdown.
+- **Heavier MCP note servers** — vellum ships one 24 MB container, no
+  vector DB, no API keys, and burns minimal agent context (15 tools).
+
+## Author
+
+Created by **Tomáš Grasl** ([@freema](https://github.com/freema)).
+
+Issues and PRs welcome — the [threat model](docs/threat-model.md) and
+[SECURITY.md](SECURITY.md) explain the boundaries contributions must keep.
 
 ## License
 
