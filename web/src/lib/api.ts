@@ -117,12 +117,34 @@ export class AuthError extends Error {
   }
 }
 
+const TOKEN_KEY = 'vellum_token'
+
 export class ApiClient {
   private token: string | null = null
   onAuthError?: () => void
 
+  constructor() {
+    // Restore the session token so a page refresh doesn't force a re-login.
+    // sessionStorage (not localStorage) — survives reload, cleared on tab close.
+    try {
+      this.token = sessionStorage.getItem(TOKEN_KEY)
+    } catch {
+      /* private mode / storage disabled */
+    }
+  }
+
+  hasToken(): boolean {
+    return !!this.token
+  }
+
   setToken(token: string | null) {
     this.token = token
+    try {
+      if (token) sessionStorage.setItem(TOKEN_KEY, token)
+      else sessionStorage.removeItem(TOKEN_KEY)
+    } catch {
+      /* ignore */
+    }
   }
 
   /** Exchange the client secret for a bearer token (client_credentials). */
@@ -140,7 +162,7 @@ export class ApiClient {
       throw new Error(res.status === 401 ? 'Invalid client secret' : `Connect failed (${res.status})`)
     }
     const body = (await res.json()) as { access_token: string }
-    this.token = body.access_token
+    this.setToken(body.access_token)
   }
 
   /** Server health: whether auth is on + the running version. */
@@ -215,6 +237,13 @@ export class ApiClient {
     })
   }
 
+  async deleteFolder(path: string): Promise<{ deleted: string; notes: number }> {
+    return (await this.request('DELETE', `/api/folders/${encodePath(path)}`)) as {
+      deleted: string
+      notes: number
+    }
+  }
+
   async connections(): Promise<ConnectionsData> {
     return (await this.request('GET', '/api/connections')) as ConnectionsData
   }
@@ -261,7 +290,7 @@ export class ApiClient {
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`
     const res = await fetch(url, { method, body, headers })
     if (res.status === 401) {
-      this.token = null
+      this.setToken(null)
       this.onAuthError?.()
       throw new AuthError()
     }

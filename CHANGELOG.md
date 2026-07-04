@@ -6,6 +6,25 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.4.0] — 2026-07-04
+
+### Fixed
+- **Login now survives a page refresh.** The session token is kept in
+  sessionStorage (restored on load and verified), so reloading no longer drops
+  you back to the connect screen.
+
+### Added
+- **Delete folders** — hover a folder in the tree for a `×`; a confirm dialog
+  shows how many notes go with it, then it's removed recursively
+  (`DELETE /api/folders/{path}`).
+- **Re-scan vault** button in the tree header — pulls in notes added/changed
+  via MCP without a full page reload.
+- **Loading feedback** — a spinner while a note opens, a top progress bar when
+  switching notes, and a "Searching…" indicator in the command palette.
+- **MCP server icon** — the folded-leaf mark is advertised in the MCP server
+  info (`icons` data URI + `websiteUrl`) and served at `/favicon.ico`, so the
+  server shows an icon in the Inspector and connector lists.
+
 ## [1.3.0] — 2026-07-04
 
 ### Fixed
@@ -152,7 +171,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/freema/vellum/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/freema/vellum/compare/v1.2.1...v1.3.0
 [1.2.1]: https://github.com/freema/vellum/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/freema/vellum/compare/v1.1.0...v1.2.0

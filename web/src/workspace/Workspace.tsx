@@ -149,6 +149,8 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const [tourStep, setTourStep] = useState<number | null>(null)
   const [folders, setFolders] = useState<string[]>([])
   const [addingFolder, setAddingFolder] = useState(false)
+  const [refreshing, setRefreshing] = useState(false)
+  const [folderToDelete, setFolderToDelete] = useState<string | null>(null)
 
   // top-bar panels + their data
   const [connOpen, setConnOpen] = useState(false)
@@ -190,6 +192,18 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     setToast({ text, tone })
     toastTimer.current = window.setTimeout(() => setToast(null), 2400)
   }, [])
+
+  // Manual vault re-scan — picks up notes added/changed via MCP without a full
+  // page reload (otherwise the only way to see them).
+  const doRefresh = useCallback(async () => {
+    setRefreshing(true)
+    try {
+      await refresh()
+      showToast('Vault re-scanned')
+    } finally {
+      setRefreshing(false)
+    }
+  }, [refresh, showToast])
 
   // notification + error badges on load
   useEffect(() => {
@@ -492,6 +506,22 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     [api, refresh, selectedPath, navigate, showToast],
   )
 
+  const deleteFolder = useCallback(
+    async (dir: string) => {
+      setFolderToDelete(null)
+      try {
+        const r = await api.deleteFolder(dir)
+        await refresh()
+        if (selectedPath === dir || selectedPath.startsWith(dir + '/')) navigate('/', { replace: true })
+        if (selectedDir === dir || selectedDir.startsWith(dir + '/')) setSelectedDir('')
+        showToast(`Folder deleted${r.notes ? ` · ${r.notes} note${r.notes === 1 ? '' : 's'}` : ''}`, 'danger')
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Could not delete folder', 'danger')
+      }
+    },
+    [api, refresh, selectedPath, selectedDir, navigate, showToast],
+  )
+
   const addFolder = useCallback(
     async (rawName: string) => {
       setAddingFolder(false)
@@ -544,6 +574,9 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onStartAddFolder={() => setAddingFolder(true)}
           onAddFolder={addFolder}
           onCancelAddFolder={() => setAddingFolder(false)}
+          refreshing={refreshing}
+          onRefresh={doRefresh}
+          onDeleteFolder={setFolderToDelete}
           tags={tags}
           activeTags={activeTags}
           onToggleTag={(t) =>
@@ -648,6 +681,31 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onClose={() => setActivityOpen(false)}
           showToast={showToast}
         />
+      )}
+      {folderToDelete !== null && (
+        <div className="ws-overlay ws-overlay--center" onClick={() => setFolderToDelete(null)}>
+          <div className="v-modal" style={{ width: 440 }} onClick={(e) => e.stopPropagation()}>
+            <div className="v-modal__title">Delete this folder?</div>
+            <div className="v-modal__body">
+              The folder <span className="v-modal__code">{folderToDelete}</span> and its{' '}
+              <b style={{ color: 'var(--danger)' }}>
+                {entries.filter((e) => e.path.startsWith(folderToDelete + '/')).length}
+              </b>{' '}
+              note(s) will be removed from the vault. This can’t be undone.
+            </div>
+            <div className="v-modal__actions">
+              <button className="v-modal__cancel" onClick={() => setFolderToDelete(null)}>
+                Cancel
+              </button>
+              <button
+                className="v-modal__confirm v-modal__confirm--danger"
+                onClick={() => deleteFolder(folderToDelete)}
+              >
+                Delete folder
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {helpOpen && (
         <HelpModal
@@ -798,6 +856,9 @@ function TreePanel({
   onStartAddFolder,
   onAddFolder,
   onCancelAddFolder,
+  refreshing,
+  onRefresh,
+  onDeleteFolder,
 }: {
   counts: Map<string, number>
   matchCounts: Map<string, number>
@@ -821,6 +882,9 @@ function TreePanel({
   onStartAddFolder: () => void
   onAddFolder: (name: string) => void
   onCancelAddFolder: () => void
+  refreshing: boolean
+  onRefresh: () => void
+  onDeleteFolder: (dir: string) => void
 }) {
   const dropProps = (dir: string) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -857,7 +921,12 @@ function TreePanel({
     dir: string,
     label: string,
     icon: IconName,
-    opts: { badge?: boolean; caret?: 'open' | 'closed'; onCaret?: () => void } = {},
+    opts: {
+      badge?: boolean
+      caret?: 'open' | 'closed'
+      onCaret?: () => void
+      deletable?: boolean
+    } = {},
   ) => {
     const selected = selectedDir === dir
     const isDrop = dropDir === dir
@@ -884,6 +953,18 @@ function TreePanel({
           <Icon name={icon} size={14} />
         </span>
         <span className="ws-tree__name">{label}</span>
+        {opts.deletable && (
+          <span
+            className="ws-tree__del"
+            title="Delete folder"
+            onClick={(e) => {
+              e.stopPropagation()
+              onDeleteFolder(dir)
+            }}
+          >
+            ×
+          </span>
+        )}
         {renderCount(dir, !!opts.badge)}
       </div>
     )
@@ -895,6 +976,14 @@ function TreePanel({
         <span className="ws-tree__label">Vault</span>
         <span className="ws-tree__head-right">
           <span className="ws-tree__total">{totalNotes} notes</span>
+          <button
+            className="ws-tree__add"
+            onClick={onRefresh}
+            title="Re-scan the vault (pick up changes made via MCP)"
+            disabled={refreshing}
+          >
+            <Icon name="refresh" size={13} className={refreshing ? 'ws-spin' : undefined} />
+          </button>
           <button
             id="tourNewFolder"
             className="ws-tree__add"
@@ -946,11 +1035,21 @@ function TreePanel({
                 <Icon name="folder" size={13} />
               </span>
               <span className="ws-tree__name">{dir.split('/')[1]}</span>
+              <span
+                className="ws-tree__del"
+                title="Delete folder"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onDeleteFolder(dir)
+                }}
+              >
+                ×
+              </span>
               {renderCount(dir, false)}
             </div>
           )
         })}
-      {otherTopDirs.map((dir) => row(dir, dir, 'folder'))}
+      {otherTopDirs.map((dir) => row(dir, dir, 'folder', { deletable: true }))}
       {row('archive', 'Archive', 'archive')}
       <div className="ws-tree__divider" />
       <div className="ws-tree__label">Tags</div>
@@ -1132,6 +1231,7 @@ function EditorPanel({
   showToast: (text: string, tone?: 'ok' | 'danger') => void
 }) {
   const [note, setNote] = useState<Note | null>(null)
+  const [loading, setLoading] = useState(false)
   const [draft, setDraft] = useState('')
   const [titleDraft, setTitleDraft] = useState('')
   const [etag, setEtag] = useState('')
@@ -1146,14 +1246,20 @@ function EditorPanel({
   useEffect(() => {
     if (!path) return
     let cancelled = false
-    void api.getNote(path).then((n) => {
-      if (cancelled) return
-      setNote(n)
-      setDraft(n.content)
-      setTitleDraft(n.title)
-      setEtag(n.hash)
-      onSavingChange(false)
-    })
+    setLoading(true)
+    void api
+      .getNote(path)
+      .then((n) => {
+        if (cancelled) return
+        setNote(n)
+        setDraft(n.content)
+        setTitleDraft(n.title)
+        setEtag(n.hash)
+        onSavingChange(false)
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
     return () => {
       cancelled = true
     }
@@ -1247,11 +1353,18 @@ function EditorPanel({
     return (
       <main className="ws-editor">
         <div className="ws-editor__empty">
-          <div className="v-empty" style={{ border: 'none', background: 'transparent' }}>
-            <div className="v-empty__glyph">∅</div>
-            <div className="v-empty__title">No note open</div>
-            <div className="v-empty__body">Pick a note from the list or press ⌘K.</div>
-          </div>
+          {path && loading ? (
+            <div className="ws-loading">
+              <span className="ws-spinner ws-spinner--lg" />
+              <div className="ws-loading__text">Opening note…</div>
+            </div>
+          ) : (
+            <div className="v-empty" style={{ border: 'none', background: 'transparent' }}>
+              <div className="v-empty__glyph">∅</div>
+              <div className="v-empty__title">No note open</div>
+              <div className="v-empty__body">Pick a note from the list or press ⌘K.</div>
+            </div>
+          )}
         </div>
       </main>
     )
@@ -1286,6 +1399,7 @@ function EditorPanel({
 
   return (
     <main className="ws-editor">
+      {loading && <div className="ws-editor__loadbar" />}
       <div className="ws-editor__header">
         <div className="ws-editor__title-row">
           <input
@@ -2010,8 +2124,15 @@ function PaletteOverlay({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [selected, setSelected] = useState(0)
+  const [searching, setSearching] = useState(false)
 
   useEffect(() => {
+    if (!query.trim()) {
+      setResults([])
+      setSearching(false)
+      return
+    }
+    setSearching(true)
     const t = window.setTimeout(() => {
       const q = query.trim()
       const tags = q
@@ -2022,10 +2143,13 @@ function PaletteOverlay({
         .split(/\s+/)
         .filter((w) => !w.startsWith('#'))
         .join(' ')
-      void api.search(text, tags).then((r) => {
-        setResults(r.slice(0, 8))
-        setSelected(0)
-      })
+      void api
+        .search(text, tags)
+        .then((r) => {
+          setResults(r.slice(0, 8))
+          setSelected(0)
+        })
+        .finally(() => setSearching(false))
     }, 180)
     return () => window.clearTimeout(t)
   }, [api, query])
@@ -2046,6 +2170,12 @@ function PaletteOverlay({
     <div className="ws-overlay" onClick={onClose}>
       <div onClick={(e) => e.stopPropagation()} onKeyDown={onKey}>
         <CommandPalette query={query} onQueryChange={setQuery}>
+          {searching && results.length === 0 && (
+            <div className="ws-palette__searching">
+              <span className="ws-spinner" />
+              Searching…
+            </div>
+          )}
           {results.map((r, i) => (
             <PaletteItem
               key={r.path}

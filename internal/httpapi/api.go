@@ -41,6 +41,7 @@ func (a *API) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tasks", a.handleTasks)
 	mux.HandleFunc("GET /api/folders", a.handleListFolders)
 	mux.HandleFunc("POST /api/folders", a.handleCreateFolder)
+	mux.HandleFunc("DELETE /api/folders/{path...}", a.handleDeleteFolder)
 	if a.Activity != nil {
 		mux.HandleFunc("GET /api/connections", a.handleConnections)
 		mux.HandleFunc("DELETE /api/connections/{id}", a.handleRevoke)

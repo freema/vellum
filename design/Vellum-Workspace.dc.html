@@ -95,13 +95,14 @@
       </sc-if>
 
       <sc-for list="{{ treeRows }}" as="row" hint-placeholder-count="8">
-        <div draggable="false" onClick="{{ row.onClick }}" onDragOver="{{ row.onDragOver }}" onDragLeave="{{ row.onDragLeave }}" onDrop="{{ row.onDrop }}" style="{{ row.style }}">
+        <div draggable="false" onClick="{{ row.onClick }}" onMouseEnter="{{ row.onMouseEnter }}" onMouseLeave="{{ row.onMouseLeave }}" onDragOver="{{ row.onDragOver }}" onDragLeave="{{ row.onDragLeave }}" onDrop="{{ row.onDrop }}" style="{{ row.style }}">
           <sc-for list="{{ row.rails }}" as="r" hint-placeholder-count="0"><span style="width:15px; flex:none; align-self:stretch; border-left:1px solid #EAE3D7; margin-left:6px;"></span></sc-for>
           <div style="flex:1; min-width:0; display:flex; align-items:center; gap:7px; padding:6px 8px;">
             <span onClick="{{ row.onToggle }}" style="{{ row.chevStyle }}">{{ row.chev }}</span>
             <span style="{{ row.iconStyle }}">{{ row.icon }}</span>
             <span style="{{ row.labelStyle }}">{{ row.label }}</span>
             <span style="{{ row.countStyle }}">{{ row.count }}</span>
+            <sc-if value="{{ row.showDelete }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.onDelete }}" title="Delete folder" style="{{ row.delStyle }}" style-hover="background:#F3E6E1; color:#B3543D;">×</span></sc-if>
           </div>
         </div>
       </sc-for>
@@ -262,8 +263,13 @@
   <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
     <div onClick="{{ cancelDelete }}" style="position:absolute; inset:0; z-index:45; background:rgba(30,26,22,0.32); display:flex; align-items:center; justify-content:center;">
       <div onClick="{{ stop }}" style="width:min(420px,90%); background:#FFFFFF; border:1px solid #E0D9CD; border-radius:10px; padding:24px; box-shadow:0 20px 60px -16px rgba(42,38,34,0.4);">
-        <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:500; margin-bottom:8px;">Delete this note?</div>
-        <div style="font-size:13.5px; color:#7A7266; line-height:1.55; margin-bottom:20px;"><span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47;">{{ deleteFile }}</span> will be removed from the vault. This can’t be undone.</div>
+        <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:500; margin-bottom:8px;">{{ confirmTitle }}</div>
+        <sc-if value="{{ confirmIsFolder }}" hint-placeholder-val="{{ false }}">
+          <div style="font-size:13.5px; color:#7A7266; line-height:1.55; margin-bottom:20px;">The folder <span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47;">{{ deleteFile }}</span> and its <span style="font-weight:600; color:#B3543D;">{{ folderNoteCount }}</span> note(s) will be removed from the vault. This can’t be undone.</div>
+        </sc-if>
+        <sc-if value="{{ confirmIsNote }}" hint-placeholder-val="{{ true }}">
+          <div style="font-size:13.5px; color:#7A7266; line-height:1.55; margin-bottom:20px;"><span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47;">{{ deleteFile }}</span> will be removed from the vault. This can’t be undone.</div>
+        </sc-if>
         <div style="display:flex; justify-content:flex-end; gap:10px;">
           <button onClick="{{ cancelDelete }}" style="font-family:inherit; font-size:13px; font-weight:500; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; padding:8px 14px; cursor:pointer;" style-hover="background:#F1EAE0;">Cancel</button>
           <button onClick="{{ doDelete }}" style="font-family:inherit; font-size:13px; font-weight:500; color:#FFFFFF; background:#B3543D; border:1px solid #B3543D; border-radius:6px; padding:8px 16px; cursor:pointer;" style-hover="background:#9C4835;">Delete</button>
@@ -698,6 +704,7 @@ class Component extends DCLogic {
       activeTag: null,
       expanded: { projects:true, vellum:true, areas:false },
       addingFolder: false,
+      hoveredRow: null,
       newFolderName: '',
       dropTarget: null,
       dragId: null,
@@ -709,6 +716,8 @@ class Component extends DCLogic {
       tourRect: null,
       paletteQuery: '',
       confirmOpen: false,
+      confirmKind: 'note',
+      folderDeleteId: null,
       toast: null,
       saved: true,
       dark: false,
@@ -954,11 +963,29 @@ class Component extends DCLogic {
     this.setToast('New note in '+this.labelOf(f), 'ok');
   }
 
-  askDelete(){ this.setState({confirmOpen:true, moveMenuOpen:false, statusMenuOpen:false}); }
-  doDelete(){ const id=this.state.selectedId; const idx=this.state.notes.findIndex(n=>n.id===id);
+  askDelete(){ this.setState({confirmOpen:true, confirmKind:'note', moveMenuOpen:false, statusMenuOpen:false}); }
+  askDeleteFolder(id){ this.setState({confirmOpen:true, confirmKind:'folder', folderDeleteId:id}); }
+  cancelDelete(){ this.setState({confirmOpen:false, folderDeleteId:null}); }
+  doDelete(){
+    if(this.state.confirmKind==='folder'){ this.doDeleteFolder(); return; }
+    const id=this.state.selectedId; const idx=this.state.notes.findIndex(n=>n.id===id);
     const rest=this.state.notes.filter(n=>n.id!==id); const next=rest[Math.max(0,idx-1)]||rest[0];
     this.setState({ notes:rest, selectedId: next?next.id:null, confirmOpen:false });
     this.setToast('Note deleted', 'danger');
+  }
+  doDeleteFolder(){
+    const id=this.state.folderDeleteId; const node=this.findNode(id); if(!node){ this.setState({confirmOpen:false, folderDeleteId:null}); return; }
+    const ids=this.descIds(node);
+    const rest=this.state.notes.filter(n=>!ids.includes(n.folder));
+    // remove node from tree
+    const par=this.parent[id];
+    if(par){ const p=this.findNode(par); if(p&&p.children) p.children=p.children.filter(c=>c.id!==id); }
+    else { this.tree=this.tree.filter(n=>n.id!==id); }
+    ids.forEach(i=>{ delete this.parent[i]; });
+    const selGone=ids.includes(this.state.selectedFolder);
+    const label=node.label;
+    this.setState({ notes:rest, confirmOpen:false, folderDeleteId:null, selectedFolder: selGone?'inbox':this.state.selectedFolder });
+    this.setToast('Folder “'+label+'” deleted', 'danger');
   }
 
   renderVals(){
@@ -998,6 +1025,11 @@ class Component extends DCLogic {
         onDragOver: e=>{ e.preventDefault(); if(S.dropTarget!==n.id) this.setState({dropTarget:n.id}); },
         onDragLeave: ()=>{ if(S.dropTarget===n.id) this.setState({dropTarget:null}); },
         onDrop: e=>{ e.preventDefault(); if(S.dragId) this.moveNote(S.dragId, n.id); },
+        onMouseEnter: ()=>{ if(S.hoveredRow!==n.id) this.setState({hoveredRow:n.id}); },
+        onMouseLeave: ()=>{ if(S.hoveredRow===n.id) this.setState({hoveredRow:null}); },
+        showDelete: n.kind==='folder' && S.hoveredRow===n.id,
+        delStyle:'flex:none; width:20px; height:20px; margin-right:2px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; line-height:1; color:#B4A897; cursor:pointer;',
+        onDelete: e=>{ e.stopPropagation(); this.askDeleteFolder(n.id); },
       });
       if(hasKids && expanded) walk(n.children, depth+1);
     }); };
@@ -1202,6 +1234,7 @@ class Component extends DCLogic {
       mdEditStyle:md(S.mode==='edit'), mdSplitStyle:md(S.mode==='split'), mdPreviewStyle:md(S.mode==='preview'),
       setEdit:()=>this.setState({mode:'edit'}), setSplit:()=>this.setState({mode:'split'}), setPreview:()=>this.setState({mode:'preview'}),
       askDelete:()=>this.askDelete(),
+      askDeleteFolder:(id)=>this.askDeleteFolder(id),
 
       noteType: note?note.type:'', noteTypeGlyph: (note&&note.type==='task')?'●':'▢',
       isTask,
@@ -1229,7 +1262,14 @@ class Component extends DCLogic {
       paletteResults, paletteEmpty: paletteResults.length===0,
       stop:e=>e.stopPropagation(),
 
-      confirmOpen:S.confirmOpen, cancelDelete:()=>this.setState({confirmOpen:false}), doDelete:()=>this.doDelete(), deleteFile: note?(note.id+'.md'):'',
+      confirmOpen:S.confirmOpen, cancelDelete:()=>this.cancelDelete(), doDelete:()=>this.doDelete(),
+      confirmTitle: S.confirmKind==='folder' ? 'Delete this folder?' : 'Delete this note?',
+      confirmIsFolder: S.confirmKind==='folder',
+      confirmIsNote: S.confirmKind!=='folder',
+      deleteFile: S.confirmKind==='folder'
+        ? (this.findNode(S.folderDeleteId) ? this.pathOf(S.folderDeleteId).join(' / ') : '')
+        : (note?(note.id+'.md'):''),
+      folderNoteCount: (()=>{ if(S.confirmKind!=='folder') return 0; const nd=this.findNode(S.folderDeleteId); if(!nd) return 0; const ids=this.descIds(nd); return this.state.notes.filter(x=>ids.includes(x.folder)).length; })(),
 
       toastOpen: !!S.toast, toastText: S.toast?S.toast.text:'', toastDotStyle:'width:8px; height:8px; border-radius:50%; background:'+((S.toast&&S.toast.tone==='danger')?'#D98E7A':'#7FB37F')+'; flex:none;',
 

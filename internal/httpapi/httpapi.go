@@ -5,6 +5,7 @@ package httpapi
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"strings"
@@ -60,6 +61,7 @@ func NewRouter(version string, opts Options) http.Handler {
 		opts.Auth.Routes(mux)
 	}
 	if opts.SPA != nil {
+		mux.HandleFunc("GET /favicon.ico", faviconHandler(opts.SPA))
 		mux.Handle("/", spaHandler(opts.SPA))
 	}
 	return auth.CORS(opts.CORSOrigins, recoverAndReport(opts.Activity, mux))
@@ -89,8 +91,11 @@ func recoverAndReport(rec *activity.Recorder, next http.Handler) http.Handler {
 	})
 }
 
-// spaHandler serves the embedded SPA: real files as-is, everything else
-// falls back to index.html for client-side routing.
+// spaHandler serves the embedded SPA: real files as-is, unknown *routes* fall
+// back to index.html for client-side routing. A missing path that looks like a
+// static asset (its last segment has an extension) returns 404 instead of the
+// HTML shell — otherwise e.g. /favicon.ico would return HTML and MCP clients
+// could not discover a real icon.
 func spaHandler(dist fs.FS) http.Handler {
 	fileServer := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -101,9 +106,33 @@ func spaHandler(dist fs.FS) http.Handler {
 				fileServer.ServeHTTP(w, r)
 				return
 			}
+			base := path
+			if i := strings.LastIndexByte(path, '/'); i >= 0 {
+				base = path[i+1:]
+			}
+			if strings.Contains(base, ".") {
+				http.NotFound(w, r)
+				return
+			}
 		}
 		http.ServeFileFS(w, r, dist, "index.html")
 	})
+}
+
+// faviconHandler serves the vellum SVG mark for /favicon.ico so clients that
+// probe the classic path (rather than the HTML <link rel="icon">) get an icon.
+func faviconHandler(dist fs.FS) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		f, err := dist.Open("favicon.svg")
+		if err != nil {
+			http.NotFound(w, r)
+			return
+		}
+		defer f.Close()
+		w.Header().Set("Content-Type", "image/svg+xml")
+		w.Header().Set("Cache-Control", "public, max-age=86400")
+		_, _ = io.Copy(w, f)
+	}
 }
 
 // originCheck rejects browser cross-origin requests whose Origin is not

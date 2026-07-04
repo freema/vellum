@@ -14,9 +14,23 @@ export default function App() {
 
   useEffect(() => {
     api.onAuthError = () => setPhase('connect')
-    void api.health().then(({ auth, version }) => {
+    void api.health().then(async ({ auth, version }) => {
       setVersion(version)
-      setPhase(auth ? 'connect' : 'ready')
+      if (!auth) {
+        setPhase('ready')
+        return
+      }
+      // A refresh restores the session token — verify it before re-prompting.
+      if (api.hasToken()) {
+        try {
+          await api.version()
+          setPhase('ready')
+          return
+        } catch {
+          /* token expired/invalid — fall through to connect */
+        }
+      }
+      setPhase('connect')
     })
   }, [api])
 

@@ -22,14 +22,20 @@ type Deps struct {
 	Version   string
 	// Curator registers the suggest_*/find_* context tools (VELLUM_CURATOR).
 	Curator bool
+	// WebsiteURL is the server's public URL, advertised in the MCP server info.
+	WebsiteURL string
 }
 
 // New builds the MCP server with all vellum tools registered.
 func New(d Deps) *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{
-		Name:    "vellum",
-		Title:   "vellum markdown vault",
-		Version: d.Version,
+		Name:       "vellum",
+		Title:      "vellum markdown vault",
+		Version:    d.Version,
+		WebsiteURL: d.WebsiteURL,
+		Icons: []mcp.Icon{
+			{Source: vellumIconDataURI(), MIMEType: "image/svg+xml", Sizes: []string{"any"}},
+		},
 	}, nil)
 	registerTools(server, d)
 	if d.Curator {

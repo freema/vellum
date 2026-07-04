@@ -88,6 +88,34 @@ func (v *Vault) CreateDir(dir string) error {
 	return os.MkdirAll(abs, 0o755)
 }
 
+// DeleteDir removes a directory and everything under it (notes included).
+// It refuses to touch the vault root. Callers are expected to confirm with the
+// user first — this is a recursive, irreversible delete.
+func (v *Vault) DeleteDir(dir string) error {
+	dir = strings.Trim(dir, "/")
+	if dir == "" {
+		return fmt.Errorf("%w: empty directory", ErrInvalidPath)
+	}
+	abs, err := v.resolveDir(dir)
+	if err != nil {
+		return err
+	}
+	if abs == v.root {
+		return fmt.Errorf("%w: refusing to delete the vault root", ErrInvalidPath)
+	}
+	fi, err := os.Stat(abs)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return fmt.Errorf("%w: directory %s", ErrNotFound, dir)
+		}
+		return err
+	}
+	if !fi.IsDir() {
+		return fmt.Errorf("%w: %s is not a directory", ErrInvalidPath, dir)
+	}
+	return os.RemoveAll(abs)
+}
+
 // ListDirs returns every subdirectory of the vault (vault-relative,
 // forward-slash), dotfiles excluded. Empty directories are included so the
 // SPA tree can show folders that do not hold any notes yet.

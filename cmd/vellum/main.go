@@ -102,8 +102,9 @@ func main() {
 			Projects: cfg.ProjectsDir,
 			Archive:  cfg.ArchiveDir,
 		},
-		Version: version,
-		Curator: cfg.Curator,
+		Version:    version,
+		Curator:    cfg.Curator,
+		WebsiteURL: cfg.IssuerURL,
 	})
 
 	if *mcpStdio {

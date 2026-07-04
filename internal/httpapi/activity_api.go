@@ -395,6 +395,26 @@ func (a *API) handleCreateFolder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"created": strings.Trim(req.Path, "/")})
 }
 
+func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(r.PathValue("path"), "/")
+	prefix := path + "/"
+	var affected []string
+	for _, e := range a.Index.All() {
+		if strings.HasPrefix(e.Path, prefix) {
+			affected = append(affected, e.Path)
+		}
+	}
+	if err := a.Vault.DeleteDir(path); err != nil {
+		apiError(w, err)
+		return
+	}
+	for _, p := range affected {
+		a.Index.Remove(p)
+	}
+	a.recordUser("delete", path, "deleted folder ("+itoa(len(affected))+" notes)")
+	writeJSON(w, http.StatusOK, map[string]any{"deleted": path, "notes": len(affected)})
+}
+
 // recordUser logs an action taken through the SPA (source "user").
 func (a *API) recordUser(kind, target, detail string) {
 	if a.Activity == nil {

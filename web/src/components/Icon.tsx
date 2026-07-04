@@ -26,6 +26,7 @@ export type IconName =
   | 'bell'
   | 'activity'
   | 'sparkle'
+  | 'refresh'
 
 const paths: Record<IconName, ReactElement> = {
   search: (
@@ -146,6 +147,13 @@ const paths: Record<IconName, ReactElement> = {
   ),
   activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />,
   sparkle: <path d="M12 2 13.9 10.1 22 12 13.9 13.9 12 22 10.1 13.9 2 12 10.1 10.1 Z" />,
+  refresh: (
+    <>
+      <polyline points="23 4 23 10 17 10" />
+      <polyline points="1 20 1 14 7 14" />
+      <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
+    </>
+  ),
 }
 
 export function Icon({

@@ -66,6 +66,32 @@ func TestFoldersCreateAndList(t *testing.T) {
 	}
 }
 
+func TestFolderDelete(t *testing.T) {
+	srv, _ := newActivityServer(t)
+	doReq(t, http.MethodPost, srv.URL+"/api/folders", `{"path":"projects/gone"}`, nil)
+	doReq(t, http.MethodPut, srv.URL+"/api/notes/projects/gone/x.md", "# x",
+		map[string]string{"Content-Type": "text/markdown"})
+
+	resp, body := doReq(t, http.MethodDelete, srv.URL+"/api/folders/projects/gone", "", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("delete folder = %d: %s", resp.StatusCode, body)
+	}
+	var got struct {
+		Deleted string `json:"deleted"`
+		Notes   int    `json:"notes"`
+	}
+	if err := json.Unmarshal(body, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Deleted != "projects/gone" || got.Notes != 1 {
+		t.Fatalf("delete payload = %s", body)
+	}
+	_, lb := doReq(t, http.MethodGet, srv.URL+"/api/folders", "", nil)
+	if strings.Contains(string(lb), "projects/gone") {
+		t.Errorf("deleted folder still listed: %s", lb)
+	}
+}
+
 func TestConnectionsAndActivity(t *testing.T) {
 	srv, rec := newActivityServer(t)
 	rec.Touch("sk-abc", "Claude Code", "CLI", "write_note")
