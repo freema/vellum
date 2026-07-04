@@ -3,6 +3,7 @@ package auth
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -18,6 +19,7 @@ func (p *Provider) Routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /.well-known/oauth-authorization-server", p.handleASMetadata)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource", p.handlePRMetadata)
 	mux.HandleFunc("GET /.well-known/oauth-protected-resource/{rest...}", p.handlePRMetadata)
+	mux.Handle("POST /register", limited(http.HandlerFunc(p.handleRegister)))
 	mux.Handle("GET /authorize", limited(http.HandlerFunc(p.handleAuthorizeGet)))
 	mux.Handle("POST /authorize", limited(http.HandlerFunc(p.handleAuthorizePost)))
 	mux.Handle("POST /token", limited(http.HandlerFunc(p.handleToken)))
@@ -33,12 +35,40 @@ func (p *Provider) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 		"authorization_endpoint": p.issuer + "/authorize",
 		"token_endpoint":         p.issuer + "/token",
 		"revocation_endpoint":    p.issuer + "/revoke",
+		"registration_endpoint":  p.issuer + "/register",
 		"scopes_supported":       Scopes,
 		"response_types_supported":                  []string{"code"},
 		"grant_types_supported":                     []string{"authorization_code", "refresh_token", "client_credentials"},
-		"token_endpoint_auth_methods_supported":     []string{"client_secret_post", "client_secret_basic"},
-		"revocation_endpoint_auth_methods_supported": []string{"client_secret_post", "client_secret_basic"},
+		"token_endpoint_auth_methods_supported":     []string{"none", "client_secret_post", "client_secret_basic"},
+		"revocation_endpoint_auth_methods_supported": []string{"none", "client_secret_post", "client_secret_basic"},
 		"code_challenge_methods_supported":          []string{"S256"},
+	})
+}
+
+// handleRegister implements OAuth 2.0 Dynamic Client Registration (RFC 7591).
+// MCP clients (Inspector, claude.ai, Cursor, …) call this to obtain a
+// client_id before the authorization-code flow. Registration is open and
+// anonymous — it only issues an identifier; the human consent at /authorize is
+// the actual gate. Clients are registered as public (PKCE, no secret).
+func (p *Provider) handleRegister(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RedirectURIs            []string `json:"redirect_uris"`
+		TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
+		ClientName              string   `json:"client_name"`
+	}
+	if r.Body != nil {
+		_ = json.NewDecoder(io.LimitReader(r.Body, 1<<16)).Decode(&req)
+	}
+	// vellum does not mint per-client secrets — every dynamic client is public
+	// and authenticates the token exchange with PKCE.
+	reg := p.registerClient(req.RedirectURIs, true)
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"client_id":                  reg.id,
+		"client_id_issued_at":        time.Now().Unix(),
+		"redirect_uris":              reg.redirectURIs,
+		"token_endpoint_auth_method": "none",
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
 	})
 }
 
@@ -81,10 +111,11 @@ func (p *Provider) validate(params authorizeParams, responseType string) string 
 	if responseType != "code" {
 		return "unsupported_response_type"
 	}
-	if params.clientID != p.cfg.ClientID {
+	reg, ok := p.lookupClient(params.clientID)
+	if !ok {
 		return "invalid_client"
 	}
-	if !p.redirectAllowed(params.redirectURI) {
+	if !p.redirectAllowedFor(reg, params.redirectURI) {
 		return "invalid_request"
 	}
 	if params.codeChallenge == "" {
@@ -164,6 +195,27 @@ func (p *Provider) authenticateClient(w http.ResponseWriter, r *http.Request) bo
 	return true
 }
 
+// authenticateTokenClient authenticates the client for the authorization_code
+// and refresh_token grants. Public (dynamically-registered) clients present no
+// secret — PKCE and the code/refresh→client binding are the gate. Confidential
+// clients must present the shared secret.
+func (p *Provider) authenticateTokenClient(w http.ResponseWriter, r *http.Request, clientID string) bool {
+	reg, ok := p.lookupClient(clientID)
+	if !ok {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
+		return false
+	}
+	if reg.public {
+		return true
+	}
+	_, secret := clientCredentials(r)
+	if !p.secretEqualsFor(reg, secret) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
+		return false
+	}
+	return true
+}
+
 // handleToken implements the token endpoint: authorization_code (with PKCE
 // verification) and refresh_token (with rotation). The client secret check
 // here is the actual authorization gate.
@@ -172,17 +224,17 @@ func (p *Provider) handleToken(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 		return
 	}
-	if !p.authenticateClient(w, r) {
-		return
-	}
 
 	var access, refresh string
 	var scopes []string
 	var err error
 	switch r.PostForm.Get("grant_type") {
 	case "client_credentials":
-		// Direct secret-for-token exchange — used by the embedded SPA's
-		// connect screen (design artboard 1a). Client auth above is the gate.
+		// Direct secret-for-token exchange — the embedded SPA's connect screen
+		// (design artboard 1a). The confidential client secret is the gate.
+		if !p.authenticateClient(w, r) {
+			return
+		}
 		var requested []string
 		if s := r.PostForm.Get("scope"); s != "" {
 			requested = strings.Fields(s)
@@ -190,19 +242,29 @@ func (p *Provider) handleToken(w http.ResponseWriter, r *http.Request) {
 		if len(requested) == 0 {
 			requested = Scopes
 		}
-		access, refresh, scopes, err = p.grantDirect(requested)
+		access, refresh, scopes, err = p.grantDirect(p.cfg.ClientID, requested)
 	case "authorization_code":
+		// MCP clients (public, PKCE) and the confidential client both use this.
+		clientID := r.PostForm.Get("client_id")
+		if !p.authenticateTokenClient(w, r, clientID) {
+			return
+		}
 		access, refresh, scopes, err = p.exchangeCode(
+			clientID,
 			r.PostForm.Get("code"),
 			r.PostForm.Get("code_verifier"),
 			r.PostForm.Get("redirect_uri"),
 		)
 	case "refresh_token":
+		clientID := r.PostForm.Get("client_id")
+		if !p.authenticateTokenClient(w, r, clientID) {
+			return
+		}
 		var requested []string
 		if s := r.PostForm.Get("scope"); s != "" {
 			requested = strings.Fields(s)
 		}
-		access, refresh, scopes, err = p.exchangeRefresh(r.PostForm.Get("refresh_token"), requested)
+		access, refresh, scopes, err = p.exchangeRefresh(clientID, r.PostForm.Get("refresh_token"), requested)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "unsupported_grant_type"})
 		return
@@ -228,8 +290,12 @@ func (p *Provider) handleRevoke(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
 		return
 	}
-	if !p.authenticateClient(w, r) {
-		return
+	// Revoking only affects a token the caller already holds. The confidential
+	// client must still present its secret; public (DCR) clients may not.
+	if r.PostForm.Get("client_id") == p.cfg.ClientID {
+		if !p.authenticateClient(w, r) {
+			return
+		}
 	}
 	p.revokeToken(r.PostForm.Get("token"))
 	writeJSON(w, http.StatusOK, map[string]string{})

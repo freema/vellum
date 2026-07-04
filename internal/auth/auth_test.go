@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
@@ -81,8 +82,8 @@ func TestASMetadata(t *testing.T) {
 	if meta["token_endpoint"] != "https://vellum.example.com/token" {
 		t.Errorf("token_endpoint = %v", meta["token_endpoint"])
 	}
-	if meta["registration_endpoint"] != nil {
-		t.Error("registration_endpoint must be absent (no DCR)")
+	if meta["registration_endpoint"] != "https://vellum.example.com/register" {
+		t.Errorf("registration_endpoint = %v (DCR must be advertised for MCP clients)", meta["registration_endpoint"])
 	}
 	if fmtSlice(meta["code_challenge_methods_supported"]) != "S256" {
 		t.Errorf("challenge methods = %v", meta["code_challenge_methods_supported"])
@@ -124,12 +125,19 @@ func pkce() (verifier, challenge string) {
 	return verifier, base64.RawURLEncoding.EncodeToString(sum[:])
 }
 
-// authorizeAndGetCode walks GET /authorize (consent) + POST approve and
-// extracts the code from the redirect.
+// authorizeAndGetCode walks the consent flow for the confidential "vellum"
+// client and returns the authorization code.
 func authorizeAndGetCode(t *testing.T, srv *httptest.Server, challenge string) string {
 	t.Helper()
-	authURL := srv.URL + "/authorize?response_type=code&client_id=vellum&redirect_uri=" +
-		url.QueryEscape("https://claude.ai/api/mcp/auth_callback") +
+	return authorizeAndGetCodeFor(t, srv, "vellum", "https://claude.ai/api/mcp/auth_callback", challenge)
+}
+
+// authorizeAndGetCodeFor walks GET /authorize (consent) + POST approve for an
+// arbitrary client_id/redirect_uri and extracts the code from the redirect.
+func authorizeAndGetCodeFor(t *testing.T, srv *httptest.Server, clientID, redirectURI, challenge string) string {
+	t.Helper()
+	authURL := srv.URL + "/authorize?response_type=code&client_id=" + url.QueryEscape(clientID) +
+		"&redirect_uri=" + url.QueryEscape(redirectURI) +
 		"&code_challenge=" + challenge + "&code_challenge_method=S256&state=xyz"
 
 	resp, err := http.Get(authURL)
@@ -149,8 +157,8 @@ func authorizeAndGetCode(t *testing.T, srv *httptest.Server, challenge string) s
 	}
 
 	form := url.Values{
-		"decision": {"approve"}, "client_id": {"vellum"},
-		"redirect_uri":  {"https://claude.ai/api/mcp/auth_callback"},
+		"decision": {"approve"}, "client_id": {clientID},
+		"redirect_uri":  {redirectURI},
 		"state":         {"xyz"},
 		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
 	}
@@ -189,6 +197,88 @@ func tokenRequest(t *testing.T, srv *httptest.Server, form url.Values) (map[stri
 	var body map[string]any
 	_ = json.NewDecoder(resp.Body).Decode(&body)
 	return body, resp.StatusCode
+}
+
+// TestDynamicClientRegistration exercises the full flow an MCP client (the
+// Inspector, claude.ai, …) uses: register via DCR, authorize with the dynamic
+// client_id, then exchange the code with PKCE and NO client secret.
+func TestDynamicClientRegistration(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+	redirect := "http://localhost:6274/oauth/callback"
+
+	// 1) register a public client (RFC 7591).
+	regBody, _ := json.Marshal(map[string]any{
+		"redirect_uris":              []string{redirect},
+		"token_endpoint_auth_method": "none",
+		"client_name":                "MCP Inspector",
+	})
+	resp, err := http.Post(srv.URL+"/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reg map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&reg)
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("POST /register = %d", resp.StatusCode)
+	}
+	clientID, _ := reg["client_id"].(string)
+	if !strings.HasPrefix(clientID, "mcp-") {
+		t.Fatalf("client_id = %q, want mcp-* prefix", clientID)
+	}
+	if reg["token_endpoint_auth_method"] != "none" {
+		t.Errorf("auth method = %v, want none", reg["token_endpoint_auth_method"])
+	}
+
+	// 2) authorize with the dynamic client + its loopback redirect.
+	verifier, challenge := pkce()
+	code := authorizeAndGetCodeFor(t, srv, clientID, redirect, challenge)
+
+	// 3) exchange the code with NO client secret — PKCE is the gate.
+	body, status := tokenRequest(t, srv, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"client_id":     {clientID},
+		"redirect_uri":  {redirect},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("public token exchange = %d: %v", status, body)
+	}
+	access, _ := body["access_token"].(string)
+	if access == "" {
+		t.Fatal("no access token for public client")
+	}
+
+	// 4) the bearer token works on /mcp.
+	req, _ := http.NewRequest(http.MethodPost, srv.URL+"/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	r2, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r2.Body.Close()
+	if r2.StatusCode != http.StatusOK {
+		t.Errorf("authed /mcp = %d, want 200", r2.StatusCode)
+	}
+}
+
+// TestAuthorizeRejectsUnregisteredClient ensures a client_id that never
+// registered cannot start the flow.
+func TestAuthorizeRejectsUnregisteredClient(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+	_, challenge := pkce()
+	u := srv.URL + "/authorize?response_type=code&client_id=mcp-neverregistered&redirect_uri=" +
+		url.QueryEscape("http://localhost:6274/cb") +
+		"&code_challenge=" + challenge + "&code_challenge_method=S256&state=x"
+	resp, err := http.Get(u)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("unregistered authorize = %d, want 400", resp.StatusCode)
+	}
 }
 
 func TestFullOAuthFlow(t *testing.T) {

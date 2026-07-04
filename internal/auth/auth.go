@@ -78,6 +78,21 @@ type refreshData struct {
 	expiresAt time.Time
 }
 
+// clientReg is a registered OAuth client. Two kinds exist: the single
+// configured confidential client (client_credentials with the shared secret,
+// used by the embedded web SPA) and any number of PUBLIC clients that
+// self-register via Dynamic Client Registration (RFC 7591) — the MCP clients
+// (Inspector, claude.ai, Cursor, …), which authenticate with PKCE and no
+// secret. Consent at /authorize is the human gate, so open registration only
+// hands out a client_id.
+type clientReg struct {
+	id           string
+	redirectURIs []string
+	public       bool // token_endpoint_auth_method == "none" (no client secret)
+	secret       string
+	createdAt    time.Time
+}
+
 // Provider is the single-client OAuth 2.1 provider. All state is in memory;
 // lazy expiry on every lookup plus a 5-minute reaper sweep.
 type Provider struct {
@@ -88,6 +103,7 @@ type Provider struct {
 	codes   map[string]*codeData
 	tokens  map[string]*TokenInfo
 	refresh map[string]*refreshData
+	clients map[string]*clientReg // configured + dynamically-registered
 
 	stopReaper chan struct{}
 }
@@ -116,10 +132,41 @@ func NewProvider(cfg Config) (*Provider, error) {
 		codes:      map[string]*codeData{},
 		tokens:     map[string]*TokenInfo{},
 		refresh:    map[string]*refreshData{},
+		clients:    map[string]*clientReg{},
 		stopReaper: make(chan struct{}),
+	}
+	// The configured confidential client (for the SPA's client_credentials).
+	p.clients[cfg.ClientID] = &clientReg{
+		id:           cfg.ClientID,
+		redirectURIs: cfg.RedirectURIs,
+		public:       false,
+		secret:       cfg.ClientSecret,
+		createdAt:    time.Now(),
 	}
 	go p.reaper()
 	return p, nil
+}
+
+// registerClient stores a dynamically-registered client (RFC 7591). MCP
+// clients register as public (PKCE, no secret).
+func (p *Provider) registerClient(redirectURIs []string, public bool) *clientReg {
+	reg := &clientReg{
+		id:           "mcp-" + randomToken()[:24],
+		redirectURIs: redirectURIs,
+		public:       public,
+		createdAt:    time.Now(),
+	}
+	p.mu.Lock()
+	p.clients[reg.id] = reg
+	p.mu.Unlock()
+	return reg
+}
+
+func (p *Provider) lookupClient(id string) (*clientReg, bool) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	reg, ok := p.clients[id]
+	return reg, ok
 }
 
 // Close stops the background reaper.
@@ -204,6 +251,41 @@ func isLoopback(host string) bool {
 	return host == "localhost" || host == "127.0.0.1" || host == "::1"
 }
 
+// redirectAllowedFor validates a redirect URI for a specific client. A
+// registered client's own redirect_uris are its allowlist (loopback matches
+// on any port, RFC 8252); a client without registered URIs falls back to the
+// global VELLUM_REDIRECT_URIS allowlist.
+func (p *Provider) redirectAllowedFor(reg *clientReg, uri string) bool {
+	if uri == "" {
+		return false
+	}
+	if len(reg.redirectURIs) == 0 {
+		return p.redirectAllowed(uri)
+	}
+	req, err := url.Parse(uri)
+	if err != nil {
+		return false
+	}
+	for _, allowed := range reg.redirectURIs {
+		if uri == allowed {
+			return true
+		}
+		al, err := url.Parse(allowed)
+		if err != nil {
+			continue
+		}
+		if isLoopback(al.Hostname()) && isLoopback(req.Hostname()) &&
+			al.Scheme == req.Scheme && al.Hostname() == req.Hostname() && al.Path == req.Path {
+			return true // loopback: any port matches
+		}
+	}
+	return false
+}
+
+func (p *Provider) secretEqualsFor(reg *clientReg, secret string) bool {
+	return subtle.ConstantTimeCompare([]byte(reg.secret), []byte(secret)) == 1
+}
+
 // issueCode stores a fresh single-use authorization code.
 func (p *Provider) issueCode(clientID, redirectURI, challenge, resource string, scopes []string) string {
 	code := randomToken()
@@ -222,7 +304,7 @@ func (p *Provider) issueCode(clientID, redirectURI, challenge, resource string, 
 
 // exchangeCode redeems an authorization code (single use) after verifying
 // the PKCE verifier: BASE64URL(SHA256(verifier)) must equal the challenge.
-func (p *Provider) exchangeCode(code, verifier, redirectURI string) (access, refresh string, scopes []string, err error) {
+func (p *Provider) exchangeCode(clientID, code, verifier, redirectURI string) (access, refresh string, scopes []string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -233,6 +315,9 @@ func (p *Provider) exchangeCode(code, verifier, redirectURI string) (access, ref
 	}
 	delete(p.codes, code) // single use, even on failure below
 
+	if data.clientID != clientID {
+		return "", "", nil, errors.New("client_id mismatch")
+	}
 	sum := sha256.Sum256([]byte(verifier))
 	if base64.RawURLEncoding.EncodeToString(sum[:]) != data.challenge {
 		return "", "", nil, errors.New("PKCE verification failed")
@@ -245,12 +330,12 @@ func (p *Provider) exchangeCode(code, verifier, redirectURI string) (access, ref
 	if len(scopes) == 0 {
 		scopes = Scopes
 	}
-	access, refresh = p.issueTokensLocked(scopes)
+	access, refresh = p.issueTokensLocked(clientID, scopes)
 	return access, refresh, scopes, nil
 }
 
 // exchangeRefresh rotates a refresh token and issues a new pair.
-func (p *Provider) exchangeRefresh(token string, requested []string) (access, refresh string, scopes []string, err error) {
+func (p *Provider) exchangeRefresh(clientID, token string, requested []string) (access, refresh string, scopes []string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
@@ -261,25 +346,28 @@ func (p *Provider) exchangeRefresh(token string, requested []string) (access, re
 	}
 	delete(p.refresh, token) // rotation
 
+	if data.clientID != clientID {
+		return "", "", nil, errors.New("client_id mismatch")
+	}
 	scopes = data.scopes
 	if len(requested) > 0 {
 		scopes = requested
 	}
-	access, refresh = p.issueTokensLocked(scopes)
+	access, refresh = p.issueTokensLocked(clientID, scopes)
 	return access, refresh, scopes, nil
 }
 
-func (p *Provider) issueTokensLocked(scopes []string) (access, refresh string) {
+func (p *Provider) issueTokensLocked(clientID string, scopes []string) (access, refresh string) {
 	access, refresh = randomToken(), randomToken()
 	now := time.Now()
 	p.tokens[access] = &TokenInfo{
 		Token:     access,
-		ClientID:  p.cfg.ClientID,
+		ClientID:  clientID,
 		Scopes:    scopes,
 		ExpiresAt: now.Add(AccessTokenTTL),
 	}
 	p.refresh[refresh] = &refreshData{
-		clientID:  p.cfg.ClientID,
+		clientID:  clientID,
 		scopes:    scopes,
 		expiresAt: now.Add(RefreshTokenTTL),
 	}
@@ -288,10 +376,10 @@ func (p *Provider) issueTokensLocked(scopes []string) (access, refresh string) {
 
 // grantDirect issues a token pair for the client_credentials grant. The
 // caller must have authenticated the client secret already.
-func (p *Provider) grantDirect(scopes []string) (access, refresh string, granted []string, err error) {
+func (p *Provider) grantDirect(clientID string, scopes []string) (access, refresh string, granted []string, err error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	access, refresh = p.issueTokensLocked(scopes)
+	access, refresh = p.issueTokensLocked(clientID, scopes)
 	return access, refresh, scopes, nil
 }
 
