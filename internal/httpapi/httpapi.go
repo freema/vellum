@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/auth"
 )
 
@@ -30,6 +31,8 @@ type Options struct {
 	Auth *auth.Provider
 	// CORSOrigins get CORS response headers (browser clients).
 	CORSOrigins []string
+	// Activity, when set, records MCP sessions and tool calls hitting /mcp.
+	Activity *activity.Recorder
 }
 
 // NewRouter returns the root HTTP handler.
@@ -44,7 +47,7 @@ func NewRouter(version string, opts Options) http.Handler {
 		return originCheck(opts.AllowedOrigins, h)
 	}
 	if opts.MCPHandler != nil {
-		mux.Handle("/mcp", guard(opts.MCPHandler))
+		mux.Handle("/mcp", guard(mcpRecord(opts.Activity, opts.MCPHandler)))
 	}
 	if opts.API != nil {
 		apiMux := http.NewServeMux()

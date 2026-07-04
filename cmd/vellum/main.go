@@ -11,16 +11,19 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	vellum "github.com/freema/vellum"
+	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/auth"
 	"github.com/freema/vellum/internal/config"
 	"github.com/freema/vellum/internal/httpapi"
 	"github.com/freema/vellum/internal/mcpserver"
+	"github.com/freema/vellum/internal/notify"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -118,26 +121,44 @@ func main() {
 		logger.Warn("AUTH IS DISABLED — /mcp is open to anyone who can reach it")
 	}
 
+	recorder := activity.New()
+	structure := vault.Structure{
+		Inbox:    cfg.InboxDir,
+		Projects: cfg.ProjectsDir,
+		Archive:  cfg.ArchiveDir,
+	}
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: httpapi.NewRouter(version, httpapi.Options{
 			MCPHandler: mcpserver.Handler(mcpSrv),
 			API: &httpapi.API{
-				Vault:    v,
-				Index:    index,
-				Searcher: vault.NewScanSearcher(v, index),
-				Structure: vault.Structure{
-					Inbox:    cfg.InboxDir,
-					Projects: cfg.ProjectsDir,
-					Archive:  cfg.ArchiveDir,
-				},
+				Vault:     v,
+				Index:     index,
+				Searcher:  vault.NewScanSearcher(v, index),
+				Structure: structure,
+				Activity:  recorder,
+				Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",
+				Curator:   cfg.Curator,
 			},
 			SPA:            vellum.DistFS(),
 			AllowedOrigins: cfg.AllowedOrigins,
 			Auth:           authProvider,
 			CORSOrigins:    cfg.CORSOrigins,
+			Activity:       recorder,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
+	}
+
+	notifyCtx, stopNotify := context.WithCancel(context.Background())
+	defer stopNotify()
+	if cfg.Notify {
+		ncfg := notify.FromEnv(cfg.IssuerURL)
+		if ncfg.Valid() {
+			logger.Info("smtp digest enabled", "interval", ncfg.Interval.String(), "to", ncfg.To)
+			go notify.New(ncfg, index, logger).Loop(notifyCtx)
+		} else {
+			logger.Warn("VELLUM_NOTIFY is on but SMTP is not fully configured — digest disabled (need SMTP_HOST, SMTP_FROM, SMTP_TO)")
+		}
 	}
 
 	errCh := make(chan error, 1)

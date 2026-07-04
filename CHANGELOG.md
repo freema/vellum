@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.0] — 2026-07-04
+
+Synced from the updated Claude Design "Vellum Workspace" project.
+
+### Added
+- **MCP connections panel** — a live drawer of connected clients (name, kind,
+  session id, uptime, last tool, call count) with a **Revoke** action, backed
+  by in-memory session tracking on the server. A top-bar pill shows the active
+  count.
+- **Activity / curator log** — a right-hand drawer with a live timeline of what
+  MCP clients and the curator did to the vault, an **All / Curator / MCP**
+  filter, a curator status card and a **Run now** action.
+- **Notifications** — a bell with an unread dot and a popover of derived
+  notifications (untagged notes, stale inbox, open tasks, new sessions), with
+  *mark all read* and dismiss.
+- **Create folder** — a ＋ button in the tree opens an inline input; the folder
+  is persisted (`POST /api/folders`) and nests under the selected folder.
+- **GitHub Star button** in the top bar with a best-effort live star count.
+- **SMTP digest** — an optional periodic e-mail of open tasks
+  (`VELLUM_NOTIFY=on` + `SMTP_*`).
+- **Guided tour** gains steps for the new folder, notifications, activity and
+  star controls and is now fully keyboard-driven (**← / →**, Esc to skip).
+- Help modal gains a **Connect a client** section (endpoint + CLI, both with
+  copy buttons).
+- New REST endpoints: `GET /api/connections` (+ `DELETE` to revoke),
+  `GET /api/activity`, `GET /api/notifications`, `POST /api/curator/run`,
+  `GET`/`POST /api/folders`.
+- Icon set gains `bell`, `activity`, `sparkle` and a filled GitHub mark.
+
+### Changed
+- The list view hides the status segmented control for Knowledge notes.
+- Tree folder badges show `matching / total` (e.g. `1/6`) while a tag filter is
+  active; empty folders now appear in the tree.
+- The MCP request path records per-tool activity and touches a session so the
+  Connections and Activity panels reflect real usage.
+
 ## [1.1.0] — 2026-07-04
 
 ### Added
@@ -79,7 +115,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/freema/vellum/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/freema/vellum/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/freema/vellum/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/freema/vellum/compare/v0.2.0...v1.0.0

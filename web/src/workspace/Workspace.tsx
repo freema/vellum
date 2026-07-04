@@ -11,10 +11,14 @@ import {
   type NoteEntry,
   type SearchResult,
   type TagCount,
+  type Connection,
+  type ConnectionsData,
+  type ActivityData,
+  type Notification,
 } from '../lib/api'
 import { CommandPalette, PaletteItem, Highlight } from '../components/palette'
 import { LogoMark } from '../components/Logo'
-import { Icon, type IconName } from '../components/Icon'
+import { Icon, GithubMark, type IconName } from '../components/Icon'
 
 type TypeFilter = 'all' | 'task' | 'knowledge'
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -56,6 +60,12 @@ const TOUR = [
     body: 'Folders live here. Click one to open it, or drag a note onto a folder to move it.',
   },
   {
+    id: 'tourNewFolder',
+    place: 'right',
+    title: 'New folder',
+    body: 'Add a folder with the ＋ button — it nests under whatever folder you have selected.',
+  },
+  {
     id: 'tourList',
     place: 'right',
     title: 'Notes & filters',
@@ -74,6 +84,24 @@ const TOUR = [
     body: 'Write raw markdown, see it rendered, or keep both side by side.',
   },
   {
+    id: 'notifBtn',
+    place: 'below-right',
+    title: 'Notifications',
+    body: 'Curator suggestions, overdue tasks and new MCP sessions land here.',
+  },
+  {
+    id: 'activityBtn',
+    place: 'below-right',
+    title: 'Activity & curator',
+    body: 'A live log of what the curator agent and connected clients did to your vault.',
+  },
+  {
+    id: 'tourStar',
+    place: 'below-right',
+    title: 'Open source',
+    body: 'Vellum is open source — star it on GitHub if you find it useful.',
+  },
+  {
     id: 'tourHelp',
     place: 'below-right',
     title: 'Help anytime',
@@ -90,6 +118,12 @@ function basename(path: string): string {
 function dirname(path: string): string {
   const i = path.lastIndexOf('/')
   return i < 0 ? '' : path.slice(0, i)
+}
+// friendly label for the currently selected directory (for placeholders)
+function dirLabel(dir: string): string {
+  if (!dir) return 'the vault'
+  const leaf = dir.split('/').pop() ?? dir
+  return leaf.charAt(0).toUpperCase() + leaf.slice(1)
 }
 
 export default function Workspace({ api, version }: { api: ApiClient; version: string }) {
@@ -112,15 +146,33 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const [dragPath, setDragPath] = useState<string | null>(null)
   const [dropDir, setDropDir] = useState<string | null>(null)
   const [tourStep, setTourStep] = useState<number | null>(null)
+  const [folders, setFolders] = useState<string[]>([])
+  const [addingFolder, setAddingFolder] = useState(false)
+
+  // top-bar panels + their data
+  const [connOpen, setConnOpen] = useState(false)
+  const [connData, setConnData] = useState<ConnectionsData | null>(null)
+  const [notifOpen, setNotifOpen] = useState(false)
+  const [notifs, setNotifs] = useState<Notification[]>([])
+  const [unread, setUnread] = useState(0)
+  const [activityOpen, setActivityOpen] = useState(false)
+  const [activityData, setActivityData] = useState<ActivityData | null>(null)
+  const [activityFilter, setActivityFilter] = useState<'all' | 'curator' | 'mcp'>('all')
+  const [starCount, setStarCount] = useState<number | null>(null)
 
   const rootRef = useRef<HTMLDivElement>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
   const refresh = useCallback(async () => {
     try {
-      const [notes, tagList] = await Promise.all([api.listNotes(), api.tags()])
+      const [notes, tagList, dirs] = await Promise.all([
+        api.listNotes(),
+        api.tags(),
+        api.listFolders().catch(() => [] as string[]),
+      ])
       setEntries(notes)
       setTags(tagList)
+      setFolders(dirs)
     } catch (err) {
       if (!(err instanceof AuthError)) console.error(err)
     }
@@ -134,6 +186,90 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     window.clearTimeout(toastTimer.current)
     setToast({ text, tone })
     toastTimer.current = window.setTimeout(() => setToast(null), 2400)
+  }, [])
+
+  // notification badge on load
+  useEffect(() => {
+    api
+      .notifications()
+      .then((n) => {
+        setNotifs(n.notifications)
+        setUnread(n.unread)
+      })
+      .catch(() => {})
+  }, [api])
+
+  // GitHub star count — best effort, silently ignored offline / rate-limited
+  useEffect(() => {
+    let alive = true
+    fetch('https://api.github.com/repos/freema/vellum')
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive && d && typeof d.stargazers_count === 'number') setStarCount(d.stargazers_count)
+      })
+      .catch(() => {})
+    return () => {
+      alive = false
+    }
+  }, [])
+
+  // ---- top-bar panels ----
+  const openConnections = useCallback(() => {
+    setConnOpen(true)
+    api.connections().then(setConnData).catch(() => {})
+  }, [api])
+  const openActivity = useCallback(() => {
+    setActivityOpen(true)
+    setNotifOpen(false)
+    api.activity(activityFilter).then(setActivityData).catch(() => {})
+  }, [api, activityFilter])
+  const openNotifications = useCallback(() => {
+    setNotifOpen((o) => !o)
+    api
+      .notifications()
+      .then((n) => {
+        setNotifs(n.notifications)
+        setUnread(n.unread)
+      })
+      .catch(() => {})
+  }, [api])
+  const revokeConn = useCallback(
+    async (id: string) => {
+      try {
+        await api.revokeConnection(id)
+        setConnData(await api.connections())
+        showToast('Session revoked', 'danger')
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Revoke failed', 'danger')
+      }
+    },
+    [api, showToast],
+  )
+  const runCurator = useCallback(async () => {
+    try {
+      const r = await api.runCurator()
+      setActivityData(await api.activity(activityFilter))
+      showToast(
+        r.enabled ? `Curator ran — ${r.changes} suggestion${r.changes === 1 ? '' : 's'}` : 'Curator is off',
+      )
+    } catch (err) {
+      if (!(err instanceof AuthError)) showToast('Curator run failed', 'danger')
+    }
+  }, [api, activityFilter, showToast])
+  const changeActivityFilter = useCallback(
+    (f: 'all' | 'curator' | 'mcp') => {
+      setActivityFilter(f)
+      api.activity(f).then(setActivityData).catch(() => {})
+    },
+    [api],
+  )
+  const markAllRead = useCallback(() => {
+    setNotifs((ns) => ns.map((n) => ({ ...n, read: true })))
+    setUnread(0)
+  }, [])
+  const dismissNotif = useCallback((id: string) => {
+    setNotifs((ns) => ns.filter((n) => n.id !== id))
+    setUnread((u) => Math.max(0, u - 1))
   }, [])
 
   const toggleTheme = () => {
@@ -154,6 +290,10 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         setPaletteOpen(false)
         setHelpOpen(false)
         setTourStep(null)
+        setConnOpen(false)
+        setNotifOpen(false)
+        setActivityOpen(false)
+        setAddingFolder(false)
       }
     }
     window.addEventListener('keydown', handler)
@@ -203,29 +343,48 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     return byDir
   }, [entries])
 
-  const projectDirs = useMemo(() => {
-    const dirs = new Set<string>()
+  // per-folder counts of notes matching the active tag filter — powers the
+  // "1/6" badges shown while one or more tags are selected.
+  const matchCounts = useMemo(() => {
+    const byDir = new Map<string, number>()
+    if (activeTags.length === 0) return byDir
     for (const e of entries) {
-      const m = e.path.match(/^projects\/([^/]+)\//)
-      if (m) dirs.add(`projects/${m[1]}`)
+      if (!activeTags.every((t) => e.tags?.includes(t))) continue
+      const parts = e.path.split('/')
+      for (let i = 1; i <= parts.length - 1; i++) {
+        const dir = parts.slice(0, i).join('/')
+        byDir.set(dir, (byDir.get(dir) ?? 0) + 1)
+      }
     }
-    return [...dirs].sort()
-  }, [entries])
+    return byDir
+  }, [entries, activeTags])
+
+  // Directories come from the real folder list (so empty folders show too);
+  // note paths are a fallback if the folders endpoint is unavailable.
+  const dirSet = useMemo(() => {
+    const set = new Set<string>(folders)
+    for (const d of counts.keys()) set.add(d)
+    return set
+  }, [folders, counts])
+
+  const projectDirs = useMemo(
+    () => [...dirSet].filter((d) => /^projects\/[^/]+$/.test(d)).sort(),
+    [dirSet],
+  )
 
   const otherTopDirs = useMemo(() => {
     const dirs = new Set<string>()
-    for (const e of entries) {
-      const top = e.path.includes('/') ? e.path.split('/')[0] : ''
-      if (top && top !== 'inbox' && top !== 'projects' && top !== 'archive') dirs.add(top)
+    for (const d of dirSet) {
+      if (d.includes('/')) continue
+      if (d !== 'inbox' && d !== 'projects' && d !== 'archive') dirs.add(d)
     }
     return [...dirs].sort()
-  }, [entries])
+  }, [dirSet])
 
   const allDirs = useMemo(() => {
-    const set = new Set<string>(['inbox', 'projects', 'archive'])
-    for (const d of counts.keys()) set.add(d)
+    const set = new Set<string>(['inbox', 'projects', 'archive', ...dirSet])
     return [...set].sort()
-  }, [counts])
+  }, [dirSet])
 
   const listEntries = useMemo(() => {
     return entries
@@ -314,6 +473,25 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     [api, refresh, selectedPath, navigate, showToast],
   )
 
+  const addFolder = useCallback(
+    async (rawName: string) => {
+      setAddingFolder(false)
+      const name = rawName.trim().replace(/^\/+|\/+$/g, '')
+      if (!name) return
+      const path = selectedDir ? `${selectedDir}/${name}` : name
+      try {
+        await api.createFolder(path)
+        await refresh()
+        if (selectedDir === 'projects' || selectedDir.startsWith('projects/')) setProjectsOpen(true)
+        setSelectedDir(path)
+        showToast(`Folder “${name}” created`)
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Could not create folder', 'danger')
+      }
+    },
+    [api, refresh, selectedDir, showToast],
+  )
+
   return (
     <div className="ws" ref={rootRef}>
       <TopBar
@@ -323,16 +501,29 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         onOpenPalette={() => setPaletteOpen(true)}
         onToggleTheme={toggleTheme}
         onOpenHelp={() => setHelpOpen(true)}
+        connActiveCount={connData?.activeCount ?? 0}
+        onOpenConnections={openConnections}
+        starCount={starCount}
+        unreadCount={unread}
+        onOpenNotifications={openNotifications}
+        onOpenActivity={openActivity}
       />
       <div className="ws-body">
         <TreePanel
           counts={counts}
+          matchCounts={matchCounts}
+          filtering={activeTags.length > 0}
           projectDirs={projectDirs}
           otherTopDirs={otherTopDirs}
           selectedDir={selectedDir}
           onSelectDir={setSelectedDir}
           projectsOpen={projectsOpen}
           onToggleProjects={() => setProjectsOpen((o) => !o)}
+          addingFolder={addingFolder}
+          selectedLabel={dirLabel(selectedDir)}
+          onStartAddFolder={() => setAddingFolder(true)}
+          onAddFolder={addFolder}
+          onCancelAddFolder={() => setAddingFolder(false)}
           tags={tags}
           activeTags={activeTags}
           onToggleTag={(t) =>
@@ -413,7 +604,36 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           {toast.text}
         </div>
       )}
-      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} onStartTour={startTour} />}
+      {connOpen && (
+        <ConnectionsDrawer data={connData} onClose={() => setConnOpen(false)} onRevoke={revokeConn} />
+      )}
+      {notifOpen && (
+        <NotificationsPopover
+          items={notifs}
+          onClose={() => setNotifOpen(false)}
+          onMarkAllRead={markAllRead}
+          onDismiss={dismissNotif}
+          onViewActivity={openActivity}
+        />
+      )}
+      {activityOpen && (
+        <ActivityDrawer
+          data={activityData}
+          filter={activityFilter}
+          totalNotes={entries.length}
+          onFilter={changeActivityFilter}
+          onRunCurator={runCurator}
+          onClose={() => setActivityOpen(false)}
+        />
+      )}
+      {helpOpen && (
+        <HelpModal
+          endpoint={connData?.endpoint ?? `${window.location.origin}/mcp`}
+          onClose={() => setHelpOpen(false)}
+          onStartTour={startTour}
+          showToast={showToast}
+        />
+      )}
       {tourStep !== null && (
         <TourOverlay
           step={tourStep}
@@ -436,6 +656,12 @@ function TopBar({
   onOpenPalette,
   onToggleTheme,
   onOpenHelp,
+  connActiveCount,
+  onOpenConnections,
+  starCount,
+  unreadCount,
+  onOpenNotifications,
+  onOpenActivity,
 }: {
   version: string
   activeTags: string[]
@@ -443,6 +669,12 @@ function TopBar({
   onOpenPalette: () => void
   onToggleTheme: () => void
   onOpenHelp: () => void
+  connActiveCount: number
+  onOpenConnections: () => void
+  starCount: number | null
+  unreadCount: number
+  onOpenNotifications: () => void
+  onOpenActivity: () => void
 }) {
   return (
     <header className="ws-topbar">
@@ -465,9 +697,48 @@ function TopBar({
         ))}
       </span>
       <span className="ws-topbar__spacer" />
+      <button className="ws-conn-pill" onClick={onOpenConnections} title="MCP connections">
+        <span className="ws-conn-pill__dot" />
+        <span className="ws-conn-pill__count">{connActiveCount}</span>
+        <span className="ws-conn-pill__label">connected</span>
+      </button>
+      <a
+        id="tourStar"
+        className="ws-star"
+        href="https://github.com/freema/vellum"
+        target="_blank"
+        rel="noopener"
+        title="Star Vellum on GitHub"
+      >
+        <GithubMark size={14} />
+        <span className="ws-star__label">Star</span>
+        {starCount != null && (
+          <span className="ws-star__count">
+            <span className="ws-star__glyph">★</span>
+            {starCount}
+          </span>
+        )}
+      </a>
       <span className="ws-topbar__version">{version}</span>
       <button className="ws-icon-btn" onClick={onToggleTheme} title="Toggle midnight ink">
         <Icon name="moon" size={16} />
+      </button>
+      <button
+        id="notifBtn"
+        className="ws-icon-btn ws-notif-btn"
+        onClick={onOpenNotifications}
+        title="Notifications"
+      >
+        <Icon name="bell" size={16} />
+        {unreadCount > 0 && <span className="ws-notif-btn__dot" />}
+      </button>
+      <button
+        id="activityBtn"
+        className="ws-icon-btn"
+        onClick={onOpenActivity}
+        title="Activity & curator log"
+      >
+        <Icon name="activity" size={16} />
       </button>
       <button id="tourHelp" className="ws-icon-btn" onClick={onOpenHelp} title="Help & tour">
         <Icon name="help" size={16} />
@@ -480,6 +751,8 @@ function TopBar({
 
 function TreePanel({
   counts,
+  matchCounts,
+  filtering,
   projectDirs,
   otherTopDirs,
   selectedDir,
@@ -494,8 +767,15 @@ function TreePanel({
   dragging,
   onDropDir,
   onDragOverDir,
+  addingFolder,
+  selectedLabel,
+  onStartAddFolder,
+  onAddFolder,
+  onCancelAddFolder,
 }: {
   counts: Map<string, number>
+  matchCounts: Map<string, number>
+  filtering: boolean
   projectDirs: string[]
   otherTopDirs: string[]
   selectedDir: string
@@ -510,6 +790,11 @@ function TreePanel({
   dragging: boolean
   onDropDir: (dir: string) => void
   onDragOverDir: (dir: string | null) => void
+  addingFolder: boolean
+  selectedLabel: string
+  onStartAddFolder: () => void
+  onAddFolder: (name: string) => void
+  onCancelAddFolder: () => void
 }) {
   const dropProps = (dir: string) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -526,6 +811,22 @@ function TreePanel({
     },
   })
 
+  // While a tag filter is active, every folder shows "matching / total"
+  // (e.g. 1/6) with the matching part highlighted; otherwise the plain total.
+  const renderCount = (dir: string, asBadge: boolean) => {
+    const total = counts.get(dir) ?? 0
+    if (filtering) {
+      const m = matchCounts.get(dir) ?? 0
+      return (
+        <span className={`ws-tree__frac${m > 0 ? ' ws-tree__frac--hit' : ''}`}>
+          <b>{m}</b>/{total}
+        </span>
+      )
+    }
+    if (asBadge && total > 0) return <span className="ws-tree__badge">{total}</span>
+    return <span className="ws-tree__count">{total}</span>
+  }
+
   const row = (
     dir: string,
     label: string,
@@ -533,7 +834,6 @@ function TreePanel({
     opts: { badge?: boolean; caret?: 'open' | 'closed'; onCaret?: () => void } = {},
   ) => {
     const selected = selectedDir === dir
-    const count = counts.get(dir) ?? 0
     const isDrop = dropDir === dir
     return (
       <div
@@ -558,11 +858,7 @@ function TreePanel({
           <Icon name={icon} size={14} />
         </span>
         <span className="ws-tree__name">{label}</span>
-        {opts.badge && count > 0 ? (
-          <span className="ws-tree__badge">{count}</span>
-        ) : (
-          <span className="ws-tree__count">{count}</span>
-        )}
+        {renderCount(dir, !!opts.badge)}
       </div>
     )
   }
@@ -571,8 +867,38 @@ function TreePanel({
     <aside id="tourTree" className="ws-tree vscroll">
       <div className="ws-tree__head">
         <span className="ws-tree__label">Vault</span>
-        <span className="ws-tree__total">{totalNotes} notes</span>
+        <span className="ws-tree__head-right">
+          <span className="ws-tree__total">{totalNotes} notes</span>
+          <button
+            id="tourNewFolder"
+            className="ws-tree__add"
+            onClick={onStartAddFolder}
+            title="New folder"
+          >
+            <Icon name="plus" size={14} />
+          </button>
+        </span>
       </div>
+      {addingFolder && (
+        <div className="ws-tree__newfolder">
+          <span className="ws-tree__newfolder-glyph">
+            <Icon name="folder" size={13} />
+          </span>
+          <input
+            className="ws-tree__newfolder-input"
+            autoFocus
+            placeholder={`New folder in ${selectedLabel}`}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') onAddFolder((e.target as HTMLInputElement).value)
+              else if (e.key === 'Escape') {
+                e.stopPropagation()
+                onCancelAddFolder()
+              }
+            }}
+            onBlur={(e) => onAddFolder(e.target.value)}
+          />
+        </div>
+      )}
       {row('inbox', 'Inbox', 'inbox', { badge: true })}
       {row('projects', 'Projects', 'folder', {
         caret: projectsOpen ? 'open' : 'closed',
@@ -594,7 +920,7 @@ function TreePanel({
                 <Icon name="folder" size={13} />
               </span>
               <span className="ws-tree__name">{dir.split('/')[1]}</span>
-              <span className="ws-tree__count">{counts.get(dir) ?? 0}</span>
+              {renderCount(dir, false)}
             </div>
           )
         })}
@@ -665,31 +991,36 @@ function ListPanel({
             <button
               key={key}
               className={`ws-type-toggle__item${typeFilter === key ? ' ws-type-toggle__item--active' : ''}`}
-              onClick={() => onTypeFilter(key)}
+              onClick={() => {
+                if (key === 'knowledge') onStatusFilter('')
+                onTypeFilter(key)
+              }}
             >
               {marker}
               {label}
             </button>
           ))}
         </div>
-        <div className="ws-segmented">
-          {(
-            [
-              ['', 'All'],
-              ['backlog', 'Backlog'],
-              ['in-progress', 'Doing'],
-              ['done', 'Done'],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              className={`ws-segmented__item${statusFilter === key ? ' ws-segmented__item--active' : ''}`}
-              onClick={() => onStatusFilter(key)}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
+        {typeFilter !== 'knowledge' && (
+          <div className="ws-segmented">
+            {(
+              [
+                ['', 'All'],
+                ['backlog', 'Backlog'],
+                ['in-progress', 'Doing'],
+                ['done', 'Done'],
+              ] as const
+            ).map(([key, label]) => (
+              <button
+                key={key}
+                className={`ws-segmented__item${statusFilter === key ? ' ws-segmented__item--active' : ''}`}
+                onClick={() => onStatusFilter(key)}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
       <div className="ws-list__body vscroll">
         {entries.map((e) => (
@@ -1391,7 +1722,24 @@ function formatSelection(
 
 // ---------------------------------------------------------------- help modal
 
-function HelpModal({ onClose, onStartTour }: { onClose: () => void; onStartTour: () => void }) {
+function HelpModal({
+  endpoint,
+  onClose,
+  onStartTour,
+  showToast,
+}: {
+  endpoint: string
+  onClose: () => void
+  onStartTour: () => void
+  showToast: (text: string, tone?: 'ok' | 'danger') => void
+}) {
+  const cliCmd = `claude mcp add --transport http vellum ${endpoint}`
+  const copy = (text: string, label: string) => {
+    void navigator.clipboard?.writeText(text).then(
+      () => showToast(`${label} copied`),
+      () => showToast('Copy failed', 'danger'),
+    )
+  }
   const md: [string, string][] = [
     ['# H1', 'Heading'],
     ['**b**', 'Bold'],
@@ -1462,6 +1810,28 @@ function HelpModal({ onClose, onStartTour }: { onClose: () => void; onStartTour:
               </div>
             </div>
           </div>
+          <div className="ws-help__divider" />
+          <div className="ws-help__label">Connect a client</div>
+          <div className="ws-help__endpoint">
+            <span className="ws-help__endpoint-label">endpoint</span>
+            <span className="ws-help__endpoint-url">{endpoint}</span>
+            <button className="ws-help__copy" onClick={() => copy(endpoint, 'Endpoint')}>
+              Copy
+            </button>
+          </div>
+          <div className="ws-help__connect-line">
+            <strong>Claude.ai (web):</strong> Settings → Connectors → “Add custom connector” → paste
+            the endpoint → authorize.
+          </div>
+          <div className="ws-help__cli">
+            <code className="ws-help__cli-code">{cliCmd}</code>
+            <button className="ws-help__copy" onClick={() => copy(cliCmd, 'Command')}>
+              Copy
+            </button>
+          </div>
+          <div className="ws-help__connect-note">
+            Claude Code, Desktop, ChatGPT and Cursor setups live on the connect screen.
+          </div>
         </div>
       </div>
     </div>
@@ -1520,6 +1890,24 @@ function TourOverlay({
     }
   }, [step, rootRef])
 
+  // arrow keys walk the tour: → next / done, ← back, Esc skips
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+        e.preventDefault()
+        onNext()
+      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+        e.preventDefault()
+        onPrev()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        onSkip()
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onNext, onPrev, onSkip])
+
   const s = TOUR[step]
   const W = 286
   let spotlight: React.CSSProperties = { display: 'none' }
@@ -1556,7 +1944,10 @@ function TourOverlay({
       <div className="ws-tour__spotlight" style={spotlight} />
       <div className="ws-tour__tip" style={tip}>
         <div className="ws-tour__index">
-          {step + 1} / {TOUR.length}
+          <span>
+            {step + 1} / {TOUR.length}
+          </span>
+          <span className="ws-tour__keys">← → keys</span>
         </div>
         <div className="ws-tour__title">{s.title}</div>
         <div className="ws-tour__body">{s.body}</div>
@@ -1657,5 +2048,274 @@ function snippetWithHighlight(s: { match: string; context: string }) {
       <Highlight>{line.slice(idx, idx + s.match.length)}</Highlight>
       {line.slice(idx + s.match.length)}
     </>
+  )
+}
+
+// ---------------------------------------------------------------- MCP connections
+
+function ConnectionsDrawer({
+  data,
+  onClose,
+  onRevoke,
+}: {
+  data: ConnectionsData | null
+  onClose: () => void
+  onRevoke: (id: string) => void
+}) {
+  const conns = data?.connections ?? []
+  return (
+    <div className="ws-drawer-scrim" onClick={onClose}>
+      <div className="ws-drawer vscroll" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-drawer__head">
+          <div className="ws-drawer__head-row">
+            <div>
+              <div className="ws-drawer__title">MCP connections</div>
+              <div className="ws-drawer__sub">Live sessions held in the server’s memory.</div>
+            </div>
+            <button className="ws-drawer__esc" onClick={onClose}>
+              esc
+            </button>
+          </div>
+          <div className="ws-conn__endpoint">
+            <span className="ws-conn__endpoint-label">endpoint</span>
+            <span className="ws-conn__endpoint-url">{data?.endpoint ?? ''}</span>
+          </div>
+          <div className="ws-conn__stats">
+            <div className="ws-conn__stat">
+              <div className="ws-conn__stat-n">{data?.activeCount ?? 0}</div>
+              <div className="ws-conn__stat-l">active clients</div>
+            </div>
+            <div className="ws-conn__stat-div" />
+            <div className="ws-conn__stat">
+              <div className="ws-conn__stat-n">{data?.totalCalls ?? 0}</div>
+              <div className="ws-conn__stat-l">tool calls today</div>
+            </div>
+          </div>
+        </div>
+        <div className="ws-drawer__body">
+          {conns.map((c) => (
+            <ConnectionCard key={c.id} c={c} onRevoke={onRevoke} />
+          ))}
+          {conns.length === 0 && (
+            <div className="ws-drawer__empty">
+              <div className="ws-drawer__empty-glyph">∅</div>
+              <div className="ws-drawer__empty-title">No active sessions</div>
+              <div className="ws-drawer__empty-sub">Nothing is connected to the vault right now.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ConnectionCard({ c, onRevoke }: { c: Connection; onRevoke: (id: string) => void }) {
+  const live = c.status === 'active'
+  return (
+    <div className="ws-conn-card">
+      <div className="ws-conn-card__top">
+        <div className={`ws-conn-card__mono${live ? '' : ' ws-conn-card__mono--idle'}`}>{c.mono}</div>
+        <div className="ws-conn-card__id">
+          <div className="ws-conn-card__name-row">
+            <span className="ws-conn-card__name">{c.name}</span>
+            <span className={`ws-conn-card__status ws-conn-card__status--${c.status}`}>
+              <span className="ws-conn-card__status-dot" />
+              {live ? 'live' : 'idle'}
+            </span>
+          </div>
+          <div className="ws-conn-card__kind">{c.kind}</div>
+        </div>
+      </div>
+      <div className="ws-conn-card__divider" />
+      <div className="ws-conn-card__meta">
+        <span className="ws-conn-card__sid">{c.id}</span>
+        <span className="ws-conn-card__mid-dot">·</span>
+        <span>up {c.since}</span>
+      </div>
+      <div className="ws-conn-card__foot">
+        {c.lastTool && <span className="ws-conn-card__tool">{c.lastTool}</span>}
+        <span className="ws-conn-card__ago">{c.lastAgo} ago</span>
+        <span className="ws-conn-card__spacer" />
+        <span className="ws-conn-card__calls">{c.calls} calls</span>
+        <span className="ws-conn-card__revoke" onClick={() => onRevoke(c.id)}>
+          Revoke
+        </span>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- notifications
+
+const NOTIF_DOT: Record<string, string> = {
+  curator: 'var(--accent)',
+  task: 'var(--status-inprogress)',
+  mcp: 'var(--status-done)',
+  digest: 'var(--accent)',
+}
+
+function NotificationsPopover({
+  items,
+  onClose,
+  onMarkAllRead,
+  onDismiss,
+  onViewActivity,
+}: {
+  items: Notification[]
+  onClose: () => void
+  onMarkAllRead: () => void
+  onDismiss: (id: string) => void
+  onViewActivity: () => void
+}) {
+  return (
+    <div className="ws-notif-scrim" onClick={onClose}>
+      <div className="ws-notif" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-notif__head">
+          <span className="ws-notif__title">Notifications</span>
+          <span className="ws-notif__markall" onClick={onMarkAllRead}>
+            Mark all read
+          </span>
+        </div>
+        <div className="ws-notif__list vscroll">
+          {items.map((n) => (
+            <div key={n.id} className={`ws-notif__row${n.read ? '' : ' ws-notif__row--unread'}`}>
+              <span className="ws-notif__dot" style={{ background: NOTIF_DOT[n.kind] ?? 'var(--accent)' }} />
+              <div className="ws-notif__body">
+                <div className="ws-notif__row-title">{n.title}</div>
+                <div className="ws-notif__row-sub">{n.body}</div>
+              </div>
+              <div className="ws-notif__aside">
+                <span className="ws-notif__time">{n.time}</span>
+                <span className="ws-notif__x" onClick={() => onDismiss(n.id)}>
+                  ×
+                </span>
+              </div>
+            </div>
+          ))}
+          {items.length === 0 && <div className="ws-notif__empty">You’re all caught up.</div>}
+        </div>
+        <div className="ws-notif__foot" onClick={onViewActivity}>
+          View all activity →
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- activity / curator
+
+const ACT_DOT: Record<string, string> = {
+  tag: 'var(--accent)',
+  link: 'var(--accent)',
+  organize: 'var(--accent)',
+  summary: 'var(--accent)',
+  move: 'var(--accent)',
+  archive: 'var(--status-backlog)',
+  write: 'var(--status-inprogress)',
+  read: 'var(--status-done)',
+  search: 'var(--status-done)',
+  delete: 'var(--danger)',
+}
+
+function ActivityDrawer({
+  data,
+  filter,
+  totalNotes,
+  onFilter,
+  onRunCurator,
+  onClose,
+}: {
+  data: ActivityData | null
+  filter: 'all' | 'curator' | 'mcp'
+  totalNotes: number
+  onFilter: (f: 'all' | 'curator' | 'mcp') => void
+  onRunCurator: () => void
+  onClose: () => void
+}) {
+  const events = data?.events ?? []
+  const cur = data?.curator
+  return (
+    <div className="ws-drawer-scrim" onClick={onClose}>
+      <div className="ws-drawer ws-drawer--wide vscroll" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-drawer__head">
+          <div className="ws-drawer__head-row">
+            <div>
+              <div className="ws-drawer__title">Activity</div>
+              <div className="ws-drawer__sub">What the curator and connected clients did.</div>
+            </div>
+            <button className="ws-drawer__esc" onClick={onClose}>
+              esc
+            </button>
+          </div>
+          <div className="ws-curator">
+            <div className="ws-curator__top">
+              <div className="ws-curator__avatar">
+                <Icon name="sparkle" size={18} />
+              </div>
+              <div className="ws-curator__id">
+                <div className="ws-curator__name-row">
+                  <span className="ws-curator__name">Curator</span>
+                  <span className={`ws-curator__badge${cur?.enabled ? '' : ' ws-curator__badge--off'}`}>
+                    <span className="ws-curator__badge-dot" />
+                    {cur?.enabled ? 'watching' : 'off'}
+                  </span>
+                </div>
+                <div className="ws-curator__sub">Auto-tags, links and tidies your vault.</div>
+              </div>
+              <button className="ws-curator__run" onClick={onRunCurator}>
+                Run now
+              </button>
+            </div>
+            <div className="ws-curator__divider" />
+            <div className="ws-curator__meta">
+              <span>ran {cur?.lastRun ?? 'never'}</span>
+              <span className="ws-curator__mid-dot">·</span>
+              <span>{cur?.changes ?? 0} changes today</span>
+              <span className="ws-curator__mid-dot">·</span>
+              <span>watching {cur?.watching ?? totalNotes} notes</span>
+            </div>
+          </div>
+          <div className="ws-segmented ws-activity__filter">
+            {(['all', 'curator', 'mcp'] as const).map((f) => (
+              <button
+                key={f}
+                className={`ws-segmented__item${filter === f ? ' ws-segmented__item--active' : ''}`}
+                onClick={() => onFilter(f)}
+              >
+                {f === 'all' ? 'All' : f === 'curator' ? 'Curator' : 'MCP'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="ws-drawer__body ws-activity__timeline">
+          {events.map((ev) => (
+            <div key={ev.id} className={`ws-activity__row${ev.pending ? ' ws-activity__row--pending' : ''}`}>
+              <span className="ws-activity__dot" style={{ background: ACT_DOT[ev.kind] ?? 'var(--accent)' }} />
+              <div className="ws-activity__main">
+                <div className="ws-activity__line">
+                  <span
+                    className={`ws-activity__actor${ev.source === 'curator' ? ' ws-activity__actor--curator' : ''}`}
+                  >
+                    {ev.actor}
+                  </span>
+                  <span className="ws-activity__verb"> {ev.verb} </span>
+                  <span className="ws-activity__target">{ev.target}</span>
+                </div>
+                {ev.detail && <div className="ws-activity__detail">{ev.detail}</div>}
+                {ev.pending && <span className="ws-activity__review">needs review →</span>}
+              </div>
+              <span className="ws-activity__time">{ev.time}</span>
+            </div>
+          ))}
+          {events.length === 0 && (
+            <div className="ws-drawer__empty">
+              <div className="ws-drawer__empty-glyph">∅</div>
+              <div className="ws-drawer__empty-title">Nothing yet</div>
+              <div className="ws-drawer__empty-sub">No activity for this filter.</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

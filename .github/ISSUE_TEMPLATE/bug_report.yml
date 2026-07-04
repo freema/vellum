@@ -1,0 +1,63 @@
+name: Bug report
+description: Something in vellum is not working as expected
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report! Please **do not** file security issues here —
+        see [SECURITY.md](https://github.com/freema/vellum/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear description of the bug, and what you expected instead.
+      placeholder: When I …, vellum … but I expected …
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. …
+        2. …
+        3. …
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `vellum --version` or the image tag you run.
+      placeholder: "1.2.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Where?
+      options:
+        - MCP tools (agent)
+        - Web workspace UI
+        - REST API
+        - Auth / OAuth
+        - Deployment / Docker
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: env
+    attributes:
+      label: Environment
+      description: OS, how you run it (binary / Docker / compose), reverse proxy, etc.
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Paste any server logs. Redact tokens/secrets first.
+      render: shell
+    validations:
+      required: false

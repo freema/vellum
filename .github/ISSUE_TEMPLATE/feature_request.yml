@@ -1,0 +1,37 @@
+name: Feature request
+description: Suggest an idea for vellum
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        vellum stays deliberately small. The best requests are sharp and
+        composable — thanks for keeping that in mind.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem does this solve?
+      description: Describe the use case, not just the feature.
+      placeholder: I'm trying to … but today I can't because …
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: What would you like vellum to do?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+    validations:
+      required: false
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope check
+      options:
+        - label: This keeps the tool surface small (or explains why it's worth growing it).
+          required: false

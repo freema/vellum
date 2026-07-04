@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -16,6 +17,13 @@ type API struct {
 	Index     *vault.Index
 	Searcher  vault.Searcher
 	Structure vault.Structure
+
+	// Activity records sessions and events for the Connections/Activity
+	// panels. Endpoint is the public MCP URL shown in those panels; Curator
+	// reflects whether the curator tools are enabled. All optional.
+	Activity *activity.Recorder
+	Endpoint string
+	Curator  bool
 }
 
 // routes registers /api/* handlers on mux.
@@ -30,6 +38,15 @@ func (a *API) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/tags", a.handleTags)
 	mux.HandleFunc("GET /api/backlinks/{path...}", a.handleBacklinks)
 	mux.HandleFunc("GET /api/tasks", a.handleTasks)
+	mux.HandleFunc("GET /api/folders", a.handleListFolders)
+	mux.HandleFunc("POST /api/folders", a.handleCreateFolder)
+	if a.Activity != nil {
+		mux.HandleFunc("GET /api/connections", a.handleConnections)
+		mux.HandleFunc("DELETE /api/connections/{id}", a.handleRevoke)
+		mux.HandleFunc("GET /api/activity", a.handleActivity)
+		mux.HandleFunc("GET /api/notifications", a.handleNotifications)
+		mux.HandleFunc("POST /api/curator/run", a.handleCuratorRun)
+	}
 }
 
 var apiVersion = "dev" // set by NewRouter
@@ -127,6 +144,7 @@ func (a *API) handlePutNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.Index.Update(path)
+	a.recordUser("write", path, "saved from the workspace")
 
 	note, err := a.Vault.Read(path)
 	if err != nil {
@@ -144,6 +162,7 @@ func (a *API) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Index.Remove(path)
+	a.recordUser("delete", path, "deleted from the workspace")
 	writeJSON(w, http.StatusOK, map[string]string{"deleted": path})
 }
 
@@ -161,6 +180,7 @@ func (a *API) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.Index.Rename(req.From, req.To)
+	a.recordUser("move", req.To, "moved from "+req.From)
 	writeJSON(w, http.StatusOK, map[string]string{"from": req.From, "to": req.To})
 }
 

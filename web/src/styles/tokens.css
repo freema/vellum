@@ -54,6 +54,14 @@
   --danger-text: #8A3E29;
   --knowledge: #C4BBA9;
 
+  /* drawers / popovers (connections, activity, notifications) */
+  --line-rail: #EAE3D7; /* tree depth rails, inactive tool borders */
+  --bg-inactive-chip: #F0EDE6; /* idle avatar / type badge */
+  --ink-dismiss: #C6BEB0; /* notification dismiss × idle */
+  --overlay-scrim: rgba(30, 26, 22, 0.28);
+  --shadow-drawer: -18px 0 60px -24px rgba(42, 38, 34, 0.4);
+  --shadow-popover: 0 18px 50px -16px rgba(42, 38, 34, 0.4);
+
   /* logo */
   --logo-fold: #6F5836;
   --logo-fold-midnight: #9E8351;
@@ -110,4 +118,11 @@
   --accent-hover: #C2A878;
   --accent-soft: #2A2433;
   --on-accent: #16141F;
+
+  --line-rail: #2E2A3A;
+  --bg-inactive-chip: #2A2433;
+  --ink-dismiss: #6E687C;
+  --overlay-scrim: rgba(8, 7, 12, 0.5);
+  --shadow-drawer: -18px 0 60px -24px rgba(0, 0, 0, 0.55);
+  --shadow-popover: 0 18px 50px -16px rgba(0, 0, 0, 0.55);
 }

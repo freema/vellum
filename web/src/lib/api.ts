@@ -41,6 +41,58 @@ export interface TagCount {
   count: number
 }
 
+export interface Connection {
+  id: string
+  name: string
+  kind: string
+  mono: string
+  status: 'active' | 'idle'
+  since: string
+  lastTool?: string
+  lastAgo: string
+  calls: number
+}
+
+export interface ConnectionsData {
+  endpoint: string
+  activeCount: number
+  totalCalls: number
+  connections: Connection[]
+}
+
+export interface ActivityEvent {
+  id: string
+  source: 'mcp' | 'curator' | 'user'
+  actor: string
+  kind: string
+  verb: string
+  target: string
+  detail: string
+  pending?: boolean
+  time: string
+}
+
+export interface CuratorStatus {
+  enabled: boolean
+  changes: number
+  watching: number
+  lastRun: string
+}
+
+export interface ActivityData {
+  curator: CuratorStatus
+  events: ActivityEvent[]
+}
+
+export interface Notification {
+  id: string
+  kind: 'curator' | 'task' | 'mcp' | 'digest'
+  title: string
+  body: string
+  time: string
+  read: boolean
+}
+
 export class ConflictError extends Error {
   content: string
   etag: string
@@ -143,6 +195,40 @@ export class ApiClient {
   async tags(): Promise<TagCount[]> {
     const body = (await this.request('GET', '/api/tags')) as { tags: TagCount[] }
     return body.tags
+  }
+
+  async listFolders(): Promise<string[]> {
+    const body = (await this.request('GET', '/api/folders')) as { folders: string[] | null }
+    return body.folders ?? []
+  }
+
+  async createFolder(path: string): Promise<void> {
+    await this.request('POST', '/api/folders', JSON.stringify({ path }), {
+      'Content-Type': 'application/json',
+    })
+  }
+
+  async connections(): Promise<ConnectionsData> {
+    return (await this.request('GET', '/api/connections')) as ConnectionsData
+  }
+
+  async revokeConnection(id: string): Promise<void> {
+    await this.request('DELETE', `/api/connections/${encodeURIComponent(id)}`)
+  }
+
+  async activity(filter = 'all'): Promise<ActivityData> {
+    return (await this.request('GET', `/api/activity?filter=${encodeURIComponent(filter)}`)) as ActivityData
+  }
+
+  async notifications(): Promise<{ notifications: Notification[]; unread: number }> {
+    return (await this.request('GET', '/api/notifications')) as {
+      notifications: Notification[]
+      unread: number
+    }
+  }
+
+  async runCurator(): Promise<{ enabled: boolean; changes: number }> {
+    return (await this.request('POST', '/api/curator/run')) as { enabled: boolean; changes: number }
   }
 
   private async request(

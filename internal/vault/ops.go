@@ -68,6 +68,54 @@ func (v *Vault) List(dir string, recursive bool) ([]NoteInfo, error) {
 	return infos, nil
 }
 
+// CreateDir creates a directory (and any parents) inside the vault. An
+// existing directory is a no-op; a file already at the path is an error.
+func (v *Vault) CreateDir(dir string) error {
+	dir = strings.Trim(dir, "/")
+	if dir == "" {
+		return fmt.Errorf("%w: empty directory", ErrInvalidPath)
+	}
+	abs, err := v.resolveDir(dir)
+	if err != nil {
+		return err
+	}
+	if fi, err := os.Stat(abs); err == nil {
+		if fi.IsDir() {
+			return nil
+		}
+		return fmt.Errorf("%w: %s exists and is not a directory", ErrExists, dir)
+	}
+	return os.MkdirAll(abs, 0o755)
+}
+
+// ListDirs returns every subdirectory of the vault (vault-relative,
+// forward-slash), dotfiles excluded. Empty directories are included so the
+// SPA tree can show folders that do not hold any notes yet.
+func (v *Vault) ListDirs() ([]string, error) {
+	var dirs []string
+	err := filepath.WalkDir(v.root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !d.IsDir() {
+			return nil
+		}
+		if path == v.root {
+			return nil
+		}
+		if strings.HasPrefix(d.Name(), ".") {
+			return filepath.SkipDir
+		}
+		dirs = append(dirs, v.relPath(path))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Strings(dirs)
+	return dirs, nil
+}
+
 // titleOf derives a note title from the file head (frontmatter or first
 // heading fit comfortably in the first 8 KB).
 func titleOf(abs string) string {

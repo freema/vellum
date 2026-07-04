@@ -27,6 +27,10 @@ type Config struct {
 	// (env VELLUM_CURATOR=on|off, default off).
 	Curator bool
 
+	// Notify enables the periodic SMTP task digest (env VELLUM_NOTIFY=on|off,
+	// default off). SMTP_* settings are read by the notify package.
+	Notify bool
+
 	// AllowedOrigins are browser origins allowed to reach /mcp
 	// (env VELLUM_ALLOWED_ORIGINS, comma-separated).
 	AllowedOrigins []string
@@ -54,6 +58,7 @@ func Load() Config {
 		ProjectsDir:   getenv("VELLUM_PROJECTS_DIR", "projects"),
 		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
 		Curator:       getenv("VELLUM_CURATOR", "off") == "on",
+		Notify:        getbool("VELLUM_NOTIFY", false),
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
 			[]string{"https://claude.ai", "https://claude.com"}),
 		AuthEnabled:  getbool("AUTH_ENABLED", false),
