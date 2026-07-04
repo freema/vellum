@@ -128,7 +128,7 @@ func faviconHandler(dist fs.FS) http.HandlerFunc {
 			http.NotFound(w, r)
 			return
 		}
-		defer f.Close()
+		defer func() { _ = f.Close() }()
 		w.Header().Set("Content-Type", "image/svg+xml")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		_, _ = io.Copy(w, f)
