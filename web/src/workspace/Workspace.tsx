@@ -13,18 +13,83 @@ import {
   type TagCount,
 } from '../lib/api'
 import { CommandPalette, PaletteItem, Highlight } from '../components/palette'
+import { LogoMark } from '../components/Logo'
+import { Icon, type IconName } from '../components/Icon'
 
 type TypeFilter = 'all' | 'task' | 'knowledge'
 type ViewMode = 'edit' | 'split' | 'preview'
+type Toast = { text: string; tone: 'ok' | 'danger' }
 
-const statusDotColor: Record<string, string> = {
-  backlog: 'var(--status-backlog)',
-  'in-progress': 'var(--status-inprogress)',
-  done: 'var(--status-done)',
+const STATUS: Record<string, { label: string; dot: string; soft: string; text: string }> = {
+  backlog: {
+    label: 'Backlog',
+    dot: 'var(--status-backlog)',
+    soft: 'var(--status-backlog-soft)',
+    text: 'var(--status-backlog-text)',
+  },
+  'in-progress': {
+    label: 'In progress',
+    dot: 'var(--status-inprogress)',
+    soft: 'var(--status-inprogress-soft)',
+    text: 'var(--status-inprogress-text)',
+  },
+  done: {
+    label: 'Done',
+    dot: 'var(--status-done)',
+    soft: 'var(--status-done-soft)',
+    text: 'var(--status-done-text)',
+  },
 }
+const STATUS_ORDER = ['backlog', 'in-progress', 'done'] as const
+
+const TOUR = [
+  {
+    id: 'tourSearch',
+    place: 'below-left',
+    title: 'Find anything',
+    body: 'Search across every note and #tag. Press ⌘K from anywhere in the vault.',
+  },
+  {
+    id: 'tourTree',
+    place: 'right',
+    title: 'Your vault',
+    body: 'Folders live here. Click one to open it, or drag a note onto a folder to move it.',
+  },
+  {
+    id: 'tourList',
+    place: 'right',
+    title: 'Notes & filters',
+    body: 'Notes in the open folder. Filter by task / knowledge and by status.',
+  },
+  {
+    id: 'tourToolbar',
+    place: 'below-left',
+    title: 'Format markdown',
+    body: 'Bold, headings, lists, checkboxes and links — or just type the syntax by hand.',
+  },
+  {
+    id: 'tourModes',
+    place: 'below-right',
+    title: 'Edit · Split · Preview',
+    body: 'Write raw markdown, see it rendered, or keep both side by side.',
+  },
+  {
+    id: 'tourHelp',
+    place: 'below-right',
+    title: 'Help anytime',
+    body: 'Reopen this tour and the markdown cheatsheet from here whenever you need it.',
+  },
+] as const
 
 function noteType(e: NoteEntry): 'task' | 'knowledge' {
   return e.type === 'task' ? 'task' : 'knowledge'
+}
+function basename(path: string): string {
+  return path.split('/').pop() ?? path
+}
+function dirname(path: string): string {
+  const i = path.lastIndexOf('/')
+  return i < 0 ? '' : path.slice(0, i)
 }
 
 export default function Workspace({ api, version }: { api: ApiClient; version: string }) {
@@ -39,7 +104,17 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const [statusFilter, setStatusFilter] = useState('')
   const [activeTags, setActiveTags] = useState<string[]>([])
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [helpOpen, setHelpOpen] = useState(false)
   const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [toast, setToast] = useState<Toast | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [projectsOpen, setProjectsOpen] = useState(true)
+  const [dragPath, setDragPath] = useState<string | null>(null)
+  const [dropDir, setDropDir] = useState<string | null>(null)
+  const [tourStep, setTourStep] = useState<number | null>(null)
+
+  const rootRef = useRef<HTMLDivElement>(null)
+  const toastTimer = useRef<number | undefined>(undefined)
 
   const refresh = useCallback(async () => {
     try {
@@ -55,16 +130,10 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     void refresh()
   }, [refresh])
 
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
-        e.preventDefault()
-        setPaletteOpen((o) => !o)
-      }
-      if (e.key === 'Escape') setPaletteOpen(false)
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
+  const showToast = useCallback((text: string, tone: 'ok' | 'danger' = 'ok') => {
+    window.clearTimeout(toastTimer.current)
+    setToast({ text, tone })
+    toastTimer.current = window.setTimeout(() => setToast(null), 2400)
   }, [])
 
   const toggleTheme = () => {
@@ -72,6 +141,50 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     setTheme(next)
     document.documentElement.setAttribute('data-theme', next)
   }
+
+  // ---- keyboard: ⌘K palette, Escape closes overlays ----
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault()
+        setPaletteOpen((o) => !o)
+        return
+      }
+      if (e.key === 'Escape') {
+        setPaletteOpen(false)
+        setHelpOpen(false)
+        setTourStep(null)
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  // ---- onboarding tour: auto-start once per browser ----
+  const startTour = useCallback(() => {
+    setHelpOpen(false)
+    setPaletteOpen(false)
+    setTourStep(0)
+  }, [])
+  useEffect(() => {
+    let seen = false
+    try {
+      seen = !!localStorage.getItem('vellum_onboarded')
+    } catch {
+      /* private mode */
+    }
+    if (seen) return
+    const t = window.setTimeout(() => setTourStep(0), 700)
+    return () => window.clearTimeout(t)
+  }, [])
+  const endTour = useCallback(() => {
+    try {
+      localStorage.setItem('vellum_onboarded', '1')
+    } catch {
+      /* ignore */
+    }
+    setTourStep(null)
+  }, [])
 
   // ---- derived tree data ----
   const inDir = useCallback(
@@ -99,7 +212,21 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     return [...dirs].sort()
   }, [entries])
 
-  // ---- filtered list ----
+  const otherTopDirs = useMemo(() => {
+    const dirs = new Set<string>()
+    for (const e of entries) {
+      const top = e.path.includes('/') ? e.path.split('/')[0] : ''
+      if (top && top !== 'inbox' && top !== 'projects' && top !== 'archive') dirs.add(top)
+    }
+    return [...dirs].sort()
+  }, [entries])
+
+  const allDirs = useMemo(() => {
+    const set = new Set<string>(['inbox', 'projects', 'archive'])
+    for (const d of counts.keys()) set.add(d)
+    return [...set].sort()
+  }, [counts])
+
   const listEntries = useMemo(() => {
     return entries
       .filter((e) => inDir(e, selectedDir))
@@ -109,10 +236,13 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       .sort((a, b) => b.modTime - a.modTime)
   }, [entries, selectedDir, typeFilter, statusFilter, activeTags, inDir])
 
-  const openNote = (path: string) => {
-    setPaletteOpen(false)
-    navigate(`/n/${path}`)
-  }
+  const openNote = useCallback(
+    (path: string) => {
+      setPaletteOpen(false)
+      navigate(`/n/${path}`)
+    },
+    [navigate],
+  )
 
   const createNote = async () => {
     const dir = selectedDir || 'inbox'
@@ -121,26 +251,88 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       name = `untitled-${i}.md`
     }
     const path = `${dir}/${name}`
-    await api.putNote(path, '# Untitled\n')
-    await refresh()
-    openNote(path)
+    try {
+      await api.putNote(path, '# Untitled\n')
+      await refresh()
+      openNote(path)
+      showToast(`New note in ${dir.split('/').pop()}`)
+    } catch (err) {
+      if (!(err instanceof AuthError)) showToast('Could not create note', 'danger')
+    }
   }
 
+  // ---- path-level actions ----
+  const moveToDir = useCallback(
+    async (from: string, dir: string) => {
+      if (dirname(from) === dir) return
+      const to = `${dir}/${basename(from)}`
+      try {
+        await api.moveNote(from, to)
+        await refresh()
+        if (from === selectedPath) navigate(`/n/${to}`, { replace: true })
+        showToast(`Moved to ${dir.split('/').pop()}`)
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Move failed', 'danger')
+      } finally {
+        setDragPath(null)
+        setDropDir(null)
+      }
+    },
+    [api, refresh, selectedPath, navigate, showToast],
+  )
+
+  const renameNote = useCallback(
+    async (from: string, rawName: string) => {
+      let name = rawName.trim()
+      if (!name) return
+      if (!/\.(md|markdown)$/i.test(name)) name += '.md'
+      const to = dirname(from) ? `${dirname(from)}/${name}` : name
+      if (to === from) return
+      try {
+        await api.moveNote(from, to)
+        await refresh()
+        if (from === selectedPath) navigate(`/n/${to}`, { replace: true })
+        showToast('Renamed')
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Rename failed', 'danger')
+      }
+    },
+    [api, refresh, selectedPath, navigate, showToast],
+  )
+
+  const deleteNote = useCallback(
+    async (path: string) => {
+      try {
+        await api.deleteNote(path)
+        await refresh()
+        if (path === selectedPath) navigate('/', { replace: true })
+        showToast('Note deleted', 'danger')
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('Delete failed', 'danger')
+      }
+    },
+    [api, refresh, selectedPath, navigate, showToast],
+  )
+
   return (
-    <div className="ws">
+    <div className="ws" ref={rootRef}>
       <TopBar
         version={version}
         activeTags={activeTags}
         onRemoveTag={(t) => setActiveTags(activeTags.filter((x) => x !== t))}
         onOpenPalette={() => setPaletteOpen(true)}
         onToggleTheme={toggleTheme}
+        onOpenHelp={() => setHelpOpen(true)}
       />
       <div className="ws-body">
         <TreePanel
           counts={counts}
           projectDirs={projectDirs}
+          otherTopDirs={otherTopDirs}
           selectedDir={selectedDir}
           onSelectDir={setSelectedDir}
+          projectsOpen={projectsOpen}
+          onToggleProjects={() => setProjectsOpen((o) => !o)}
           tags={tags}
           activeTags={activeTags}
           onToggleTag={(t) =>
@@ -148,6 +340,11 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
               activeTags.includes(t) ? activeTags.filter((x) => x !== t) : [...activeTags, t],
             )
           }
+          totalNotes={entries.length}
+          dropDir={dropDir}
+          dragging={dragPath !== null}
+          onDropDir={(dir) => dragPath && moveToDir(dragPath, dir)}
+          onDragOverDir={setDropDir}
         />
         <ListPanel
           entries={listEntries}
@@ -159,18 +356,34 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onStatusFilter={setStatusFilter}
           onOpen={openNote}
           onCreate={createNote}
+          onDragStart={setDragPath}
+          onDragEnd={() => {
+            setDragPath(null)
+            setDropDir(null)
+          }}
         />
-        <EditorPanel key={selectedPath} api={api} path={selectedPath} onSaved={refresh} />
+        <EditorPanel
+          key={selectedPath}
+          api={api}
+          path={selectedPath}
+          allDirs={allDirs}
+          onSaved={refresh}
+          onSavingChange={setSaving}
+          onMove={moveToDir}
+          onRename={renameNote}
+          onDelete={deleteNote}
+          showToast={showToast}
+        />
       </div>
       <footer className="ws-statusbar">
         {selectedPath ? (
           <span>
             <span className="ws-statusbar__dir">
-              {selectedPath.includes('/') ? selectedPath.slice(0, selectedPath.lastIndexOf('/') + 1) : ''}
+              {selectedPath.includes('/')
+                ? selectedPath.slice(0, selectedPath.lastIndexOf('/') + 1)
+                : ''}
             </span>
-            <span className="ws-statusbar__file">
-              {selectedPath.split('/').pop()}
-            </span>
+            <span className="ws-statusbar__file">{basename(selectedPath)}</span>
           </span>
         ) : (
           <span className="ws-statusbar__dir">{selectedDir || 'vault'}</span>
@@ -179,9 +392,36 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         <span>{entries.length} notes</span>
         <span className="ws-statusbar__sep">·</span>
         <span>md</span>
+        {selectedPath && (
+          <>
+            <span className="ws-statusbar__sep">·</span>
+            <span className={saving ? 'ws-statusbar__dirty' : 'ws-statusbar__saved'}>
+              {saving ? 'Saving…' : 'Saved ✓'}
+            </span>
+          </>
+        )}
       </footer>
       {paletteOpen && (
         <PaletteOverlay api={api} onClose={() => setPaletteOpen(false)} onOpen={openNote} />
+      )}
+      {toast && (
+        <div className="ws-toast">
+          <span
+            className="ws-toast__dot"
+            style={{ background: toast.tone === 'danger' ? 'var(--danger)' : 'var(--status-done)' }}
+          />
+          {toast.text}
+        </div>
+      )}
+      {helpOpen && <HelpModal onClose={() => setHelpOpen(false)} onStartTour={startTour} />}
+      {tourStep !== null && (
+        <TourOverlay
+          step={tourStep}
+          rootRef={rootRef}
+          onPrev={() => setTourStep(Math.max(0, tourStep - 1))}
+          onNext={() => (tourStep >= TOUR.length - 1 ? endTour() : setTourStep(tourStep + 1))}
+          onSkip={endTour}
+        />
       )}
     </div>
   )
@@ -195,23 +435,24 @@ function TopBar({
   onRemoveTag,
   onOpenPalette,
   onToggleTheme,
+  onOpenHelp,
 }: {
   version: string
   activeTags: string[]
   onRemoveTag: (t: string) => void
   onOpenPalette: () => void
   onToggleTheme: () => void
+  onOpenHelp: () => void
 }) {
   return (
     <header className="ws-topbar">
-      <span className="ws-topbar__wordmark">vellum</span>
+      <div className="ws-topbar__brand">
+        <LogoMark size={27} variant="paper" surface="var(--bg)" />
+        <span className="ws-topbar__wordmark">vellum</span>
+      </div>
       <span className="ws-topbar__divider" />
-      <button
-        className="ws-topbar__search"
-        onClick={onOpenPalette}
-        style={{ font: 'inherit' }}
-      >
-        <span className="ws-topbar__search-icon">⌕</span>
+      <button id="tourSearch" className="ws-topbar__search" onClick={onOpenPalette}>
+        <Icon name="search" size={15} className="ws-topbar__search-icon" />
         <span className="ws-topbar__search-placeholder">Search notes…</span>
         <span className="ws-topbar__kbd">⌘K</span>
       </button>
@@ -225,8 +466,11 @@ function TopBar({
       </span>
       <span className="ws-topbar__spacer" />
       <span className="ws-topbar__version">{version}</span>
-      <button className="ws-topbar__settings" onClick={onToggleTheme} title="Toggle theme">
-        ⚙
+      <button className="ws-icon-btn" onClick={onToggleTheme} title="Toggle midnight ink">
+        <Icon name="moon" size={16} />
+      </button>
+      <button id="tourHelp" className="ws-icon-btn" onClick={onOpenHelp} title="Help & tour">
+        <Icon name="help" size={16} />
       </button>
     </header>
   )
@@ -237,30 +481,82 @@ function TopBar({
 function TreePanel({
   counts,
   projectDirs,
+  otherTopDirs,
   selectedDir,
   onSelectDir,
+  projectsOpen,
+  onToggleProjects,
   tags,
   activeTags,
   onToggleTag,
+  totalNotes,
+  dropDir,
+  dragging,
+  onDropDir,
+  onDragOverDir,
 }: {
   counts: Map<string, number>
   projectDirs: string[]
+  otherTopDirs: string[]
   selectedDir: string
   onSelectDir: (dir: string) => void
+  projectsOpen: boolean
+  onToggleProjects: () => void
   tags: TagCount[]
   activeTags: string[]
   onToggleTag: (t: string) => void
+  totalNotes: number
+  dropDir: string | null
+  dragging: boolean
+  onDropDir: (dir: string) => void
+  onDragOverDir: (dir: string | null) => void
 }) {
-  const row = (dir: string, label: string, opts: { badge?: boolean; glyph?: string } = {}) => {
+  const dropProps = (dir: string) => ({
+    onDragOver: (e: React.DragEvent) => {
+      if (!dragging) return
+      e.preventDefault()
+      if (dropDir !== dir) onDragOverDir(dir)
+    },
+    onDragLeave: () => {
+      if (dropDir === dir) onDragOverDir(null)
+    },
+    onDrop: (e: React.DragEvent) => {
+      e.preventDefault()
+      onDropDir(dir)
+    },
+  })
+
+  const row = (
+    dir: string,
+    label: string,
+    icon: IconName,
+    opts: { badge?: boolean; caret?: 'open' | 'closed'; onCaret?: () => void } = {},
+  ) => {
     const selected = selectedDir === dir
     const count = counts.get(dir) ?? 0
+    const isDrop = dropDir === dir
     return (
       <div
-        className={`ws-tree__row${selected ? ' ws-tree__row--selected' : ''}`}
+        className={`ws-tree__row${selected ? ' ws-tree__row--selected' : ''}${isDrop ? ' ws-tree__row--drop' : ''}`}
         onClick={() => onSelectDir(selected ? '' : dir)}
+        {...dropProps(dir)}
       >
-        <span className="ws-tree__caret">{selected ? '▾' : '▸'}</span>
-        <span className="ws-tree__glyph">{opts.glyph ?? (selected ? '▤' : '▢')}</span>
+        <span
+          className="ws-tree__caret"
+          onClick={
+            opts.onCaret
+              ? (e) => {
+                  e.stopPropagation()
+                  opts.onCaret?.()
+                }
+              : undefined
+          }
+        >
+          {opts.caret ? (opts.caret === 'open' ? '▾' : '▸') : ''}
+        </span>
+        <span className="ws-tree__glyph">
+          <Icon name={icon} size={14} />
+        </span>
         <span className="ws-tree__name">{label}</span>
         {opts.badge && count > 0 ? (
           <span className="ws-tree__badge">{count}</span>
@@ -272,30 +568,38 @@ function TreePanel({
   }
 
   return (
-    <aside className="ws-tree vscroll">
-      <div className="ws-tree__label">Vault</div>
-      {row('inbox', 'Inbox', { badge: true })}
-      {row('projects', 'Projects')}
-      <div style={{ paddingLeft: 20 }}>
-        {projectDirs.map((dir) => {
+    <aside id="tourTree" className="ws-tree vscroll">
+      <div className="ws-tree__head">
+        <span className="ws-tree__label">Vault</span>
+        <span className="ws-tree__total">{totalNotes} notes</span>
+      </div>
+      {row('inbox', 'Inbox', 'inbox', { badge: true })}
+      {row('projects', 'Projects', 'folder', {
+        caret: projectsOpen ? 'open' : 'closed',
+        onCaret: onToggleProjects,
+      })}
+      {projectsOpen &&
+        projectDirs.map((dir) => {
           const active = selectedDir === dir
+          const isDrop = dropDir === dir
           return (
             <div
               key={dir}
-              className={`ws-tree__row ws-tree__child${active ? ' ws-tree__child--active' : ''}`}
+              className={`ws-tree__row ws-tree__child${active ? ' ws-tree__child--active' : ''}${isDrop ? ' ws-tree__row--drop' : ''}`}
               onClick={() => onSelectDir(active ? 'projects' : dir)}
+              {...dropProps(dir)}
             >
-              <span style={{ width: 10 }} />
+              <span className="ws-tree__rail" />
               <span className="ws-tree__glyph" style={active ? { color: 'var(--accent)' } : undefined}>
-                ▤
+                <Icon name="folder" size={13} />
               </span>
               <span className="ws-tree__name">{dir.split('/')[1]}</span>
               <span className="ws-tree__count">{counts.get(dir) ?? 0}</span>
             </div>
           )
         })}
-      </div>
-      {row('archive', 'Archive')}
+      {otherTopDirs.map((dir) => row(dir, dir, 'folder'))}
+      {row('archive', 'Archive', 'archive')}
       <div className="ws-tree__divider" />
       <div className="ws-tree__label">Tags</div>
       <div className="ws-tree__cloud">
@@ -325,6 +629,8 @@ function ListPanel({
   onStatusFilter,
   onOpen,
   onCreate,
+  onDragStart,
+  onDragEnd,
 }: {
   entries: NoteEntry[]
   selectedDir: string
@@ -335,15 +641,17 @@ function ListPanel({
   onStatusFilter: (s: string) => void
   onOpen: (path: string) => void
   onCreate: () => void
+  onDragStart: (path: string) => void
+  onDragEnd: () => void
 }) {
   const crumb = selectedDir === '' ? 'vault' : selectedDir.split('/').join(' / ')
   return (
-    <section className="ws-list">
+    <section id="tourList" className="ws-list">
       <div className="ws-list__header">
         <div className="ws-list__crumb-row">
           <span className="ws-list__crumb">{crumb}</span>
           <button className="ws-list__add" onClick={onCreate} title="New note">
-            ＋
+            <Icon name="plus" size={16} />
           </button>
         </div>
         <div className="ws-type-toggle">
@@ -369,7 +677,7 @@ function ListPanel({
             [
               ['', 'All'],
               ['backlog', 'Backlog'],
-              ['in-progress', 'In progress'],
+              ['in-progress', 'Doing'],
               ['done', 'Done'],
             ] as const
           ).map(([key, label]) => (
@@ -389,12 +697,18 @@ function ListPanel({
             key={e.path}
             className={`ws-note-row${e.path === selectedPath ? ' ws-note-row--active' : ''}`}
             onClick={() => onOpen(e.path)}
+            draggable
+            onDragStart={(ev) => {
+              ev.dataTransfer.effectAllowed = 'move'
+              onDragStart(e.path)
+            }}
+            onDragEnd={onDragEnd}
           >
             <div className="ws-note-row__title-line">
               {noteType(e) === 'task' ? (
                 <span
                   className="ws-note-row__dot"
-                  style={{ background: statusDotColor[e.status ?? 'backlog'] ?? 'var(--status-backlog)' }}
+                  style={{ background: STATUS[e.status ?? 'backlog']?.dot ?? 'var(--status-backlog)' }}
                 />
               ) : (
                 <span className="ws-note-row__square" />
@@ -413,6 +727,13 @@ function ListPanel({
             </div>
           </div>
         ))}
+        {entries.length === 0 && (
+          <div className="ws-list__empty">
+            <div className="ws-list__empty-glyph">∅</div>
+            <div className="ws-list__empty-title">Nothing here</div>
+            <div className="ws-list__empty-body">No notes match this filter.</div>
+          </div>
+        )}
       </div>
     </section>
   )
@@ -420,23 +741,50 @@ function ListPanel({
 
 // ---------------------------------------------------------------- editor
 
+const TOOLBAR: { icon?: IconName; label?: string; title: string; kind: FormatKind }[] = [
+  { label: 'B', title: 'Bold  ⌘B', kind: 'bold' },
+  { label: 'I', title: 'Italic  ⌘I', kind: 'italic' },
+  { label: 'H1', title: 'Heading 1', kind: 'h1' },
+  { label: 'H2', title: 'Heading 2', kind: 'h2' },
+  { icon: 'list', title: 'Bullet list', kind: 'list' },
+  { icon: 'checkSquare', title: 'Checkbox', kind: 'check' },
+  { icon: 'quote', title: 'Quote', kind: 'quote' },
+  { icon: 'code', title: 'Inline code', kind: 'code' },
+  { icon: 'link', title: 'Link a note', kind: 'wiki' },
+]
+
 function EditorPanel({
   api,
   path,
+  allDirs,
   onSaved,
+  onSavingChange,
+  onMove,
+  onRename,
+  onDelete,
+  showToast,
 }: {
   api: ApiClient
   path: string
+  allDirs: string[]
   onSaved: () => void
+  onSavingChange: (saving: boolean) => void
+  onMove: (from: string, dir: string) => void
+  onRename: (from: string, name: string) => void
+  onDelete: (path: string) => void
+  showToast: (text: string, tone?: 'ok' | 'danger') => void
 }) {
   const [note, setNote] = useState<Note | null>(null)
   const [draft, setDraft] = useState('')
+  const [titleDraft, setTitleDraft] = useState('')
   const [etag, setEtag] = useState('')
-  const [dirty, setDirty] = useState(false)
   const [mode, setMode] = useState<ViewMode>('split')
-  const [showFrontmatter, setShowFrontmatter] = useState(false)
   const [conflict, setConflict] = useState<{ content: string; etag: string } | null>(null)
+  const [statusMenu, setStatusMenu] = useState(false)
+  const [moveMenu, setMoveMenu] = useState(false)
+  const [confirmDelete, setConfirmDelete] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
+  const rawRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
     if (!path) return
@@ -445,49 +793,97 @@ function EditorPanel({
       if (cancelled) return
       setNote(n)
       setDraft(n.content)
+      setTitleDraft(n.title)
       setEtag(n.hash)
-      setDirty(false)
+      onSavingChange(false)
     })
     return () => {
       cancelled = true
     }
-  }, [api, path])
+  }, [api, path, onSavingChange])
 
   const save = useCallback(
     async (content: string, ifMatch: string) => {
       try {
         const newTag = await api.putNote(path, content, ifMatch)
         setEtag(newTag)
-        setDirty(false)
+        onSavingChange(false)
         onSaved()
       } catch (err) {
         if (err instanceof ConflictError) {
           setConflict({ content: err.content, etag: err.etag })
         } else if (!(err instanceof AuthError)) {
           console.error(err)
+          onSavingChange(false)
         }
       }
     },
-    [api, path, onSaved],
+    [api, path, onSaved, onSavingChange],
+  )
+
+  const queueSave = useCallback(
+    (content: string) => {
+      onSavingChange(true)
+      window.clearTimeout(saveTimer.current)
+      saveTimer.current = window.setTimeout(() => void save(content, etag), 1000)
+    },
+    [save, etag, onSavingChange],
   )
 
   const onEdit = (value: string) => {
     setDraft(value)
-    setDirty(true)
-    window.clearTimeout(saveTimer.current)
-    saveTimer.current = window.setTimeout(() => void save(value, etag), 1200)
+    queueSave(value)
+  }
+
+  // apply immediately (checkbox toggle, title, status) without debounce
+  const commit = useCallback(
+    (content: string) => {
+      setDraft(content)
+      onSavingChange(true)
+      window.clearTimeout(saveTimer.current)
+      void save(content, etag)
+    },
+    [save, etag, onSavingChange],
+  )
+
+  const applyFormat = (kind: FormatKind) => {
+    const el = rawRef.current
+    if (!el) return
+    const next = formatSelection(el, kind)
+    if (next) {
+      setDraft(next.value)
+      queueSave(next.value)
+      requestAnimationFrame(() => {
+        el.focus()
+        try {
+          el.setSelectionRange(next.start, next.end)
+        } catch {
+          /* ignore */
+        }
+      })
+    }
   }
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+      const inRaw = document.activeElement === rawRef.current
+      if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault()
         window.clearTimeout(saveTimer.current)
         void save(draft, etag)
       }
+      if (inRaw && (e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B')) {
+        e.preventDefault()
+        applyFormat('bold')
+      }
+      if (inRaw && (e.metaKey || e.ctrlKey) && (e.key === 'i' || e.key === 'I')) {
+        e.preventDefault()
+        applyFormat('italic')
+      }
     }
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, etag, save])
 
   if (!path || !note) {
@@ -504,48 +900,104 @@ function EditorPanel({
     )
   }
 
-  const fm = note.frontmatter ?? {}
-  const type = fm['type'] === 'task' ? 'task' : 'knowledge'
-  const status = typeof fm['status'] === 'string' ? (fm['status'] as string) : ''
+  // Derive type/status from the live draft so the header updates immediately
+  // after a status change or an inline frontmatter edit (the loaded note object
+  // is only re-fetched when the path changes).
+  const type = frontmatterValue(draft, 'type') === 'task' ? 'task' : 'knowledge'
+  const status = frontmatterValue(draft, 'status')
+  const st = STATUS[status] ?? STATUS.backlog
   const draftBody = stripFrontmatter(draft)
-  const frontmatterBlock = draft.slice(0, draft.length - draftBody.length)
+  const wordCount = draftBody.trim() ? draftBody.trim().split(/\s+/).length : 0
+  const showRaw = mode !== 'preview'
+  const showPreview = mode !== 'edit'
+
+  const commitTitle = () => {
+    const t = titleDraft.trim() || 'Untitled'
+    if (t === note.title) return
+    commit(setTitle(draft, t))
+  }
+  const setStatus = (next: string) => {
+    setStatusMenu(false)
+    if (next === status) return
+    commit(setFrontmatterStatus(draft, next))
+    showToast(`Marked ${STATUS[next].label.toLowerCase()}`)
+  }
+  const toggleCheckbox = (index: number) => {
+    const next = toggleTaskLine(draft, index)
+    if (next !== draft) commit(next)
+  }
 
   return (
     <main className="ws-editor">
       <div className="ws-editor__header">
         <div className="ws-editor__title-row">
-          <h1 className="ws-editor__title">{note.title}</h1>
-          <div className="ws-segmented ws-editor__modes">
-            {(['edit', 'split', 'preview'] as const).map((m) => (
-              <button
-                key={m}
-                className={`ws-segmented__item${mode === m ? ' ws-segmented__item--active' : ''}`}
-                onClick={() => setMode(m)}
-              >
-                {m[0].toUpperCase() + m.slice(1)}
-              </button>
-            ))}
+          <input
+            className="ws-editor__title-input"
+            value={titleDraft}
+            onChange={(e) => setTitleDraft(e.target.value)}
+            onBlur={commitTitle}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                ;(e.target as HTMLInputElement).blur()
+              }
+            }}
+            spellCheck={false}
+          />
+          <div className="ws-editor__actions">
+            <div id="tourModes" className="ws-segmented ws-editor__modes">
+              {(['edit', 'split', 'preview'] as const).map((m) => (
+                <button
+                  key={m}
+                  className={`ws-segmented__item${mode === m ? ' ws-segmented__item--active' : ''}`}
+                  onClick={() => setMode(m)}
+                >
+                  {m[0].toUpperCase() + m.slice(1)}
+                </button>
+              ))}
+            </div>
+            <button className="ws-icon-btn ws-icon-btn--danger" title="Delete note" onClick={() => setConfirmDelete(true)}>
+              <Icon name="trash" size={15} />
+            </button>
           </div>
         </div>
         <div className="ws-editor__meta">
           <span className="ws-type-badge">
             {type === 'task' ? (
-              <span
-                className="ws-note-row__dot"
-                style={{ background: statusDotColor[status] ?? 'var(--status-backlog)' }}
-              />
+              <span className="ws-note-row__dot" style={{ background: st.dot }} />
             ) : (
               <span className="ws-note-row__square" style={{ width: 7, height: 7 }} />
             )}
             {type}
           </span>
-          {status && (
-            <span className={`v-status-badge v-status-badge--${status}`} style={{ fontSize: 12 }}>
-              <span
-                className="ws-note-row__dot"
-                style={{ background: statusDotColor[status] }}
-              />
-              {status === 'in-progress' ? 'In progress' : status[0].toUpperCase() + status.slice(1)}
+          {type === 'task' && (
+            <span className="ws-status-chip-wrap">
+              <button
+                className="ws-status-chip"
+                style={{ color: st.text, background: st.soft }}
+                onClick={() => {
+                  setStatusMenu((o) => !o)
+                  setMoveMenu(false)
+                }}
+              >
+                <span className="ws-note-row__dot" style={{ background: st.dot }} />
+                {st.label}
+                <span className="ws-status-chip__caret">▾</span>
+              </button>
+              {statusMenu && (
+                <div className="ws-menu ws-status-menu">
+                  {STATUS_ORDER.map((k) => (
+                    <div
+                      key={k}
+                      className={`ws-menu__item${status === k ? ' ws-menu__item--current' : ''}`}
+                      onClick={() => setStatus(k)}
+                    >
+                      <span className="ws-note-row__dot" style={{ background: STATUS[k].dot }} />
+                      {STATUS[k].label}
+                    </div>
+                  ))}
+                </div>
+              )}
             </span>
           )}
           {(note.tags ?? []).map((t) => (
@@ -554,46 +1006,107 @@ function EditorPanel({
             </span>
           ))}
           <span style={{ flex: 1 }} />
-          <span className="ws-editor__modified">
-            {dirty ? 'unsaved' : `modified ${relativeAge(Date.parse(note.modTime) / 1000)} ago`}
-          </span>
-          {frontmatterBlock && (
+          <span className="ws-move-wrap">
             <button
-              className="ws-editor__frontmatter"
-              onClick={() => setShowFrontmatter(!showFrontmatter)}
+              className="ws-move-btn"
+              onClick={() => {
+                setMoveMenu((o) => !o)
+                setStatusMenu(false)
+              }}
             >
-              {showFrontmatter ? '▴' : '▾'} frontmatter
+              <Icon name="move" size={14} />
+              Move to…
             </button>
-          )}
+            {moveMenu && (
+              <MovePopover
+                path={path}
+                allDirs={allDirs}
+                onMove={(dir) => {
+                  setMoveMenu(false)
+                  onMove(path, dir)
+                }}
+                onRename={(name) => {
+                  setMoveMenu(false)
+                  onRename(path, name)
+                }}
+                onClose={() => setMoveMenu(false)}
+              />
+            )}
+          </span>
+          <span className="ws-editor__modified">modified {relativeAge(Date.parse(note.modTime) / 1000)}</span>
         </div>
       </div>
+
+      {showRaw && (
+        <div id="tourToolbar" className="ws-toolbar">
+          {TOOLBAR.map((b, i) => (
+            <button
+              key={i}
+              className={`ws-toolbar__btn${b.label === 'B' ? ' ws-toolbar__btn--bold' : ''}${b.label === 'I' ? ' ws-toolbar__btn--italic' : ''}`}
+              title={b.title}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => applyFormat(b.kind)}
+            >
+              {b.icon ? <Icon name={b.icon} size={15} /> : b.label}
+            </button>
+          ))}
+          <span style={{ flex: 1 }} />
+          <span className="ws-toolbar__count">
+            {wordCount} {wordCount === 1 ? 'word' : 'words'}
+          </span>
+        </div>
+      )}
+
       <div className="ws-editor__body">
-        {mode !== 'preview' && (
+        {showRaw && (
           <textarea
-            className="ws-editor__raw vscroll"
+            ref={rawRef}
+            className={`ws-editor__raw vscroll${showPreview ? '' : ' ws-editor__raw--full'}`}
             value={draft}
             onChange={(e) => onEdit(e.target.value)}
             spellCheck={false}
           />
         )}
-        {mode !== 'edit' && (
+        {showPreview && (
           <div className="ws-editor__preview vscroll">
-            {showFrontmatter && frontmatterBlock && (
-              <pre className="v-markdown" style={{ marginBottom: 18 }}>
-                {frontmatterBlock.trim()}
-              </pre>
-            )}
-            <MarkdownView body={draftBody} />
+            <MarkdownView body={draftBody} onToggleCheckbox={toggleCheckbox} />
           </div>
         )}
       </div>
+
+      {confirmDelete && (
+        <div className="ws-overlay ws-overlay--center" onClick={() => setConfirmDelete(false)}>
+          <div className="v-modal" style={{ width: 420 }} onClick={(e) => e.stopPropagation()}>
+            <div className="v-modal__title">Delete this note?</div>
+            <div className="v-modal__body">
+              <span className="v-modal__code">{basename(path)}</span> will be removed from the vault.
+              This can’t be undone.
+            </div>
+            <div className="v-modal__actions">
+              <button className="v-modal__cancel" onClick={() => setConfirmDelete(false)}>
+                Cancel
+              </button>
+              <button
+                className="v-modal__confirm v-modal__confirm--danger"
+                onClick={() => {
+                  setConfirmDelete(false)
+                  onDelete(path)
+                }}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {conflict && (
-        <div className="ws-overlay" style={{ alignItems: 'center', paddingTop: 0 }}>
+        <div className="ws-overlay ws-overlay--center">
           <div className="v-modal" style={{ width: 440 }}>
             <div className="v-modal__title">Note changed on disk</div>
             <div className="v-modal__body">
-              Someone else saved <span className="v-modal__code">{path}</span> while you were
-              editing. Load the latest version, or overwrite it with yours.
+              Someone else saved <span className="v-modal__code">{path}</span> while you were editing.
+              Load the latest version, or overwrite it with yours.
             </div>
             <div className="v-modal__actions">
               <button
@@ -601,7 +1114,7 @@ function EditorPanel({
                 onClick={() => {
                   setDraft(conflict.content)
                   setEtag(conflict.etag)
-                  setDirty(false)
+                  onSavingChange(false)
                   setConflict(null)
                 }}
               >
@@ -625,6 +1138,67 @@ function EditorPanel({
   )
 }
 
+// ---------------------------------------------------------------- move popover
+
+function MovePopover({
+  path,
+  allDirs,
+  onMove,
+  onRename,
+  onClose,
+}: {
+  path: string
+  allDirs: string[]
+  onMove: (dir: string) => void
+  onRename: (name: string) => void
+  onClose: () => void
+}) {
+  const [name, setName] = useState(basename(path))
+  const currentDir = dirname(path)
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onDoc = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('mousedown', onDoc)
+    return () => document.removeEventListener('mousedown', onDoc)
+  }, [onClose])
+  return (
+    <div className="ws-menu ws-move-menu" ref={ref}>
+      <div className="ws-menu__label">Rename file</div>
+      <input
+        className="ws-move-menu__input"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault()
+            if (name.trim() && name !== basename(path)) onRename(name)
+          }
+        }}
+        spellCheck={false}
+      />
+      <div className="ws-menu__label">Move to folder</div>
+      <div className="ws-move-menu__list vscroll">
+        {allDirs.map((dir) => (
+          <div
+            key={dir}
+            className={`ws-menu__item${dir === currentDir ? ' ws-menu__item--current' : ''}`}
+            onClick={() => onMove(dir)}
+          >
+            <Icon name="folder" size={13} />
+            {dir.split('/').join(' / ')}
+            <span style={{ flex: 1 }} />
+            {dir === currentDir && <span className="ws-menu__check">✓</span>}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- markdown
+
 function stripFrontmatter(content: string): string {
   if (!content.startsWith('---\n')) return content
   const end = content.indexOf('\n---\n', 4)
@@ -632,15 +1206,32 @@ function stripFrontmatter(content: string): string {
   return content.slice(end + 5)
 }
 
-/** Markdown preview with GFM, design checkboxes and wikilink chips. */
-function MarkdownView({ body }: { body: string }) {
+/** Read a top-level frontmatter scalar (e.g. type, status) from live content. */
+function frontmatterValue(content: string, key: string): string {
+  if (!content.startsWith('---\n')) return ''
+  const end = content.indexOf('\n---\n', 4)
+  if (end < 0) return ''
+  const line = content
+    .slice(4, end)
+    .split('\n')
+    .find((l) => new RegExp(`^${key}:`, 'i').test(l))
+  return line ? line.slice(line.indexOf(':') + 1).trim() : ''
+}
+
+function MarkdownView({
+  body,
+  onToggleCheckbox,
+}: {
+  body: string
+  onToggleCheckbox?: (index: number) => void
+}) {
   const navigate = useNavigate()
-  // [[wikilink]] / [[wikilink|alias]] → placeholder links resolved on click.
   const processed = body.replace(
     /\[\[([^\][|]+)(?:\|([^\][]+))?\]\]/g,
     (_, target: string, alias?: string) =>
       `[${alias ?? target}](#wikilink=${encodeURIComponent(target.trim())})`,
   )
+  const cb = { i: 0 }
   return (
     <div className="v-markdown">
       <ReactMarkdown
@@ -668,8 +1259,12 @@ function MarkdownView({ body }: { body: string }) {
             )
           },
           input({ checked }) {
+            const idx = cb.i++
             return (
-              <span className={`v-checkbox${checked ? ' v-checkbox--checked' : ''}`}>
+              <span
+                className={`v-checkbox${checked ? ' v-checkbox--checked' : ''}${onToggleCheckbox ? ' v-checkbox--live' : ''}`}
+                onClick={onToggleCheckbox ? () => onToggleCheckbox(idx) : undefined}
+              >
                 {checked ? '✓' : ''}
               </span>
             )
@@ -678,6 +1273,308 @@ function MarkdownView({ body }: { body: string }) {
       >
         {processed}
       </ReactMarkdown>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- content edits
+
+/** Replace the note title, following deriveTitle precedence (fm title → first heading → prepend). */
+function setTitle(content: string, title: string): string {
+  if (content.startsWith('---\n')) {
+    const end = content.indexOf('\n---\n', 4)
+    if (end >= 0) {
+      const front = content.slice(4, end)
+      const rest = content.slice(end + 5)
+      const lines = front.split('\n')
+      const ti = lines.findIndex((l) => /^title:/i.test(l))
+      if (ti >= 0) lines[ti] = `title: ${title}`
+      else lines.unshift(`title: ${title}`)
+      return `---\n${lines.join('\n')}\n---\n${rest}`
+    }
+  }
+  // no frontmatter — edit first H1 or prepend one
+  const lines = content.split('\n')
+  const hi = lines.findIndex((l) => /^#\s+/.test(l))
+  if (hi >= 0) {
+    lines[hi] = `# ${title}`
+    return lines.join('\n')
+  }
+  return `# ${title}\n\n${content}`
+}
+
+/** Set the frontmatter `status:` line, creating frontmatter if absent. */
+function setFrontmatterStatus(content: string, status: string): string {
+  if (content.startsWith('---\n')) {
+    const end = content.indexOf('\n---\n', 4)
+    if (end >= 0) {
+      const lines = content.slice(4, end).split('\n')
+      const si = lines.findIndex((l) => /^status:/i.test(l))
+      if (si >= 0) lines[si] = `status: ${status}`
+      else lines.push(`status: ${status}`)
+      return `---\n${lines.join('\n')}\n---\n${content.slice(end + 5)}`
+    }
+  }
+  return `---\ntype: task\nstatus: ${status}\n---\n\n${content}`
+}
+
+/** Flip the index-th GFM task checkbox in the body region. */
+function toggleTaskLine(content: string, index: number): string {
+  const body = stripFrontmatter(content)
+  const offset = content.length - body.length
+  const lines = body.split('\n')
+  let n = -1
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\s*[-*+] )\[([ xX])\]/)
+    if (!m) continue
+    n++
+    if (n === index) {
+      const done = m[2].toLowerCase() === 'x'
+      lines[i] = lines[i].replace(/^(\s*[-*+] )\[[ xX]\]/, `$1[${done ? ' ' : 'x'}]`)
+      return content.slice(0, offset) + lines.join('\n')
+    }
+  }
+  return content
+}
+
+type FormatKind = 'bold' | 'italic' | 'code' | 'wiki' | 'h1' | 'h2' | 'list' | 'check' | 'quote'
+
+/** Apply a markdown format to the textarea's current selection. */
+function formatSelection(
+  el: HTMLTextAreaElement,
+  kind: FormatKind,
+): { value: string; start: number; end: number } | null {
+  const val = el.value
+  const s = el.selectionStart
+  const e = el.selectionEnd
+  const sel = val.slice(s, e)
+  const pair = (open: string, close: string, ph: string) => {
+    const inner = sel || ph
+    const value = val.slice(0, s) + open + inner + close + val.slice(e)
+    const ns = s + open.length
+    return { value, start: ns, end: ns + inner.length }
+  }
+  const line = (prefix: string) => {
+    let ls = val.lastIndexOf('\n', s - 1) + 1
+    let le = val.indexOf('\n', e)
+    if (le === -1) le = val.length
+    const block = val.slice(ls, le)
+    const nb = block
+      .split('\n')
+      .map((l) => prefix + l)
+      .join('\n')
+    return { value: val.slice(0, ls) + nb + val.slice(le), start: ls, end: ls + nb.length }
+  }
+  switch (kind) {
+    case 'bold':
+      return pair('**', '**', 'bold')
+    case 'italic':
+      return pair('*', '*', 'italic')
+    case 'code':
+      return pair('`', '`', 'code')
+    case 'wiki':
+      return pair('[[', ']]', 'note')
+    case 'h1':
+      return line('# ')
+    case 'h2':
+      return line('## ')
+    case 'list':
+      return line('- ')
+    case 'check':
+      return line('- [ ] ')
+    case 'quote':
+      return line('> ')
+    default:
+      return null
+  }
+}
+
+// ---------------------------------------------------------------- help modal
+
+function HelpModal({ onClose, onStartTour }: { onClose: () => void; onStartTour: () => void }) {
+  const md: [string, string][] = [
+    ['# H1', 'Heading'],
+    ['**b**', 'Bold'],
+    ['*i*', 'Italic'],
+    ['- item', 'List'],
+    ['- [ ]', 'Checkbox'],
+    ['> q', 'Quote'],
+    ['`code`', 'Inline code'],
+    ['[[note]]', 'Link a note'],
+  ]
+  const keys: [string, string][] = [
+    ['⌘K', 'Search notes'],
+    ['⌘B', 'Bold selection'],
+    ['⌘I', 'Italic selection'],
+    ['⌘S', 'Save now'],
+    ['esc', 'Close panel'],
+  ]
+  return (
+    <div className="ws-overlay ws-overlay--center" onClick={onClose}>
+      <div className="ws-help vscroll" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-help__head">
+          <div>
+            <div className="ws-help__title">Help</div>
+            <div className="ws-help__sub">Markdown syntax and keyboard shortcuts.</div>
+          </div>
+          <button className="ws-help__esc" onClick={onClose}>
+            esc
+          </button>
+        </div>
+        <div className="ws-help__body">
+          <button className="ws-help__tour" onClick={onStartTour}>
+            Take the guided tour →
+          </button>
+          <div className="ws-help__grid">
+            <div>
+              <div className="ws-help__label">Markdown</div>
+              <div className="ws-help__rows">
+                {md.map(([code, desc]) => (
+                  <div key={code} className="ws-help__row">
+                    <code className="ws-help__code">{code}</code>
+                    <span className="ws-help__desc">{desc}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div>
+              <div className="ws-help__label">Shortcuts</div>
+              <div className="ws-help__rows">
+                {keys.map(([k, desc]) => (
+                  <div key={k} className="ws-help__row">
+                    <span className="ws-help__kbd">{k}</span>
+                    <span className="ws-help__desc">{desc}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="ws-help__label" style={{ marginTop: 24 }}>
+                Note types
+              </div>
+              <div className="ws-help__rows">
+                <div className="ws-help__row">
+                  <span className="ws-note-row__dot" style={{ background: 'var(--status-inprogress)' }} />
+                  <span className="ws-help__desc">Task — carries a status</span>
+                </div>
+                <div className="ws-help__row">
+                  <span className="ws-note-row__square" />
+                  <span className="ws-help__desc">Knowledge — reference</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------- onboarding tour
+
+function TourOverlay({
+  step,
+  rootRef,
+  onPrev,
+  onNext,
+  onSkip,
+}: {
+  step: number
+  rootRef: React.RefObject<HTMLDivElement | null>
+  onPrev: () => void
+  onNext: () => void
+  onSkip: () => void
+}) {
+  const [rect, setRect] = useState<{
+    top: number
+    left: number
+    width: number
+    height: number
+    cw: number
+    ch: number
+  } | null>(null)
+
+  useEffect(() => {
+    const measure = () => {
+      const s = TOUR[step]
+      const root = rootRef.current
+      const el = document.getElementById(s.id)
+      if (!root || !el) {
+        setRect(null)
+        return
+      }
+      const cr = root.getBoundingClientRect()
+      const r = el.getBoundingClientRect()
+      setRect({
+        top: r.top - cr.top,
+        left: r.left - cr.left,
+        width: r.width,
+        height: r.height,
+        cw: cr.width,
+        ch: cr.height,
+      })
+    }
+    const id = requestAnimationFrame(measure)
+    window.addEventListener('resize', measure)
+    return () => {
+      cancelAnimationFrame(id)
+      window.removeEventListener('resize', measure)
+    }
+  }, [step, rootRef])
+
+  const s = TOUR[step]
+  const W = 286
+  let spotlight: React.CSSProperties = { display: 'none' }
+  let tip: React.CSSProperties
+  if (rect) {
+    const pad = 6
+    spotlight = {
+      top: rect.top - pad,
+      left: rect.left - pad,
+      width: rect.width + pad * 2,
+      height: rect.height + pad * 2,
+    }
+    let t: number
+    let l: number
+    if (s.place === 'right') {
+      l = rect.left + rect.width + 16
+      t = rect.top
+    } else if (s.place === 'below-right') {
+      t = rect.top + rect.height + 14
+      l = rect.left + rect.width - W
+    } else {
+      t = rect.top + rect.height + 14
+      l = rect.left
+    }
+    l = Math.max(14, Math.min(l, rect.cw - W - 14))
+    t = Math.max(14, Math.min(t, rect.ch - 200))
+    tip = { top: t, left: l, width: W }
+  } else {
+    tip = { top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: W }
+  }
+
+  return (
+    <div className="ws-tour">
+      <div className="ws-tour__spotlight" style={spotlight} />
+      <div className="ws-tour__tip" style={tip}>
+        <div className="ws-tour__index">
+          {step + 1} / {TOUR.length}
+        </div>
+        <div className="ws-tour__title">{s.title}</div>
+        <div className="ws-tour__body">{s.body}</div>
+        <div className="ws-tour__actions">
+          <span className="ws-tour__skip" onClick={onSkip}>
+            Skip
+          </span>
+          <span style={{ flex: 1 }} />
+          {step > 0 && (
+            <button className="ws-tour__back" onClick={onPrev}>
+              Back
+            </button>
+          )}
+          <button className="ws-tour__next" onClick={onNext}>
+            {step === TOUR.length - 1 ? 'Done' : 'Next'}
+          </button>
+        </div>
+      </div>
     </div>
   )
 }

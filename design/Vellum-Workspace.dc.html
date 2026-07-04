@@ -19,197 +19,751 @@
   .vscroll::-webkit-scrollbar { width:9px; }
   .vscroll::-webkit-scrollbar-thumb { background:#E0D9CD; border-radius:6px; border:2px solid transparent; background-clip:content-box; }
   .vscroll::-webkit-scrollbar-track { background:transparent; }
+  .vraw { outline:none; border:none; resize:none; }
+  .vtitle { outline:none; border:none; background:transparent; }
+  @media (max-width:1080px){ .vtree{ width:190px !important; } .vlist{ width:290px !important; } .vsearch{ width:230px !important; } }
+  @media (max-width:820px){ .vtree{ width:168px !important; } .vlist{ width:250px !important; } .vsearch{ width:auto !important; flex:1 !important; } }
+  @media (max-width:640px){ .vtree{ display:none !important; } .vlist{ width:240px !important; } }
+  @media (max-width:480px){ .vlist{ display:none !important; } }
 </style>
 </helmet>
 
-<div style="width:1440px; height:900px; margin:0 auto; background:#FAF7F2; font-family:'Inter',system-ui,sans-serif; color:#2A2622; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; overflow:hidden;">
+<div ref="{{ rootRef }}" style="width:100%; height:100vh; min-height:560px; background:#FAF7F2; font-family:'Inter',system-ui,sans-serif; color:#2A2622; -webkit-font-smoothing:antialiased; display:flex; flex-direction:column; overflow:hidden; position:relative;">
 
   <!-- ===== TOP BAR ===== -->
-  <header style="height:52px; flex:none; display:flex; align-items:center; gap:20px; padding:0 18px; border-bottom:1px solid #E8E2D8; background:#FAF7F2;">
-    <div style="font-family:'Newsreader',serif; font-size:22px; font-weight:500; letter-spacing:-0.01em; padding-right:6px;">vellum</div>
+  <header style="height:52px; flex:none; display:flex; align-items:center; gap:16px; padding:0 16px; border-bottom:1px solid #E8E2D8; background:#FAF7F2; z-index:5;">
+    <div style="display:flex; align-items:center; gap:9px;">
+      <div style="width:27px; height:27px; border-radius:7px; background:#8B6F47; box-shadow:inset 0 0 0 1px rgba(255,255,255,0.14), 0 1px 2px rgba(42,38,34,0.18); display:flex; align-items:center; justify-content:center; font-family:'Newsreader',serif; font-size:18px; color:#FBF7F0; line-height:1;">v</div>
+      <div style="font-family:'Newsreader',serif; font-size:21px; font-weight:500; letter-spacing:-0.01em;">vellum</div>
+    </div>
     <div style="width:1px; height:22px; background:#E8E2D8;"></div>
-    <div style="display:flex; align-items:center; gap:9px; width:340px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:7px 11px;">
+    <div id="tourSearch" class="vsearch" onClick="{{ openPalette }}" style="display:flex; align-items:center; gap:9px; width:320px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:7px; padding:7px 11px; cursor:pointer;" style-hover="border-color:#CFC6B7;">
       <span style="color:#9A938A; font-size:14px;">⌕</span>
       <span style="flex:1; font-size:13.5px; color:#9A938A;">Search notes…</span>
       <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:4px; padding:1px 6px;">⌘K</span>
     </div>
-    <div style="display:flex; align-items:center; gap:7px;">
-      <span style="display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8B6F47; background:#F1EAE0; border:1px solid #E6D9C4; border-radius:5px; padding:3px 7px 3px 8px;">#roadmap <span style="color:#9A938A; cursor:pointer; font-size:12px;">×</span></span>
-      <span style="font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#9A938A; border:1px dashed #DDD4C6; border-radius:5px; padding:3px 8px; cursor:pointer;">+ tag</span>
-    </div>
+    <sc-if value="{{ activeTag }}" hint-placeholder-val="{{ false }}">
+      <span style="display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11.5px; color:#8B6F47; background:#F1EAE0; border:1px solid #E6D9C4; border-radius:5px; padding:3px 7px 3px 8px;">{{ activeTagLabel }} <span onClick="{{ clearTag }}" style="color:#9A938A; cursor:pointer; font-size:12px;">×</span></span>
+    </sc-if>
     <div style="flex:1;"></div>
     <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">v0.1.0</span>
-    <button style="font-family:inherit; font-size:15px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0;">⚙</button>
+    <button onClick="{{ toggleTheme }}" title="Toggle midnight ink" style="font-family:inherit; font-size:14px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">◐</button>
+    <button id="tourHelp" onClick="{{ openHelp }}" title="Help & tour" style="font-family:inherit; font-size:14px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">?</button>
+    <button style="font-family:inherit; font-size:15px; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F1EAE0; color:#2A2622;">⚙</button>
   </header>
 
   <!-- ===== BODY: 3 PANES ===== -->
   <div style="flex:1; display:flex; min-height:0;">
 
     <!-- LEFT: TREE -->
-    <aside style="width:220px; flex:none; border-right:1px solid #E8E2D8; background:#FAF7F2; padding:14px 10px; overflow-y:auto;" class="vscroll">
-      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; padding:4px 10px 10px;">Vault</div>
-
-      <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer;" style-hover="background:#F1EAE0;">
-        <span style="color:#9A938A; font-size:12px; width:10px;">▾</span><span style="color:#9A938A;">▢</span><span style="flex:1;">Inbox</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#FFFFFF; background:#8B6F47; border-radius:9px; padding:1px 7px;">12</span>
+    <aside id="tourTree" class="vtree vscroll" style="width:224px; flex:none; border-right:1px solid #E8E2D8; background:#FAF7F2; padding:12px 8px; overflow-y:auto;">
+      <div style="display:flex; align-items:center; justify-content:space-between; padding:4px 8px 10px;">
+        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em;">Vault</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#B9B1A4;">{{ totalNotes }} notes</span>
       </div>
 
-      <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer; background:#F1EAE0;">
-        <span style="color:#8B6F47; font-size:12px; width:10px;">▾</span><span style="color:#8B6F47;">▤</span><span style="flex:1; font-weight:500;">Projects</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">28</span>
-      </div>
-      <div style="padding-left:20px;">
-        <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:#8B6F47; background:#F7F2EA; font-weight:500;"><span style="width:10px;"></span><span>▤</span><span style="flex:1;">vellum</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">9</span></div>
-        <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:#5C564D;" style-hover="background:#F1EAE0;"><span style="width:10px;"></span><span style="color:#9A938A;">▤</span><span style="flex:1;">physiohub</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">14</span></div>
-        <div style="display:flex; align-items:center; gap:8px; padding:6px 10px; border-radius:6px; font-size:13px; cursor:pointer; color:#5C564D;" style-hover="background:#F1EAE0;"><span style="width:10px;"></span><span style="color:#9A938A;">▤</span><span style="flex:1;">side-notes</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">5</span></div>
-      </div>
-
-      <div style="display:flex; align-items:center; gap:8px; padding:7px 10px; border-radius:6px; font-size:13.5px; cursor:pointer; color:#5C564D;" style-hover="background:#F1EAE0;">
-        <span style="font-size:12px; width:10px; color:#9A938A;">▸</span><span style="color:#9A938A;">▢</span><span style="flex:1;">Archive</span><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">63</span>
-      </div>
+      <sc-for list="{{ treeRows }}" as="row" hint-placeholder-count="8">
+        <div draggable="false" onClick="{{ row.onClick }}" onDragOver="{{ row.onDragOver }}" onDragLeave="{{ row.onDragLeave }}" onDrop="{{ row.onDrop }}" style="{{ row.style }}">
+          <sc-for list="{{ row.rails }}" as="r" hint-placeholder-count="0"><span style="width:15px; flex:none; align-self:stretch; border-left:1px solid #EAE3D7; margin-left:6px;"></span></sc-for>
+          <div style="flex:1; min-width:0; display:flex; align-items:center; gap:7px; padding:6px 8px;">
+            <span onClick="{{ row.onToggle }}" style="{{ row.chevStyle }}">{{ row.chev }}</span>
+            <span style="{{ row.iconStyle }}">{{ row.icon }}</span>
+            <span style="{{ row.labelStyle }}">{{ row.label }}</span>
+            <span style="{{ row.countStyle }}">{{ row.count }}</span>
+          </div>
+        </div>
+      </sc-for>
 
       <div style="height:1px; background:#E8E2D8; margin:12px 8px;"></div>
-      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; padding:4px 10px 8px;">Tags</div>
+      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; padding:4px 8px 8px;">Tags</div>
       <div style="display:flex; flex-wrap:wrap; gap:6px; padding:0 8px;">
-        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 7px; cursor:pointer;">#go</span>
-        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#F3F1EC; border-radius:5px; padding:2px 7px; cursor:pointer;">#mcp</span>
-        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#F3F1EC; border-radius:5px; padding:2px 7px; cursor:pointer;">#spec</span>
-        <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#F3F1EC; border-radius:5px; padding:2px 7px; cursor:pointer;">#build</span>
+        <sc-for list="{{ tagChips }}" as="t" hint-placeholder-count="5">
+          <span onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</span>
+        </sc-for>
       </div>
     </aside>
 
     <!-- MIDDLE: NOTE LIST -->
-    <section style="width:326px; flex:none; border-right:1px solid #E8E2D8; background:#FCFAF6; display:flex; flex-direction:column; min-height:0;">
+    <section id="tourList" class="vlist" style="width:340px; flex:none; border-right:1px solid #E8E2D8; background:#FCFAF6; display:flex; flex-direction:column; min-height:0;">
       <div style="flex:none; padding:14px 16px 12px; border-bottom:1px solid #EFE9DF;">
-        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
-          <div style="font-family:'Newsreader',serif; font-size:17px; font-weight:500;">projects / vellum</div>
-          <button style="font-family:inherit; font-size:15px; color:#7A7266; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; width:28px; height:28px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#FAF7F2; color:#2A2622;">＋</button>
+        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px; gap:10px;">
+          <div style="font-family:'Newsreader',serif; font-size:16px; font-weight:500; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ folderPath }}</div>
+          <button onClick="{{ newNote }}" title="New note" style="flex:none; font-family:inherit; font-size:15px; color:#7A7266; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; width:28px; height:28px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#FAF7F2; color:#2A2622;">＋</button>
         </div>
-        <!-- note type toggle -->
         <div style="display:flex; gap:16px; margin-bottom:11px; font-family:'JetBrains Mono',monospace; font-size:11px;">
-          <span style="color:#2A2622; font-weight:500; border-bottom:1.5px solid #8B6F47; padding-bottom:4px; cursor:pointer;">All</span>
-          <span style="color:#7A7266; padding-bottom:4px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;"><span style="width:7px; height:7px; border-radius:50%; background:#9A938A;"></span>Tasks</span>
-          <span style="color:#7A7266; padding-bottom:4px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;"><span style="width:8px; height:8px; border-radius:2px; background:#C4BBA9;"></span>Knowledge</span>
+          <span onClick="{{ setTypeAll }}" style="{{ tfAllStyle }}">All</span>
+          <span onClick="{{ setTypeTask }}" style="{{ tfTaskStyle }}"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E;"></span>Tasks</span>
+          <span onClick="{{ setTypeKnow }}" style="{{ tfKnowStyle }}"><span style="width:8px; height:8px; border-radius:2px; background:#C4BBA9;"></span>Knowledge</span>
         </div>
-        <!-- task status filter -->
         <div style="display:flex; gap:2px; background:#F1EDE5; border:1px solid #E8E2D8; border-radius:7px; padding:2px;">
-          <span style="flex:1; text-align:center; font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; border-radius:5px; padding:5px 0; box-shadow:0 1px 2px rgba(42,38,34,0.05); cursor:pointer;">All</span>
-          <span style="flex:1; text-align:center; font-size:12px; color:#7A7266; padding:5px 0; cursor:pointer;">Backlog</span>
-          <span style="flex:1; text-align:center; font-size:12px; color:#7A7266; padding:5px 0; cursor:pointer;">In progress</span>
-          <span style="flex:1; text-align:center; font-size:12px; color:#7A7266; padding:5px 0; cursor:pointer;">Done</span>
+          <span onClick="{{ setStatAll }}" style="{{ sfAllStyle }}">All</span>
+          <span onClick="{{ setStatBacklog }}" style="{{ sfBacklogStyle }}">Backlog</span>
+          <span onClick="{{ setStatProg }}" style="{{ sfProgStyle }}">Doing</span>
+          <span onClick="{{ setStatDone }}" style="{{ sfDoneStyle }}">Done</span>
         </div>
       </div>
 
-      <div style="flex:1; overflow-y:auto;" class="vscroll">
-        <!-- active item -->
-        <div style="padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer; background:#FFFFFF; box-shadow:inset 3px 0 0 #8B6F47;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2;">Roadmap — Q3 milestones</div></div>
-          <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px;">Ship the MCP write tools and the embedded SPA. Wire folder move plus the command palette before…</div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#go</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#mcp</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">2d</span></div>
-        </div>
-        <div style="padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer;" style-hover="background:#FFFFFF;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#5F8D5F; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2;">Embedded SPA build</div></div>
-          <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px;">go:embed the dist folder, serve index at root, fall through to the API router for /mcp…</div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#build</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">5d</span></div>
-        </div>
-        <div style="padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer;" style-hover="background:#FFFFFF;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:9px; height:9px; border-radius:2px; background:#C4BBA9; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2;">Frontmatter schema</div></div>
-          <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px;">Decide the minimal YAML: title, tags, status, created. Everything else stays in the body…</div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#spec</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">1w</span></div>
-        </div>
-        <div style="padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer;" style-hover="background:#FFFFFF;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:9px; height:9px; border-radius:2px; background:#C4BBA9; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2;">MCP tool inventory</div></div>
-          <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px;">read_note, write_note, list_folder, search. Keep the surface small and predictable…</div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#mcp</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">1w</span></div>
-        </div>
-        <div style="padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer;" style-hover="background:#FFFFFF;">
-          <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;"><span style="width:7px; height:7px; border-radius:50%; background:#9A938A; flex:none;"></span><div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2;">Dark mode — midnight ink</div></div>
-          <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px;">Never pure black. Panels lift a step off the background; accent lightens to warm sand…</div>
-          <div style="display:flex; align-items:center; gap:6px;"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">#ui</span><span style="flex:1;"></span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">2w</span></div>
-        </div>
+      <div class="vscroll" style="flex:1; overflow-y:auto;">
+        <sc-for list="{{ noteItems }}" as="n" hint-placeholder-count="4">
+          <div draggable="true" onDragStart="{{ n.onDragStart }}" onDragEnd="{{ n.onDragEnd }}" onClick="{{ n.onClick }}" style="{{ n.style }}" style-hover="background:#FFFFFF;">
+            <div style="display:flex; align-items:center; gap:8px; margin-bottom:5px;">
+              <span style="{{ n.markerStyle }}"></span>
+              <div style="font-family:'Newsreader',serif; font-size:15.5px; font-weight:500; line-height:1.2; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ n.title }}</div>
+            </div>
+            <div style="font-size:12.5px; color:#7A7266; line-height:1.5; margin-bottom:9px; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;">{{ n.excerpt }}</div>
+            <div style="display:flex; align-items:center; gap:6px;">
+              <sc-for list="{{ n.tags }}" as="t" hint-placeholder-count="2"><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:2px 6px;">{{ t.label }}</span></sc-for>
+              <span style="flex:1;"></span>
+              <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">{{ n.time }}</span>
+            </div>
+          </div>
+        </sc-for>
+        <sc-if value="{{ listEmpty }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:56px 24px; text-align:center;">
+            <div style="font-family:'Newsreader',serif; font-size:30px; color:#D8C9AF; margin-bottom:10px;">∅</div>
+            <div style="font-family:'Newsreader',serif; font-size:16px; font-weight:500; margin-bottom:5px;">Nothing here</div>
+            <div style="font-size:12.5px; color:#7A7266;">No notes match this filter.</div>
+          </div>
+        </sc-if>
       </div>
     </section>
 
     <!-- RIGHT: EDITOR -->
     <main style="flex:1; min-width:0; display:flex; flex-direction:column; background:#FFFFFF;">
-      <!-- note header -->
-      <div style="flex:none; padding:26px 36px 18px; border-bottom:1px solid #EFE9DF;">
-        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:20px;">
-          <h1 style="font-family:'Newsreader',serif; font-size:30px; font-weight:500; margin:0; letter-spacing:-0.01em; line-height:1.15;">Roadmap — Q3 milestones</h1>
-          <div style="flex:none; display:flex; gap:2px; background:#F1EDE5; border:1px solid #E8E2D8; border-radius:7px; padding:2px;">
-            <span style="font-size:12px; color:#7A7266; padding:5px 12px; border-radius:5px; cursor:pointer;">Edit</span>
-            <span style="font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; padding:5px 12px; border-radius:5px; box-shadow:0 1px 2px rgba(42,38,34,0.05); cursor:pointer;">Split</span>
-            <span style="font-size:12px; color:#7A7266; padding:5px 12px; border-radius:5px; cursor:pointer;">Preview</span>
+      <div style="flex:none; padding:22px 30px 16px; border-bottom:1px solid #EFE9DF;">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:16px;">
+          <input class="vtitle" value="{{ noteTitle }}" onInput="{{ onTitle }}" style="font-family:'Newsreader',serif; font-size:28px; font-weight:500; letter-spacing:-0.01em; line-height:1.15; color:#2A2622; flex:1; min-width:0; padding:0;">
+          <div style="flex:none; display:flex; align-items:center; gap:8px;">
+            <div id="tourModes" style="display:flex; gap:2px; background:#F1EDE5; border:1px solid #E8E2D8; border-radius:7px; padding:2px;">
+              <span onClick="{{ setEdit }}" style="{{ mdEditStyle }}">Edit</span>
+              <span onClick="{{ setSplit }}" style="{{ mdSplitStyle }}">Split</span>
+              <span onClick="{{ setPreview }}" style="{{ mdPreviewStyle }}">Preview</span>
+            </div>
+            <button onClick="{{ askDelete }}" title="Delete note" style="flex:none; font-family:inherit; font-size:14px; color:#B3543D; background:#FFFFFF; border:1px solid #E5CCC4; border-radius:6px; width:32px; height:32px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center;" style-hover="background:#F7ECE8;">🗑</button>
           </div>
         </div>
-        <div style="display:flex; align-items:center; gap:10px; margin-top:14px; flex-wrap:wrap;">
-          <span style="display:inline-flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E665B; background:#F0EDE6; border:1px solid #E5DFD3; border-radius:5px; padding:3px 9px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E;"></span>task</span>
-          <span style="display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:#976A28; background:#F7EEDD; border-radius:5px; padding:3px 10px;"><span style="width:7px; height:7px; border-radius:50%; background:#C08A3E;"></span>In progress</span>
-          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:3px 7px;">#go</span>
-          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:3px 7px;">#mcp</span>
-          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A; border:1px dashed #DDD4C6; border-radius:5px; padding:3px 8px; cursor:pointer;">+ tag</span>
+        <div style="display:flex; align-items:center; gap:9px; margin-top:12px; flex-wrap:wrap; position:relative;">
+          <span style="display:inline-flex; align-items:center; gap:6px; font-family:'JetBrains Mono',monospace; font-size:11px; color:#6E665B; background:#F0EDE6; border:1px solid #E5DFD3; border-radius:5px; padding:3px 9px;">{{ noteTypeGlyph }} {{ noteType }}</span>
+          <sc-if value="{{ isTask }}" hint-placeholder-val="{{ true }}">
+            <span onClick="{{ toggleStatusMenu }}" style="{{ statusChipStyle }}"><span style="{{ statusDotStyle }}"></span>{{ statusLabel }} <span style="font-size:9px; opacity:0.6;">▾</span></span>
+          </sc-if>
+          <sc-for list="{{ noteTags }}" as="t" hint-placeholder-count="2"><span onClick="{{ t.onClick }}" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border-radius:5px; padding:3px 7px; cursor:pointer;">{{ t.label }}</span></sc-for>
           <span style="flex:1;"></span>
-          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">modified 2d ago</span>
-          <span style="color:#9A938A; font-size:12px; cursor:pointer;">▾ frontmatter</span>
+          <button onClick="{{ toggleMoveMenu }}" style="font-family:inherit; font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:5px 11px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;" style-hover="background:#FAF7F2; border-color:#CFC6B7;">⇄ Move to…</button>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#9A938A;">{{ modifiedLabel }}</span>
+
+          <sc-if value="{{ statusMenuOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute; top:34px; left:96px; z-index:20; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:8px; box-shadow:0 12px 32px -12px rgba(42,38,34,0.22); padding:5px; min-width:160px;">
+              <sc-for list="{{ statusOptions }}" as="s" hint-placeholder-count="3"><div onClick="{{ s.onClick }}" style="{{ s.style }}"><span style="{{ s.dotStyle }}"></span>{{ s.label }}</div></sc-for>
+            </div>
+          </sc-if>
+          <sc-if value="{{ moveMenuOpen }}" hint-placeholder-val="{{ false }}">
+            <div style="position:absolute; top:34px; right:0; z-index:20; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:8px; box-shadow:0 12px 32px -12px rgba(42,38,34,0.22); padding:5px; min-width:190px; max-height:280px; overflow-y:auto;" class="vscroll">
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; padding:6px 10px 8px;">Move to folder</div>
+              <sc-for list="{{ moveOptions }}" as="m" hint-placeholder-count="6"><div onClick="{{ m.onClick }}" style="{{ m.style }}"><span style="color:#9A938A;">▤</span>{{ m.label }}<span style="flex:1;"></span><span style="{{ m.checkStyle }}">✓</span></div></sc-for>
+            </div>
+          </sc-if>
         </div>
       </div>
 
-      <!-- split body -->
+      <sc-if value="{{ showToolbar }}" hint-placeholder-val="{{ true }}">
+        <div id="tourToolbar" style="flex:none; display:flex; align-items:center; gap:2px; padding:7px 22px; border-bottom:1px solid #EFE9DF; background:#FCFAF6;">
+          <sc-for list="{{ toolbarBtns }}" as="b" hint-placeholder-count="9">
+            <button onClick="{{ b.onClick }}" title="{{ b.title }}" style="{{ b.style }}" style-hover="background:#F1EAE0; color:#2A2622;">{{ b.glyph }}</button>
+          </sc-for>
+          <span style="flex:1;"></span>
+          <span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#B9B1A4;">{{ wordCount }}</span>
+        </div>
+      </sc-if>
       <div style="flex:1; display:flex; min-height:0;">
-        <!-- raw -->
-        <div style="flex:1; min-width:0; padding:26px 30px; overflow-y:auto; border-right:1px solid #EFE9DF; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:1.7; color:#4A443C;" class="vscroll">
-<div style="color:#9A938A;">---</div>
-<div><span style="color:#8B6F47;">title:</span> Roadmap — Q3 milestones</div>
-<div><span style="color:#8B6F47;">status:</span> in-progress</div>
-<div><span style="color:#8B6F47;">tags:</span> [go, mcp]</div>
-<div style="color:#9A938A; margin-bottom:12px;">---</div>
-<div style="color:#2A2622;"># Near term</div>
-<div style="margin-bottom:10px;">&nbsp;</div>
-<div>- [x] Frontmatter schema locked</div>
-<div>- [ ] Embedded SPA served from the binary</div>
-<div style="margin-bottom:10px;">- [ ] Command palette over the vault</div>
-<div style="color:#2A2622;">## Write path</div>
-<div style="margin-bottom:10px;">&nbsp;</div>
-<div>Expose <span style="color:#8B6F47;">[[MCP tool inventory]]</span> as the</div>
-<div>single source of truth for the agent.</div>
-<div style="margin-bottom:10px;">&nbsp;</div>
-<div>&gt; The tool should feel like paper</div>
-<div>&gt; you can search.</div>
-<div style="margin-bottom:10px;">&nbsp;</div>
-<div>```sh</div>
-<div>claude mcp add --transport http \</div>
-<div>&nbsp;&nbsp;vellum https://localhost:8080/mcp</div>
-<div>```</div>
-        </div>
-
-        <!-- preview -->
-        <div style="flex:1; min-width:0; padding:26px 34px; overflow-y:auto;" class="vscroll">
-          <h1 style="font-family:'Newsreader',serif; font-size:26px; font-weight:600; margin:0 0 14px; letter-spacing:-0.01em;">Near term</h1>
-          <div style="margin-bottom:18px;">
-            <div style="font-size:15px; line-height:1.9; color:#3A342E; display:flex; align-items:center; gap:9px;"><span style="width:16px; height:16px; border-radius:4px; background:#5F8D5F; color:#fff; display:inline-flex; align-items:center; justify-content:center; font-size:11px; flex:none;">✓</span>Frontmatter schema locked</div>
-            <div style="font-size:15px; line-height:1.9; color:#3A342E; display:flex; align-items:center; gap:9px;"><span style="width:16px; height:16px; border:1.5px solid #CFC6B7; border-radius:4px; display:inline-block; flex:none;"></span>Embedded SPA served from the binary</div>
-            <div style="font-size:15px; line-height:1.9; color:#3A342E; display:flex; align-items:center; gap:9px;"><span style="width:16px; height:16px; border:1.5px solid #CFC6B7; border-radius:4px; display:inline-block; flex:none;"></span>Command palette over the vault</div>
-          </div>
-          <h2 style="font-family:'Newsreader',serif; font-size:20px; font-weight:600; margin:22px 0 10px;">Write path</h2>
-          <p style="font-size:15px; line-height:1.7; color:#3A342E; margin:0 0 16px;">Expose <a href="#" style="color:#8B6F47; text-decoration:none; background:#F1EAE0; border-radius:4px; padding:1px 5px; font-family:'JetBrains Mono',monospace; font-size:13px;">[[MCP tool inventory]]</a> as the single source of truth for the agent.</p>
-          <blockquote style="margin:0 0 18px; padding:4px 0 4px 18px; border-left:2px solid #D8C9AF; color:#7A7266; font-family:'Newsreader',serif; font-style:italic; font-size:15.5px;">The tool should feel like paper you can search.</blockquote>
-          <pre style="font-family:'JetBrains Mono',monospace; font-size:12.5px; line-height:1.6; background:#FAF7F2; border:1px solid #EFE8DC; border-radius:6px; padding:14px 16px; overflow:auto; margin:0; color:#4A443C;">claude mcp add --transport http \
-  vellum https://localhost:8080/mcp</pre>
-        </div>
+        <sc-if value="{{ showRaw }}" hint-placeholder-val="{{ true }}">
+          <textarea ref="{{ rawRef }}" class="vraw vscroll" value="{{ bodyValue }}" onInput="{{ onBody }}" style="{{ rawStyle }}"></textarea>
+        </sc-if>
+        <sc-if value="{{ showPreview }}" hint-placeholder-val="{{ true }}">
+          <div class="vscroll" style="{{ previewStyle }}">{{ previewBody }}</div>
+        </sc-if>
       </div>
     </main>
   </div>
 
   <!-- ===== STATUS BAR ===== -->
   <footer style="height:30px; flex:none; display:flex; align-items:center; gap:16px; padding:0 18px; border-top:1px solid #E8E2D8; background:#F3F1EC; font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266;">
-    <span><span style="color:#9A938A;">projects/vellum/</span><span style="color:#8B6F47;">roadmap.md</span></span>
+    <span>{{ crumbPath }}<span style="color:#8B6F47;">{{ crumbFile }}</span></span>
     <span style="flex:1;"></span>
-    <span>128 notes</span>
+    <span>{{ totalNotes }} notes</span>
     <span style="color:#CFC6B7;">·</span>
     <span>md</span>
     <span style="color:#CFC6B7;">·</span>
-    <span style="color:#5F8D5F;">Saved ✓</span>
+    <span style="{{ savedStyle }}">{{ savedLabel }}</span>
   </footer>
 
+  <!-- ===== COMMAND PALETTE ===== -->
+  <sc-if value="{{ paletteOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closePalette }}" style="position:absolute; inset:0; z-index:40; background:rgba(30,26,22,0.28); display:flex; align-items:flex-start; justify-content:center; padding-top:96px;">
+      <div onClick="{{ stop }}" style="width:min(560px,90%); background:#FFFFFF; border:1px solid #E0D9CD; border-radius:10px; box-shadow:0 20px 60px -16px rgba(42,38,34,0.4); overflow:hidden;">
+        <div style="display:flex; align-items:center; gap:10px; padding:14px 18px; border-bottom:1px solid #F0EBE2;">
+          <span style="color:#9A938A; font-size:15px;">⌕</span>
+          <input value="{{ paletteQuery }}" onInput="{{ onPaletteQuery }}" placeholder="Search notes, #tags…" autofocus="true" class="vtitle" style="flex:1; font-family:inherit; font-size:15px; color:#2A2622;">
+          <span onClick="{{ closePalette }}" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:4px; padding:2px 6px; cursor:pointer;">esc</span>
+        </div>
+        <div class="vscroll" style="padding:6px; max-height:340px; overflow-y:auto;">
+          <sc-for list="{{ paletteResults }}" as="r" hint-placeholder-count="3">
+            <div onClick="{{ r.onClick }}" style="{{ r.style }}">
+              <div style="display:flex; align-items:baseline; gap:8px;"><span style="font-family:'Newsreader',serif; font-size:15px; font-weight:500;">{{ r.title }}</span><span style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">{{ r.path }}</span></div>
+              <div style="font-size:12.5px; color:#7A7266; margin-top:3px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ r.excerpt }}</div>
+            </div>
+          </sc-for>
+          <sc-if value="{{ paletteEmpty }}" hint-placeholder-val="{{ false }}">
+            <div style="padding:26px; text-align:center; font-size:13px; color:#9A938A;">No matches.</div>
+          </sc-if>
+        </div>
+        <div style="display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid #F0EBE2; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">
+          <span>↵ open</span><span>#tag filter</span><span>esc close</span>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== DELETE CONFIRM ===== -->
+  <sc-if value="{{ confirmOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ cancelDelete }}" style="position:absolute; inset:0; z-index:45; background:rgba(30,26,22,0.32); display:flex; align-items:center; justify-content:center;">
+      <div onClick="{{ stop }}" style="width:min(420px,90%); background:#FFFFFF; border:1px solid #E0D9CD; border-radius:10px; padding:24px; box-shadow:0 20px 60px -16px rgba(42,38,34,0.4);">
+        <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:500; margin-bottom:8px;">Delete this note?</div>
+        <div style="font-size:13.5px; color:#7A7266; line-height:1.55; margin-bottom:20px;"><span style="font-family:'JetBrains Mono',monospace; font-size:12.5px; color:#8B6F47;">{{ deleteFile }}</span> will be removed from the vault. This can’t be undone.</div>
+        <div style="display:flex; justify-content:flex-end; gap:10px;">
+          <button onClick="{{ cancelDelete }}" style="font-family:inherit; font-size:13px; font-weight:500; color:#7A7266; background:transparent; border:1px solid transparent; border-radius:6px; padding:8px 14px; cursor:pointer;" style-hover="background:#F1EAE0;">Cancel</button>
+          <button onClick="{{ doDelete }}" style="font-family:inherit; font-size:13px; font-weight:500; color:#FFFFFF; background:#B3543D; border:1px solid #B3543D; border-radius:6px; padding:8px 16px; cursor:pointer;" style-hover="background:#9C4835;">Delete</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== TOAST ===== -->
+  <sc-if value="{{ toastOpen }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; bottom:44px; left:50%; transform:translateX(-50%); z-index:50; display:flex; align-items:center; gap:10px; background:#2A2622; color:#F4EFE7; border-radius:8px; padding:11px 16px; font-size:13px; box-shadow:0 12px 32px -10px rgba(42,38,34,0.5);">
+      <span style="{{ toastDotStyle }}"></span>{{ toastText }}
+    </div>
+  </sc-if>
+
+  <!-- ===== HELP ===== -->
+  <sc-if value="{{ helpOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeHelp }}" style="position:absolute; inset:0; z-index:55; background:rgba(30,26,22,0.32); display:flex; align-items:center; justify-content:center; padding:24px;">
+      <div onClick="{{ stop }}" class="vscroll" style="width:min(580px,94%); max-height:84vh; overflow-y:auto; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:12px; box-shadow:0 24px 70px -18px rgba(42,38,34,0.5);">
+        <div style="display:flex; align-items:flex-start; justify-content:space-between; padding:22px 26px 18px; border-bottom:1px solid #F0EBE2;">
+          <div>
+            <div style="font-family:'Newsreader',serif; font-size:23px; font-weight:500; letter-spacing:-0.01em;">Help</div>
+            <div style="font-size:13px; color:#7A7266; margin-top:4px;">Markdown syntax and keyboard shortcuts.</div>
+          </div>
+          <span onClick="{{ closeHelp }}" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; cursor:pointer;">esc</span>
+        </div>
+        <div style="padding:22px 26px 26px;">
+          <button onClick="{{ startTour }}" style="width:100%; font-family:inherit; font-size:13.5px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:7px; padding:11px 16px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; gap:8px; margin-bottom:26px;" style-hover="background:#7A6039; border-color:#7A6039;">Take the guided tour →</button>
+          <div style="display:grid; grid-template-columns:1fr 1fr; gap:30px;">
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:15px;">Markdown</div>
+              <div style="display:flex; flex-direction:column; gap:11px;">
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;"># H1</code><span style="font-size:13px; color:#4A443C;">Heading</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">**b**</code><span style="font-size:13px; color:#4A443C;">Bold</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">*i*</code><span style="font-size:13px; color:#4A443C;">Italic</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">- item</code><span style="font-size:13px; color:#4A443C;">List</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">- [ ]</code><span style="font-size:13px; color:#4A443C;">Checkbox</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">&gt; q</code><span style="font-size:13px; color:#4A443C;">Quote</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">`code`</code><span style="font-size:13px; color:#4A443C;">Inline code</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><code style="font-family:'JetBrains Mono',monospace; font-size:12px; color:#8B6F47; background:#F4F0E8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">[[note]]</code><span style="font-size:13px; color:#4A443C;">Link a note</span></div>
+              </div>
+            </div>
+            <div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; margin-bottom:15px;">Shortcuts</div>
+              <div style="display:flex; flex-direction:column; gap:11px;">
+                <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">⌘K</span><span style="font-size:13px; color:#4A443C;">Search notes</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">⌘B</span><span style="font-size:13px; color:#4A443C;">Bold selection</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">⌘I</span><span style="font-size:13px; color:#4A443C;">Italic selection</span></div>
+                <div style="display:flex; align-items:center; gap:12px;"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#FAF7F2; border:1px solid #E8E2D8; border-radius:5px; padding:3px 8px; white-space:nowrap; flex:none;">esc</span><span style="font-size:13px; color:#4A443C;">Close panel</span></div>
+              </div>
+              <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; margin:24px 0 15px;">Note types</div>
+              <div style="display:flex; flex-direction:column; gap:11px;">
+                <div style="display:flex; align-items:center; gap:11px;"><span style="width:8px; height:8px; border-radius:50%; background:#C08A3E; flex:none;"></span><span style="font-size:13px; color:#4A443C;">Task — carries a status</span></div>
+                <div style="display:flex; align-items:center; gap:11px;"><span style="width:9px; height:9px; border-radius:2px; background:#C4BBA9; flex:none;"></span><span style="font-size:13px; color:#4A443C;">Knowledge — reference</span></div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== ONBOARDING TOUR ===== -->
+  <sc-if value="{{ tourOn }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute; inset:0; z-index:60;">
+      <div style="{{ spotlightStyle }}"></div>
+      <div style="{{ tooltipStyle }}">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#8B6F47; letter-spacing:0.06em; margin-bottom:9px;">{{ tourIndexLabel }}</div>
+        <div style="font-family:'Newsreader',serif; font-size:19px; font-weight:500; margin-bottom:7px; letter-spacing:-0.01em;">{{ tourTitle }}</div>
+        <div style="font-size:13px; color:#7A7266; line-height:1.55; margin-bottom:18px;">{{ tourBody }}</div>
+        <div style="display:flex; align-items:center; gap:10px;">
+          <span onClick="{{ endTour }}" style="font-size:12.5px; color:#9A938A; cursor:pointer;" style-hover="color:#7A7266;">Skip</span>
+          <span style="flex:1;"></span>
+          <sc-if value="{{ tourCanBack }}" hint-placeholder-val="{{ false }}"><button onClick="{{ tourPrev }}" style="font-family:inherit; font-size:12.5px; font-weight:500; color:#2A2622; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:6px; padding:7px 13px; cursor:pointer;" style-hover="background:#FAF7F2;">Back</button></sc-if>
+          <button onClick="{{ tourNext }}" style="font-family:inherit; font-size:12.5px; font-weight:500; color:#FFFFFF; background:#8B6F47; border:1px solid #8B6F47; border-radius:6px; padding:7px 15px; cursor:pointer;" style-hover="background:#7A6039;">{{ tourNextLabel }}</button>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
 </div>
+
+<template id="__bundler_thumbnail">
+  <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><rect width="100" height="100" fill="#8B6F47"/><rect x="30" y="26" width="40" height="48" rx="5" fill="#FBF7F0"/><text x="50" y="60" font-family="Georgia,serif" font-size="34" fill="#8B6F47" text-anchor="middle">v</text></svg>
+</template>
 </x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;$preview&quot;:{&quot;width&quot;:1440,&quot;height&quot;:900},&quot;defaultView&quot;:{&quot;editor&quot;:&quot;enum&quot;,&quot;options&quot;:[&quot;edit&quot;,&quot;split&quot;,&quot;preview&quot;],&quot;default&quot;:&quot;split&quot;,&quot;tsType&quot;:&quot;string&quot;,&quot;section&quot;:&quot;Editor&quot;}}">
+const mb = (...l) => l.join('\n');
+
+const TOUR = [
+  { id:'tourSearch', place:'below-left', title:'Find anything', body:'Search across every note and #tag. Press ⌘K from anywhere in the vault.' },
+  { id:'tourTree',   place:'right',       title:'Your vault',    body:'Folders live here. Click one to open it, or drag a note onto a folder to move it.' },
+  { id:'tourList',   place:'right',       title:'Notes & filters', body:'Notes in the open folder. Filter by task / knowledge and by status.' },
+  { id:'tourToolbar',place:'below-left',  title:'Format markdown', body:'Bold, headings, lists, checkboxes and links — or just type the syntax by hand.' },
+  { id:'tourModes',  place:'below-right', title:'Edit · Split · Preview', body:'Write raw markdown, see it rendered, or keep both side by side.' },
+  { id:'tourHelp',   place:'below-right', title:'Help anytime',  body:'Reopen this tour and the markdown cheatsheet from here whenever you need it.' },
+];
+
+const STATUS = {
+  backlog:      { dot:'#9A938A', label:'Backlog',     color:'#6E6A62', bg:'#F3F1EC' },
+  'in-progress':{ dot:'#C08A3E', label:'In progress', color:'#976A28', bg:'#F7EEDD' },
+  done:         { dot:'#5F8D5F', label:'Done',        color:'#4A714A', bg:'#E9F0E7' },
+};
+
+class Component extends DCLogic {
+  constructor(props){
+    super(props);
+    this.tree = [
+      { id:'inbox', label:'Inbox', kind:'inbox' },
+      { id:'projects', label:'Projects', kind:'group', children:[
+        { id:'vellum', label:'vellum', kind:'folder', children:[
+          { id:'specs', label:'specs', kind:'folder' },
+          { id:'drafts', label:'drafts', kind:'folder' },
+        ]},
+        { id:'physiohub', label:'physiohub', kind:'folder' },
+        { id:'side-notes', label:'side-notes', kind:'folder' },
+      ]},
+      { id:'areas', label:'Areas', kind:'group', children:[
+        { id:'writing', label:'writing', kind:'folder' },
+        { id:'health', label:'health', kind:'folder' },
+      ]},
+      { id:'archive', label:'Archive', kind:'archive' },
+    ];
+    this.parent = {};
+    const walkP = (nodes, par) => nodes.forEach(n => { this.parent[n.id] = par; if(n.children) walkP(n.children, n.id); });
+    walkP(this.tree, null);
+
+    const notes = [
+      { id:'roadmap', title:'Roadmap — Q3 milestones', folder:'vellum', type:'task', status:'in-progress', tags:['go','mcp'], modified:'2d', body:mb(
+        '---','title: Roadmap — Q3 milestones','status: in-progress','tags: [go, mcp]','---',
+        '# Near term','',
+        '- [x] Frontmatter schema locked','- [ ] Embedded SPA served from the binary','- [ ] Command palette over the vault','',
+        '## Write path','',
+        'Expose [[MCP tool inventory]] as the single source of truth for the agent.','',
+        '> The tool should feel like paper you can search.','',
+        '```sh','claude mcp add --transport http vellum https://localhost:8080/mcp','```') },
+      { id:'spa', title:'Embedded SPA build', folder:'vellum', type:'task', status:'backlog', tags:['build'], modified:'5d', body:mb(
+        '---','title: Embedded SPA build','status: backlog','---',
+        '# Serving',' ',
+        'go:embed the dist folder, serve index at root, fall through to the API router for `/mcp`.','',
+        '- [ ] embed dist','- [ ] SPA fallback','- [ ] gzip assets') },
+      { id:'frontmatter', title:'Frontmatter schema', folder:'specs', type:'knowledge', status:'done', tags:['spec'], modified:'1w', body:mb(
+        '# Frontmatter','',
+        'Decide the minimal YAML: **title, tags, status, created**. Everything else stays in the body.','',
+        '> Keep the surface small and predictable.') },
+      { id:'mcpinv', title:'MCP tool inventory', folder:'specs', type:'knowledge', status:'done', tags:['mcp'], modified:'1w', body:mb(
+        '# Tools','',
+        '- `read_note`','- `write_note`','- `list_folder`','- `search`','',
+        'Keep the surface small and predictable.') },
+      { id:'dark', title:'Dark mode — midnight ink', folder:'drafts', type:'task', status:'backlog', tags:['ui'], modified:'2w', body:mb(
+        '# Midnight ink','',
+        'Never pure black. Panels lift a step off the background; accent lightens to warm sand.') },
+      { id:'physio', title:'Physiohub — intake form', folder:'physiohub', type:'task', status:'in-progress', tags:['health'], modified:'3d', body:mb(
+        '# Intake','',
+        '- [x] fields drafted','- [ ] validation','- [ ] export to PDF') },
+      { id:'sidea', title:'Weekend idea — quiet timer', folder:'side-notes', type:'knowledge', status:'backlog', tags:['idea'], modified:'4d', body:mb(
+        '# Quiet timer','','A pomodoro that never beeps — only dims the room.') },
+      { id:'essay', title:'On writing in the margins', folder:'writing', type:'knowledge', status:'backlog', tags:['essay'], modified:'1w', body:mb(
+        '# Margins','','The best notes live where the page runs out.') },
+      { id:'workout', title:'Training block — July', folder:'health', type:'task', status:'in-progress', tags:['health'], modified:'1d', body:mb(
+        '# July block','','- [x] mon — push','- [ ] wed — pull','- [ ] fri — legs') },
+      { id:'capture', title:'Untitled capture', folder:'inbox', type:'task', status:'backlog', tags:[], modified:'1h', body:mb(
+        '# Capture','','Look into single-binary SQLite index for search.') },
+      { id:'oldplan', title:'2025 planning notes', folder:'archive', type:'knowledge', status:'done', tags:['old'], modified:'1y', body:mb(
+        '# 2025','','Quarterly roadmap review — carry the write-path work into Q3.') },
+    ];
+
+    this.state = {
+      notes,
+      selectedId: 'roadmap',
+      selectedFolder: 'vellum',
+      mode: (props && props.defaultView) || 'split',
+      typeFilter: 'all',
+      statusFilter: 'all',
+      activeTag: null,
+      expanded: { projects:true, vellum:true, areas:false },
+      dropTarget: null,
+      dragId: null,
+      moveMenuOpen: false,
+      statusMenuOpen: false,
+      paletteOpen: false,
+      helpOpen: false,
+      tourStep: null,
+      tourRect: null,
+      paletteQuery: '',
+      confirmOpen: false,
+      toast: null,
+      saved: true,
+      dark: false,
+    };
+    this._onKey = this._onKey.bind(this);
+    this.rawRef = React.createRef();
+    this.rootRef = React.createRef();
+    this._onResize = () => { if(this.state.tourStep!=null) this.measureTour(); };
+  }
+
+  componentDidMount(){
+    document.addEventListener('keydown', this._onKey);
+    window.addEventListener('resize', this._onResize);
+    let seen=false; try{ seen = !!localStorage.getItem('vellum_onboarded'); }catch(e){}
+    if(!seen){ this._tourT = setTimeout(()=>this.startTour(), 650); }
+  }
+  componentWillUnmount(){ document.removeEventListener('keydown', this._onKey); window.removeEventListener('resize', this._onResize); if(this._toastT) clearTimeout(this._toastT); if(this._saveT) clearTimeout(this._saveT); if(this._tourT) clearTimeout(this._tourT); }
+
+  _onKey(e){
+    const inRaw = document.activeElement===this.rawRef.current;
+    if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){ e.preventDefault(); this.setState(s=>({paletteOpen:!s.paletteOpen, paletteQuery:''})); return; }
+    if(inRaw && (e.metaKey||e.ctrlKey) && (e.key==='b'||e.key==='B')){ e.preventDefault(); this.fmt('bold'); return; }
+    if(inRaw && (e.metaKey||e.ctrlKey) && (e.key==='i'||e.key==='I')){ e.preventDefault(); this.fmt('italic'); return; }
+    if(e.key==='Escape'){ this.setState({paletteOpen:false, moveMenuOpen:false, statusMenuOpen:false, confirmOpen:false, helpOpen:false}); if(this.state.tourStep!=null) this.endTour(); }
+  }
+
+  // ---- markdown formatting
+  fmt(kind){
+    const el=this.rawRef.current; const note=this.selNote(); if(!el||!note) return;
+    const val=el.value; const start=el.selectionStart, end=el.selectionEnd; const sel=val.slice(start,end);
+    const commit=(next,s,e)=>{ this.updateNote(note.id,{body:next}); requestAnimationFrame(()=>{ const t=this.rawRef.current; if(t){ t.focus(); try{ t.setSelectionRange(s,e); }catch(_){} } }); };
+    const pair=(open,close,ph)=>{ const inner=sel||ph; const next=val.slice(0,start)+open+inner+close+val.slice(end); const s=start+open.length; commit(next,s,s+inner.length); };
+    const line=(prefix)=>{ let ls=val.lastIndexOf('\n',start-1)+1; let le=val.indexOf('\n',end); if(le===-1) le=val.length; const block=val.slice(ls,le); const nb=block.split('\n').map(l=>prefix+l).join('\n'); const next=val.slice(0,ls)+nb+val.slice(le); commit(next,ls,ls+nb.length); };
+    switch(kind){
+      case 'bold':   return pair('**','**','bold');
+      case 'italic': return pair('*','*','italic');
+      case 'code':   return pair('`','`','code');
+      case 'wiki':   return pair('[[',']]','note');
+      case 'h1':     return line('# ');
+      case 'h2':     return line('## ');
+      case 'list':   return line('- ');
+      case 'check':  return line('- [ ] ');
+      case 'quote':  return line('> ');
+    }
+  }
+
+  // ---- onboarding tour
+  measureTour(){
+    const step=TOUR[this.state.tourStep]; if(!step) return;
+    const root=this.rootRef.current; const el=document.getElementById(step.id);
+    if(!root||!el) return;
+    const cr=root.getBoundingClientRect(); const r=el.getBoundingClientRect();
+    this.setState({ tourRect:{ top:r.top-cr.top, left:r.left-cr.left, width:r.width, height:r.height, cw:cr.width, ch:cr.height } });
+  }
+  startTour(){ this.setState({ tourStep:0, helpOpen:false, paletteOpen:false, mode:'split' }, ()=>requestAnimationFrame(()=>this.measureTour())); }
+  tourNext(){ if(this.state.tourStep>=TOUR.length-1){ this.endTour(); return; } this.setState(s=>({tourStep:s.tourStep+1}), ()=>requestAnimationFrame(()=>this.measureTour())); }
+  tourPrev(){ if(this.state.tourStep<=0) return; this.setState(s=>({tourStep:s.tourStep-1}), ()=>requestAnimationFrame(()=>this.measureTour())); }
+  endTour(){ try{ localStorage.setItem('vellum_onboarded','1'); }catch(e){} this.setState({tourStep:null, tourRect:null}); }
+
+  // ---- helpers
+  findNode(id){ let r=null; const w=ns=>ns.forEach(n=>{ if(n.id===id) r=n; if(n.children) w(n.children); }); w(this.tree); return r; }
+  descIds(node){ let ids=[node.id]; if(node.children) node.children.forEach(c=>{ ids=ids.concat(this.descIds(c)); }); return ids; }
+  labelOf(id){ const n=this.findNode(id); return n?n.label:id; }
+  pathOf(id){ const parts=[]; let cur=id; while(cur){ parts.unshift(this.labelOf(cur)); cur=this.parent[cur]; } return parts; }
+  selNote(){ return this.state.notes.find(n=>n.id===this.state.selectedId) || this.state.notes[0]; }
+
+  stripFront(body){ const l=body.split('\n'); if(l[0]==='---'){ let j=1; while(j<l.length && l[j]!=='---') j++; return l.slice(j+1).join('\n'); } return body; }
+  excerptOf(body){
+    const lines=this.stripFront(body).split('\n'); let p='';
+    for(const ln of lines){ const t=ln.trim(); if(!t) continue; if(t[0]==='#'||t[0]==='>'||t.startsWith('```')||t.startsWith('- ')) continue; p=t; break; }
+    if(!p){ for(const ln of lines){ const t=ln.trim().replace(/^[-#>*`\[\]x ]+/,''); if(t){ p=t; break; } } }
+    p=p.replace(/\[\[|\]\]|`|\*\*/g,'');
+    return p ? (p.length>110? p.slice(0,110)+'…' : p+'…') : 'Empty note';
+  }
+
+  setToast(text, tone){ if(this._toastT) clearTimeout(this._toastT); this.setState({toast:{text,tone:tone||'ok'}}); this._toastT=setTimeout(()=>this.setState({toast:null}),2200); }
+  markEdited(){ this.setState({saved:false}); if(this._saveT) clearTimeout(this._saveT); this._saveT=setTimeout(()=>this.setState({saved:true}),900); }
+
+  updateNote(id, patch){ this.setState(s=>({ notes:s.notes.map(n=>n.id===id?{...n,...patch,modified:'now'}:n) })); this.markEdited(); }
+
+  // ---- markdown render
+  renderInline(text, kb){
+    const parts=[]; const rx=/(\[\[[^\]]+\]\])|(`[^`]+`)|(\*\*[^*]+\*\*)/g; let last=0,m,i=0;
+    while((m=rx.exec(text))){ if(m.index>last) parts.push(text.slice(last,m.index)); const tok=m[0];
+      if(tok.startsWith('[[')) parts.push(React.createElement('a',{key:kb+i++,href:'#',onClick:e=>e.preventDefault(),style:{color:'#8B6F47',textDecoration:'none',background:'#F1EAE0',borderRadius:'4px',padding:'1px 5px',fontFamily:"'JetBrains Mono',monospace",fontSize:'13px'}},tok.slice(2,-2)));
+      else if(tok.startsWith('`')) parts.push(React.createElement('code',{key:kb+i++,style:{fontFamily:"'JetBrains Mono',monospace",fontSize:'13px',background:'#F4F0E8',borderRadius:'4px',padding:'1px 5px',color:'#8B6F47'}},tok.slice(1,-1)));
+      else parts.push(React.createElement('strong',{key:kb+i++},tok.slice(2,-2)));
+      last=m.index+tok.length;
+    }
+    if(last<text.length) parts.push(text.slice(last));
+    return parts;
+  }
+  renderMarkdown(body, noteId){
+    const lines=this.stripFront(body).split('\n'); const out=[]; let i=0,k=0,cb=0;
+    while(i<lines.length){ let line=lines[i];
+      if(line.trim()===''){ i++; continue; }
+      if(line.startsWith('```')){ const buf=[]; i++; while(i<lines.length && !lines[i].startsWith('```')){ buf.push(lines[i]); i++; } i++;
+        out.push(React.createElement('pre',{key:k++,style:{fontFamily:"'JetBrains Mono',monospace",fontSize:'12.5px',lineHeight:1.6,background:'#FAF7F2',border:'1px solid #EFE8DC',borderRadius:'6px',padding:'14px 16px',overflow:'auto',margin:'0 0 18px',color:'#4A443C'}},buf.join('\n'))); continue; }
+      if(line.startsWith('# ')){ out.push(React.createElement('h1',{key:k++,style:{fontFamily:"'Newsreader',serif",fontSize:'26px',fontWeight:600,margin:'0 0 12px',letterSpacing:'-0.01em'}},this.renderInline(line.slice(2),'h'+k))); i++; continue; }
+      if(line.startsWith('## ')){ out.push(React.createElement('h2',{key:k++,style:{fontFamily:"'Newsreader',serif",fontSize:'20px',fontWeight:600,margin:'22px 0 10px'}},this.renderInline(line.slice(3),'h'+k))); i++; continue; }
+      if(line.startsWith('> ')){ const buf=[]; while(i<lines.length && lines[i].startsWith('> ')){ buf.push(lines[i].slice(2)); i++; }
+        out.push(React.createElement('blockquote',{key:k++,style:{margin:'0 0 18px',padding:'4px 0 4px 18px',borderLeft:'2px solid #D8C9AF',color:'#7A7266',fontFamily:"'Newsreader',serif",fontStyle:'italic',fontSize:'15.5px'}},this.renderInline(buf.join(' '),'q'+k))); continue; }
+      if(/^- \[[ xX]\] /.test(line)){ const items=[]; while(i<lines.length && /^- \[[ xX]\] /.test(lines[i])){ const done=lines[i][3].toLowerCase()==='x'; const idx=cb++; items.push({done,text:lines[i].slice(6),idx}); i++; }
+        out.push(React.createElement('div',{key:k++,style:{margin:'0 0 18px'}},items.map(it=>React.createElement('div',{key:it.idx,onClick:()=>this.toggleCheck(noteId,it.idx),style:{fontSize:'15px',lineHeight:1.9,color:'#3A342E',display:'flex',alignItems:'center',gap:'9px',cursor:'pointer'}},
+          React.createElement('span',{style:it.done?{width:'16px',height:'16px',borderRadius:'4px',background:'#5F8D5F',color:'#fff',display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:'11px',flex:'none'}:{width:'16px',height:'16px',border:'1.5px solid #CFC6B7',borderRadius:'4px',display:'inline-block',flex:'none'}},it.done?'✓':''),
+          React.createElement('span',{style:it.done?{color:'#9A938A',textDecoration:'line-through'}:null},this.renderInline(it.text,'c'+it.idx)))))); continue; }
+      if(line.startsWith('- ')){ const items=[]; while(i<lines.length && lines[i].startsWith('- ') && !/^- \[/.test(lines[i])){ items.push(lines[i].slice(2)); i++; }
+        out.push(React.createElement('ul',{key:k++,style:{fontSize:'15px',lineHeight:1.75,color:'#3A342E',margin:'0 0 16px',paddingLeft:'22px'}},items.map((it,x)=>React.createElement('li',{key:x},this.renderInline(it,'l'+k+x))))); continue; }
+      const buf=[line]; i++; while(i<lines.length && lines[i].trim()!=='' && !/^[#>\-`]/.test(lines[i])){ buf.push(lines[i]); i++; }
+      out.push(React.createElement('p',{key:k++,style:{fontSize:'15px',lineHeight:1.7,color:'#3A342E',margin:'0 0 16px'}},this.renderInline(buf.join(' '),'p'+k)));
+    }
+    return React.createElement(React.Fragment,null,out);
+  }
+  toggleCheck(noteId, idx){ const note=this.state.notes.find(n=>n.id===noteId); if(!note) return; let c=-1;
+    const lines=note.body.split('\n').map(l=>{ if(/^- \[[ xX]\] /.test(l)){ c++; if(c===idx){ const done=l[3].toLowerCase()==='x'; return '- ['+(done?' ':'x')+'] '+l.slice(6); } } return l; });
+    this.updateNote(noteId,{body:lines.join('\n')});
+  }
+
+  // ---- filtered list
+  visibleNotes(){
+    const node=this.findNode(this.state.selectedFolder); const ids=node?this.descIds(node):[this.state.selectedFolder];
+    return this.state.notes.filter(n=>{
+      if(!ids.includes(n.folder)) return false;
+      if(this.state.typeFilter!=='all' && n.type!==this.state.typeFilter) return false;
+      if(this.state.statusFilter!=='all' && (n.type!=='task' || n.status!==this.state.statusFilter)) return false;
+      if(this.state.activeTag && !n.tags.includes(this.state.activeTag)) return false;
+      return true;
+    });
+  }
+
+  // ---- move
+  moveNote(id, folder){ const n=this.state.notes.find(x=>x.id===id); if(!n||n.folder===folder) { this.setState({dropTarget:null,dragId:null,moveMenuOpen:false}); return; }
+    this.setState(s=>({ notes:s.notes.map(x=>x.id===id?{...x,folder,modified:'now'}:x), dropTarget:null, dragId:null, moveMenuOpen:false }));
+    this.setToast('Moved to '+this.labelOf(folder), 'ok');
+  }
+
+  newNote(){ const id='n'+Date.now(); const f=this.state.selectedFolder;
+    const note={ id, title:'Untitled', folder:f, type:'task', status:'backlog', tags:[], modified:'now', body:mb('# Untitled','','Start writing…') };
+    this.setState(s=>({ notes:[note,...s.notes], selectedId:id, mode:'edit' }));
+    this.setToast('New note in '+this.labelOf(f), 'ok');
+  }
+
+  askDelete(){ this.setState({confirmOpen:true, moveMenuOpen:false, statusMenuOpen:false}); }
+  doDelete(){ const id=this.state.selectedId; const idx=this.state.notes.findIndex(n=>n.id===id);
+    const rest=this.state.notes.filter(n=>n.id!==id); const next=rest[Math.max(0,idx-1)]||rest[0];
+    this.setState({ notes:rest, selectedId: next?next.id:null, confirmOpen:false });
+    this.setToast('Note deleted', 'danger');
+  }
+
+  renderVals(){
+    const S=this.state; const note=this.selNote();
+    const seg=(active)=>active
+      ? 'flex:1; text-align:center; font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; border-radius:5px; padding:5px 0; box-shadow:0 1px 2px rgba(42,38,34,0.05); cursor:pointer;'
+      : 'flex:1; text-align:center; font-size:12px; color:#7A7266; padding:5px 0; cursor:pointer;';
+    const tab=(active)=> active
+      ? 'color:#2A2622; font-weight:500; border-bottom:1.5px solid #8B6F47; padding-bottom:4px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;'
+      : 'color:#7A7266; padding-bottom:4px; cursor:pointer; display:inline-flex; align-items:center; gap:6px;';
+    const md=(active)=> active
+      ? 'font-size:12px; font-weight:500; color:#2A2622; background:#FFFFFF; padding:5px 12px; border-radius:5px; box-shadow:0 1px 2px rgba(42,38,34,0.05); cursor:pointer;'
+      : 'font-size:12px; color:#7A7266; padding:5px 12px; border-radius:5px; cursor:pointer;';
+
+    // ----- tree rows
+    const rows=[]; const walk=(nodes,depth)=>{ nodes.forEach(n=>{
+      const hasKids=n.children&&n.children.length; const expanded=!!S.expanded[n.id];
+      const isSel=S.selectedFolder===n.id; const isDrop=S.dropTarget===n.id; const isGroup=n.kind==='group';
+      const count=this.state.notes.filter(x=>this.descIds(n).includes(x.folder)).length;
+      let bg='transparent'; if(isSel) bg='#F1EAE0'; if(isDrop) bg='#Ebe0cd';
+      rows.push({
+        key:n.id,
+        rails: Array.from({length:depth}).map((_,i)=>({k:i})),
+        chev: hasKids ? (expanded?'▾':'▸') : '',
+        chevStyle: hasKids ? 'font-size:11px; color:#9A938A; width:12px; flex:none; cursor:pointer; text-align:center;' : 'width:12px; flex:none;',
+        icon: n.kind==='inbox'?'▢' : n.kind==='archive'?'▢' : '▤',
+        iconStyle: 'flex:none; font-size:12px; color:'+(isSel?'#8B6F47':'#9A938A')+';',
+        label:n.label,
+        labelStyle:'flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:13.5px; color:'+(isSel?'#2A2622':(isGroup?'#5C564D':'#5C564D'))+'; font-weight:'+((isSel||isGroup)?'500':'400')+';',
+        count: n.id==='inbox' ? String(count) : String(count),
+        countStyle: n.id==='inbox'
+          ? "font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#FFFFFF; background:#8B6F47; border-radius:9px; padding:1px 7px; flex:none;"
+          : "font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A; flex:none;",
+        style:'display:flex; align-items:stretch; border-radius:6px; cursor:pointer; background:'+bg+'; '+(isDrop?'outline:1px dashed #C9A96A; outline-offset:-1px;':''),
+        onClick: isGroup ? (()=>this.setState(s=>({expanded:{...s.expanded,[n.id]:!s.expanded[n.id]}}))) : (()=>this.setState({selectedFolder:n.id, activeTag:null})),
+        onToggle: hasKids ? (e=>{ e.stopPropagation(); this.setState(s=>({expanded:{...s.expanded,[n.id]:!s.expanded[n.id]}})); }) : (()=>{}),
+        onDragOver: e=>{ e.preventDefault(); if(S.dropTarget!==n.id) this.setState({dropTarget:n.id}); },
+        onDragLeave: ()=>{ if(S.dropTarget===n.id) this.setState({dropTarget:null}); },
+        onDrop: e=>{ e.preventDefault(); if(S.dragId) this.moveNote(S.dragId, n.id); },
+      });
+      if(hasKids && expanded) walk(n.children, depth+1);
+    }); };
+    walk(this.tree,0);
+
+    // ----- tag chips
+    const allTags=[...new Set(this.state.notes.flatMap(n=>n.tags))];
+    const tagChips=allTags.map(t=>({ label:'#'+t, onClick:()=>this.setState(s=>({activeTag:s.activeTag===t?null:t})),
+      style: (S.activeTag===t
+        ? "font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border:1px solid #E0D4C1; border-radius:5px; padding:2px 7px; cursor:pointer;"
+        : "font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#F3F1EC; border-radius:5px; padding:2px 7px; cursor:pointer;") }));
+
+    // ----- note list
+    const vis=this.visibleNotes();
+    const noteItems=vis.map(n=>{
+      const sel=n.id===S.selectedId; const st=STATUS[n.status]||STATUS.backlog;
+      const marker = n.type==='task'
+        ? 'width:7px; height:7px; border-radius:50%; background:'+st.dot+'; flex:none;'
+        : 'width:9px; height:9px; border-radius:2px; background:#C4BBA9; flex:none;';
+      return { key:n.id, title:n.title, excerpt:this.excerptOf(n.body), time:n.modified,
+        tags:n.tags.map(t=>({label:'#'+t})), markerStyle:marker,
+        style:'padding:15px 16px; border-bottom:1px solid #EFE9DF; cursor:pointer; '+(sel?'background:#FFFFFF; box-shadow:inset 3px 0 0 #8B6F47;':''),
+        onClick:()=>this.setState({selectedId:n.id}),
+        onDragStart:e=>{ e.dataTransfer.effectAllowed='move'; this.setState({dragId:n.id}); },
+        onDragEnd:()=>this.setState({dragId:null, dropTarget:null}) };
+    });
+
+    // ----- editor
+    const st=STATUS[note?note.status:'backlog']||STATUS.backlog;
+    const isTask = note && note.type==='task';
+    const showRaw = S.mode==='edit'||S.mode==='split';
+    const showPreview = S.mode==='preview'||S.mode==='split';
+    const rawBase='flex:1; min-width:0; padding:24px 28px; overflow-y:auto; font-family:'+"'JetBrains Mono',monospace"+'; font-size:13px; line-height:1.7; color:#4A443C; background:#FFFFFF; width:100%; height:100%;';
+    const rawStyle = rawBase + (S.mode==='split'?' border-right:1px solid #EFE9DF;':'');
+    const previewStyle='flex:1; min-width:0; padding:24px 32px; overflow-y:auto;';
+
+    // ----- markdown toolbar
+    const showToolbar = showRaw;
+    const btnBase='font-family:'+"'JetBrains Mono',monospace"+'; font-size:12.5px; color:#7A7266; background:transparent; border:none; border-radius:5px; min-width:29px; height:28px; padding:0 8px; cursor:pointer; display:inline-flex; align-items:center; justify-content:center; ';
+    const mk=(glyph,title,kind,extra)=>({ glyph, title, onClick:()=>this.fmt(kind), style:btnBase+(extra||'') });
+    const sep=()=>({ glyph:'', title:'', onClick:()=>{}, style:'width:1px; height:16px; background:#E8E2D8; margin:0 6px; align-self:center; pointer-events:none;' });
+    const toolbarBtns=[
+      mk('B','Bold  ⌘B','bold','font-weight:700;'),
+      mk('I','Italic  ⌘I','italic','font-style:italic;'),
+      sep(),
+      mk('H1','Heading 1','h1'),
+      mk('H2','Heading 2','h2'),
+      sep(),
+      mk('•','Bullet list','list','font-size:15px;'),
+      mk('☑','Checkbox','check','font-size:13px;'),
+      mk('❝','Quote','quote','font-size:14px;'),
+      mk('‹›','Inline code','code'),
+      mk('[[ ]]','Link a note','wiki','font-size:11px;'),
+    ];
+    const wc = note ? this.stripFront(note.body).trim().split(/\s+/).filter(Boolean).length : 0;
+    const wordCount = wc + (wc===1?' word':' words');
+
+    // ----- onboarding tour geometry
+    const tourOn = S.tourStep!=null;
+    let spotlightStyle='display:none;', tooltipStyle='', tourTitle='', tourBody='', tourIndexLabel='', tourNextLabel='Next', tourCanBack=false;
+    if(tourOn){
+      const step=TOUR[S.tourStep]; tourTitle=step.title; tourBody=step.body;
+      tourIndexLabel=(S.tourStep+1)+' / '+TOUR.length;
+      tourNextLabel = (S.tourStep===TOUR.length-1) ? 'Done' : 'Next';
+      tourCanBack = S.tourStep>0;
+      const r=S.tourRect; const W=286;
+      if(r){
+        const pad=6;
+        spotlightStyle='position:absolute; top:'+(r.top-pad)+'px; left:'+(r.left-pad)+'px; width:'+(r.width+pad*2)+'px; height:'+(r.height+pad*2)+'px; border-radius:9px; box-shadow:0 0 0 9999px rgba(28,24,20,0.55); border:1.5px solid rgba(236,228,216,0.9); pointer-events:none; transition:top 0.28s cubic-bezier(0.4,0,0.2,1), left 0.28s cubic-bezier(0.4,0,0.2,1), width 0.28s, height 0.28s;';
+        let t,l;
+        if(step.place==='right'){ l=r.left+r.width+16; t=r.top; }
+        else if(step.place==='below-right'){ t=r.top+r.height+14; l=r.left+r.width-W; }
+        else { t=r.top+r.height+14; l=r.left; }
+        l=Math.max(14, Math.min(l, (r.cw||1200)-W-14));
+        t=Math.max(14, Math.min(t, (r.ch||800)-190));
+        tooltipStyle='position:absolute; top:'+t+'px; left:'+l+'px; width:'+W+'px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:11px; box-shadow:0 20px 54px -14px rgba(42,38,34,0.5); padding:18px 20px 16px; pointer-events:auto;';
+      } else {
+        tooltipStyle='position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); width:286px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:11px; box-shadow:0 20px 54px -14px rgba(42,38,34,0.5); padding:18px 20px 16px; pointer-events:auto;';
+      }
+    }
+
+    const statusOptions = ['backlog','in-progress','done'].map(k=>({ label:STATUS[k].label,
+      dotStyle:'width:7px; height:7px; border-radius:50%; background:'+STATUS[k].dot+'; flex:none;',
+      style:'display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:6px; font-size:13px; cursor:pointer; '+(note&&note.status===k?'background:#F7F2EA;':''),
+      onClick:()=>{ this.updateNote(note.id,{status:k}); this.setState({statusMenuOpen:false}); } }));
+
+    const leafFolders=[]; const collect=ns=>ns.forEach(n=>{ if(n.kind!=='group') leafFolders.push(n); if(n.children) collect(n.children); });
+    collect(this.tree);
+    const moveOptions=leafFolders.map(f=>({ label:this.pathOf(f.id).join(' / '),
+      style:'display:flex; align-items:center; gap:8px; padding:8px 10px; border-radius:6px; font-size:13px; cursor:pointer; '+(note&&note.folder===f.id?'background:#F7F2EA;':''),
+      checkStyle:'color:#8B6F47; font-size:12px; '+(note&&note.folder===f.id?'':'opacity:0;'),
+      onClick:()=>this.moveNote(note.id, f.id) }));
+
+    // ----- palette
+    const q=S.paletteQuery.trim().toLowerCase();
+    let pr=this.state.notes;
+    if(q){ const tagQ=q.startsWith('#')?q.slice(1):null;
+      pr=this.state.notes.filter(n=> tagQ ? n.tags.some(t=>t.includes(tagQ)) : (n.title.toLowerCase().includes(q)||n.body.toLowerCase().includes(q)||n.tags.some(t=>t.includes(q))) ); }
+    pr=pr.slice(0,7);
+    const paletteResults=pr.map((n,i)=>({ title:n.title, path:this.pathOf(n.folder).join('/'), excerpt:this.excerptOf(n.body),
+      style:'padding:10px 12px; border-radius:7px; cursor:pointer; '+(i===0?'background:#F1EAE0;':''),
+      onClick:()=>this.setState({selectedId:n.id, selectedFolder:n.folder, paletteOpen:false}) }));
+
+    return {
+      totalNotes: this.state.notes.length,
+      treeRows: rows,
+      tagChips,
+      activeTag: S.activeTag, activeTagLabel: S.activeTag?('#'+S.activeTag):'', clearTag:()=>this.setState({activeTag:null}),
+
+      folderPath: this.pathOf(S.selectedFolder).join(' / '),
+      newNote:()=>this.newNote(),
+
+      tfAllStyle:tab(S.typeFilter==='all'), tfTaskStyle:tab(S.typeFilter==='task'), tfKnowStyle:tab(S.typeFilter==='knowledge'),
+      setTypeAll:()=>this.setState({typeFilter:'all'}), setTypeTask:()=>this.setState({typeFilter:'task'}), setTypeKnow:()=>this.setState({typeFilter:'knowledge'}),
+      sfAllStyle:seg(S.statusFilter==='all'), sfBacklogStyle:seg(S.statusFilter==='backlog'), sfProgStyle:seg(S.statusFilter==='in-progress'), sfDoneStyle:seg(S.statusFilter==='done'),
+      setStatAll:()=>this.setState({statusFilter:'all'}), setStatBacklog:()=>this.setState({statusFilter:'backlog'}), setStatProg:()=>this.setState({statusFilter:'in-progress'}), setStatDone:()=>this.setState({statusFilter:'done'}),
+
+      noteItems, listEmpty: noteItems.length===0,
+
+      noteTitle: note?note.title:'', onTitle:e=>this.updateNote(note.id,{title:e.target.value||'Untitled'}),
+      mdEditStyle:md(S.mode==='edit'), mdSplitStyle:md(S.mode==='split'), mdPreviewStyle:md(S.mode==='preview'),
+      setEdit:()=>this.setState({mode:'edit'}), setSplit:()=>this.setState({mode:'split'}), setPreview:()=>this.setState({mode:'preview'}),
+      askDelete:()=>this.askDelete(),
+
+      noteType: note?note.type:'', noteTypeGlyph: (note&&note.type==='task')?'●':'▢',
+      isTask,
+      statusLabel: st.label, statusChipStyle:'display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:500; color:'+st.color+'; background:'+st.bg+'; border-radius:5px; padding:3px 10px; cursor:pointer;',
+      statusDotStyle:'width:7px; height:7px; border-radius:50%; background:'+st.dot+';',
+      toggleStatusMenu:()=>this.setState(s=>({statusMenuOpen:!s.statusMenuOpen, moveMenuOpen:false})),
+      statusMenuOpen:S.statusMenuOpen, statusOptions,
+      noteTags: note?note.tags.map(t=>({label:'#'+t, onClick:()=>this.setState({activeTag:t})})):[],
+      modifiedLabel: note?('modified '+note.modified):'',
+      toggleMoveMenu:()=>this.setState(s=>({moveMenuOpen:!s.moveMenuOpen, statusMenuOpen:false})),
+      moveMenuOpen:S.moveMenuOpen, moveOptions,
+
+      showRaw, showPreview, rawStyle, previewStyle,
+      bodyValue: note?note.body:'', onBody:e=>this.updateNote(note.id,{body:e.target.value}),
+      previewBody: note?this.renderMarkdown(note.body, note.id):null,
+
+      crumbPath: note?(this.pathOf(note.folder).join('/')+'/'):'', crumbFile: note?(note.id+'.md'):'',
+      savedLabel: S.saved?'Saved ✓':'Saving…', savedStyle: S.saved?'color:#5F8D5F;':'color:#C08A3E;',
+
+      paletteOpen:S.paletteOpen, openPalette:()=>this.setState({paletteOpen:true, paletteQuery:''}), closePalette:()=>this.setState({paletteOpen:false}),
+      paletteQuery:S.paletteQuery, onPaletteQuery:e=>this.setState({paletteQuery:e.target.value}),
+      paletteResults, paletteEmpty: paletteResults.length===0,
+      stop:e=>e.stopPropagation(),
+
+      confirmOpen:S.confirmOpen, cancelDelete:()=>this.setState({confirmOpen:false}), doDelete:()=>this.doDelete(), deleteFile: note?(note.id+'.md'):'',
+
+      toastOpen: !!S.toast, toastText: S.toast?S.toast.text:'', toastDotStyle:'width:8px; height:8px; border-radius:50%; background:'+((S.toast&&S.toast.tone==='danger')?'#D98E7A':'#7FB37F')+'; flex:none;',
+
+      toggleTheme:()=>this.setState(s=>({dark:!s.dark})),
+
+      showToolbar, toolbarBtns, wordCount, rawRef:this.rawRef, rootRef:this.rootRef,
+
+      helpOpen:S.helpOpen, openHelp:()=>this.setState({helpOpen:true}), closeHelp:()=>this.setState({helpOpen:false}),
+
+      tourOn, spotlightStyle, tooltipStyle, tourTitle, tourBody, tourIndexLabel, tourNextLabel, tourCanBack,
+      startTour:()=>this.startTour(), tourNext:()=>this.tourNext(), tourPrev:()=>this.tourPrev(), endTour:()=>this.endTour(),
+    };
+  }
+}
+</script>
 </body>
 </html>

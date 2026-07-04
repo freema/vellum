@@ -8,7 +8,7 @@ Lokální kopie v repu (**tohle je reference pro implementaci SPA**):
 | Soubor | Obsah |
 |---|---|
 | `design/Vellum-Design-System.dc.html` | 10 sekcí: barvy, typografie, tlačítka, inputy, tagy & status, strom + note list, command palette, markdown preview, feedback (toast/modal/empty state/status bar), dark mode |
-| `design/Vellum-Workspace.dc.html` | Hlavní obrazovka 1440×900 — třípanelový workspace |
+| `design/Vellum-Workspace.dc.html` | Hlavní obrazovka 1440×900 — třípanelový workspace: strom, note list, editor s markdown toolbarem, move/rename/delete, status dropdown, command palette, help modal, onboarding tour, toasty |
 | `design/Vellum-Auth.dc.html` | 1a connect/login karta, 1b OAuth authorize (výběr nástrojů + scopes) |
 | `design/Vellum-Logo.dc.html` | Značka, wordmark, lockupy, varianty, favicony |
 | `design/support.js` | Runtime Claude designu — needitovat |
