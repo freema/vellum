@@ -142,14 +142,19 @@ func New(cfg Config, tasks Tasks, log *slog.Logger) *Notifier {
 	return &Notifier{mailer: smtpMailer{cfg: cfg}, tasks: tasks, cfg: cfg, log: log}
 }
 
-// Loop sends a digest every cfg.Interval until ctx is cancelled.
+// Loop sends a digest shortly after boot (to confirm the setup) and then
+// every cfg.Interval until ctx is cancelled.
 func (n *Notifier) Loop(ctx context.Context) {
+	first := time.NewTimer(30 * time.Second)
+	defer first.Stop()
 	t := time.NewTicker(n.cfg.Interval)
 	defer t.Stop()
 	for {
 		select {
 		case <-ctx.Done():
 			return
+		case <-first.C:
+			n.SendDigest()
 		case <-t.C:
 			n.SendDigest()
 		}

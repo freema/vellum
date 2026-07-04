@@ -6,6 +6,18 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.2.1] — 2026-07-04
+
+### Added
+- **Redesigned connect / login screen** (design artboard 1a): a two-column card
+  with sign-in on the left and a full "Connect a client" guide on the right —
+  copyable endpoint, a four-step Claude.ai walkthrough, and tabs with ready-to-
+  paste config for Claude Code, Claude Desktop, ChatGPT and Cursor.
+
+### Changed
+- The SMTP digest now also sends once shortly after start (to confirm the setup)
+  in addition to the recurring interval.
+
 ## [1.2.0] — 2026-07-04
 
 Synced from the updated Claude Design "Vellum Workspace" project.
@@ -115,7 +127,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.2.1...HEAD
+[1.2.1]: https://github.com/freema/vellum/compare/v1.2.0...v1.2.1
 [1.2.0]: https://github.com/freema/vellum/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/freema/vellum/compare/v1.0.1...v1.1.0
 [1.0.1]: https://github.com/freema/vellum/compare/v1.0.0...v1.0.1
