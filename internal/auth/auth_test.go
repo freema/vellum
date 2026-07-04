@@ -158,8 +158,8 @@ func authorizeAndGetCodeFor(t *testing.T, srv *httptest.Server, clientID, redire
 
 	form := url.Values{
 		"decision": {"approve"}, "client_id": {clientID},
-		"redirect_uri":  {redirectURI},
-		"state":         {"xyz"},
+		"redirect_uri":   {redirectURI},
+		"state":          {"xyz"},
 		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
 	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {

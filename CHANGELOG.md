@@ -6,6 +6,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.5.0] — 2026-07-04
+
+Performance release: loading and searching are dramatically faster.
+
+### Changed
+- **Gzip compression** for the API and the SPA — the app bundle now travels
+  ~4× smaller and JSON listings shrink accordingly. (`/mcp` is untouched; its
+  SSE stream must not be buffered.)
+- **Proper HTTP caching** — hashed `/assets/` files are `immutable` for a
+  year (no more re-downloading the bundle on every load), the HTML shell
+  revalidates so deploys still appear immediately.
+- **Search is ranked and RAM-fast.** Note content is cached in memory and
+  invalidated precisely by the metadata index (modTime+size), so repeated
+  searches never touch the disk. Results are ordered by relevance — title
+  matches beat tag matches beat path matches beat body hits — instead of
+  alphabetically. Multi-word queries AND their terms; the words in a row
+  beat the words scattered apart; snippets pick the best-matching lines
+  first. MCP and the REST API share one search cache.
+- **Opening a note is instant when unchanged** — `GET /api/notes/{path}`
+  honours `If-None-Match` (304), the SPA keeps a client-side note cache and
+  revalidates by ETag, and hovering a note in the list prefetches it.
+- `/api/search` takes a `limit` parameter; the command palette asks for 8
+  instead of the default 50.
+- The palette drops out-of-order search responses (a slow old query can no
+  longer overwrite the results of a newer one).
+
 ## [1.4.0] — 2026-07-04
 
 ### Fixed

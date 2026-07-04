@@ -93,10 +93,13 @@ func main() {
 	}
 	logger.Info("metadata index built", "notes", index.Len(), "took", time.Since(start).String())
 
+	// One searcher for MCP and the REST API — they share the content cache.
+	searcher := vault.NewScanSearcher(v, index)
+
 	mcpSrv := mcpserver.New(mcpserver.Deps{
 		Vault:    v,
 		Index:    index,
-		Searcher: vault.NewScanSearcher(v, index),
+		Searcher: searcher,
 		Structure: vault.Structure{
 			Inbox:    cfg.InboxDir,
 			Projects: cfg.ProjectsDir,
@@ -149,7 +152,7 @@ func main() {
 			API: &httpapi.API{
 				Vault:     v,
 				Index:     index,
-				Searcher:  vault.NewScanSearcher(v, index),
+				Searcher:  searcher,
 				Structure: structure,
 				Activity:  recorder,
 				Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",

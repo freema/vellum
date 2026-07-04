@@ -171,3 +171,70 @@ func TestSearchSpeed1000Files(t *testing.T) {
 		t.Errorf("search took %s, want well under 1s (~100ms target)", elapsed)
 	}
 }
+
+func TestSearchRankingTitleFirst(t *testing.T) {
+	v := newTestVault(t)
+	// "roadmap" in the body only vs. in the title — the title match must rank first.
+	mustWrite(t, v, "inbox/meeting.md", "# Weekly sync\n\nWe discussed the roadmap briefly.\n")
+	mustWrite(t, v, "projects/roadmap.md", "# Roadmap\n\nThe plan for the next quarter.\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	results, err := s.Search("roadmap", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("results = %+v, want 2", results)
+	}
+	if results[0].Path != "projects/roadmap.md" {
+		t.Errorf("first = %s, want the title match projects/roadmap.md", results[0].Path)
+	}
+}
+
+func TestSearchMultiTermAND(t *testing.T) {
+	s := newSearchFixture(t)
+	// "apples great": both terms in apples.md; go/notes.md has only "great".
+	results, err := s.Search("apples great", SearchOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 1 || results[0].Path != "inbox/apples.md" {
+		t.Errorf("AND search = %+v, want only inbox/apples.md", results)
+	}
+	// A term found nowhere kills the note.
+	if r, _ := s.Search("apples nonexistentterm", SearchOpts{}); len(r) != 0 {
+		t.Errorf("impossible AND should be empty, got %+v", r)
+	}
+}
+
+func TestSearchCacheInvalidatedByWrite(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/note.md", "# Note\n\nfirst version\n")
+	ix := NewIndex(v)
+	if err := ix.Build(); err != nil {
+		t.Fatal(err)
+	}
+	s := NewScanSearcher(v, ix)
+
+	if r, _ := s.Search("first", SearchOpts{}); len(r) != 1 {
+		t.Fatalf("warm-up search = %+v", r)
+	}
+	// Rewrite the note; the index update changes modTime/size, which must
+	// invalidate the searcher's content cache.
+	if err := v.Write("inbox/note.md", "# Note\n\nsecond version entirely\n", WriteOptions{Overwrite: true}); err != nil {
+		t.Fatal(err)
+	}
+	if err := ix.Update("inbox/note.md"); err != nil {
+		t.Fatal(err)
+	}
+	if r, _ := s.Search("second version", SearchOpts{}); len(r) != 1 {
+		t.Errorf("stale cache: new content not found, got %+v", r)
+	}
+	if r, _ := s.Search("first", SearchOpts{}); len(r) != 0 {
+		t.Errorf("stale cache: old content still found, got %+v", r)
+	}
+}

@@ -10,7 +10,7 @@
       "name": "vellum",
       "source": "./plugins/claude/vellum",
       "description": "Connect Claude to your self-hosted vellum markdown vault: read, write, search, tags, tasks and backlinks.",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": {
         "name": "Tomas Grasl"
       },

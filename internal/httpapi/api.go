@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/freema/vellum/internal/activity"
@@ -109,6 +110,12 @@ func (a *API) handleGetNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("ETag", `"`+note.Hash+`"`)
+	// Conditional GET: the SPA caches notes and revalidates with the ETag it
+	// saw last, so an unchanged note costs a 304 instead of the full body.
+	if inm := r.Header.Get("If-None-Match"); inm != "" && strings.Contains(inm, note.Hash) {
+		w.WriteHeader(http.StatusNotModified)
+		return
+	}
 	writeJSON(w, http.StatusOK, note)
 }
 
@@ -199,9 +206,11 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	limit, _ := strconv.Atoi(q.Get("limit")) // 0 → server default
 	results, err := a.Searcher.Search(q.Get("q"), vault.SearchOpts{
-		Tags: tags,
-		Dir:  q.Get("dir"),
+		Tags:       tags,
+		Dir:        q.Get("dir"),
+		MaxResults: limit,
 	})
 	if err != nil {
 		apiError(w, err)

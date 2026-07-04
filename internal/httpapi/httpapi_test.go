@@ -68,8 +68,8 @@ func TestMCPOriginCheck(t *testing.T) {
 		origin string
 		want   int
 	}{
-		{"", http.StatusOK},                        // CLI client, no Origin
-		{"https://claude.ai", http.StatusOK},       // allowlisted
+		{"", http.StatusOK},                            // CLI client, no Origin
+		{"https://claude.ai", http.StatusOK},           // allowlisted
 		{"https://evil.example", http.StatusForbidden}, // cross-origin
 	}
 	for _, tt := range tests {

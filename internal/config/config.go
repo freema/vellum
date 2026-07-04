@@ -56,14 +56,14 @@ type Config struct {
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
 	cfg := Config{
-		Port:          getenv("PORT", "8080"),
-		VaultPath:     getenv("VELLUM_VAULT_PATH", "./vault"),
-		InitStructure: getbool("VELLUM_INIT_STRUCTURE", true),
-		InboxDir:      getenv("VELLUM_INBOX_DIR", "inbox"),
-		ProjectsDir:   getenv("VELLUM_PROJECTS_DIR", "projects"),
-		ArchiveDir:    getenv("VELLUM_ARCHIVE_DIR", "archive"),
-		Curator:       getenv("VELLUM_CURATOR", "off") == "on",
-		Notify:        getbool("VELLUM_NOTIFY", false),
+		Port:              getenv("PORT", "8080"),
+		VaultPath:         getenv("VELLUM_VAULT_PATH", "./vault"),
+		InitStructure:     getbool("VELLUM_INIT_STRUCTURE", true),
+		InboxDir:          getenv("VELLUM_INBOX_DIR", "inbox"),
+		ProjectsDir:       getenv("VELLUM_PROJECTS_DIR", "projects"),
+		ArchiveDir:        getenv("VELLUM_ARCHIVE_DIR", "archive"),
+		Curator:           getenv("VELLUM_CURATOR", "off") == "on",
+		Notify:            getbool("VELLUM_NOTIFY", false),
 		SentryDSN:         os.Getenv("SENTRY_DSN"),
 		SentryEnvironment: getenv("SENTRY_ENVIRONMENT", "production"),
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",

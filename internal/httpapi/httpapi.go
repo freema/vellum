@@ -50,19 +50,20 @@ func NewRouter(version string, opts Options) http.Handler {
 		return originCheck(opts.AllowedOrigins, h)
 	}
 	if opts.MCPHandler != nil {
+		// Never compressed: the Streamable HTTP transport uses SSE.
 		mux.Handle("/mcp", guard(mcpRecord(opts.Activity, opts.MCPHandler)))
 	}
 	if opts.API != nil {
 		apiMux := http.NewServeMux()
 		opts.API.routes(apiMux)
-		mux.Handle("/api/", guard(apiMux))
+		mux.Handle("/api/", guard(compress(apiMux)))
 	}
 	if opts.Auth != nil {
 		opts.Auth.Routes(mux)
 	}
 	if opts.SPA != nil {
 		mux.HandleFunc("GET /favicon.ico", faviconHandler(opts.SPA))
-		mux.Handle("/", spaHandler(opts.SPA))
+		mux.Handle("/", compress(spaHandler(opts.SPA)))
 	}
 	return auth.CORS(opts.CORSOrigins, recoverAndReport(opts.Activity, mux))
 }
@@ -96,6 +97,10 @@ func recoverAndReport(rec *activity.Recorder, next http.Handler) http.Handler {
 // static asset (its last segment has an extension) returns 404 instead of the
 // HTML shell — otherwise e.g. /favicon.ico would return HTML and MCP clients
 // could not discover a real icon.
+//
+// Cache policy: Vite writes a content hash into every /assets/ filename, so
+// those are immutable — cache them for a year. Everything else (index.html,
+// favicon) revalidates, so a new deploy is picked up on the next load.
 func spaHandler(dist fs.FS) http.Handler {
 	fileServer := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -103,6 +108,11 @@ func spaHandler(dist fs.FS) http.Handler {
 		if path != "" {
 			if f, err := dist.Open(path); err == nil {
 				_ = f.Close()
+				if strings.HasPrefix(path, "assets/") {
+					w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					w.Header().Set("Cache-Control", "public, max-age=300")
+				}
 				fileServer.ServeHTTP(w, r)
 				return
 			}
@@ -115,6 +125,7 @@ func spaHandler(dist fs.FS) http.Handler {
 				return
 			}
 		}
+		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFileFS(w, r, dist, "index.html")
 	})
 }

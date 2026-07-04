@@ -31,17 +31,17 @@ func (p *Provider) Routes(mux *http.ServeMux) {
 // behind a reverse proxy (otherwise clients are pointed at localhost).
 func (p *Provider) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
-		"issuer":                 p.issuer,
-		"authorization_endpoint": p.issuer + "/authorize",
-		"token_endpoint":         p.issuer + "/token",
-		"revocation_endpoint":    p.issuer + "/revoke",
-		"registration_endpoint":  p.issuer + "/register",
-		"scopes_supported":       Scopes,
-		"response_types_supported":                  []string{"code"},
-		"grant_types_supported":                     []string{"authorization_code", "refresh_token", "client_credentials"},
-		"token_endpoint_auth_methods_supported":     []string{"none", "client_secret_post", "client_secret_basic"},
+		"issuer":                                     p.issuer,
+		"authorization_endpoint":                     p.issuer + "/authorize",
+		"token_endpoint":                             p.issuer + "/token",
+		"revocation_endpoint":                        p.issuer + "/revoke",
+		"registration_endpoint":                      p.issuer + "/register",
+		"scopes_supported":                           Scopes,
+		"response_types_supported":                   []string{"code"},
+		"grant_types_supported":                      []string{"authorization_code", "refresh_token", "client_credentials"},
+		"token_endpoint_auth_methods_supported":      []string{"none", "client_secret_post", "client_secret_basic"},
 		"revocation_endpoint_auth_methods_supported": []string{"none", "client_secret_post", "client_secret_basic"},
-		"code_challenge_methods_supported":          []string{"S256"},
+		"code_challenge_methods_supported":           []string{"S256"},
 	})
 }
 

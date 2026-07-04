@@ -599,6 +599,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onTypeFilter={setTypeFilter}
           onStatusFilter={setStatusFilter}
           onOpen={openNote}
+          onHover={(p) => api.prefetchNote(p)}
           onCreate={createNote}
           onDragStart={setDragPath}
           onDragEnd={() => {
@@ -1079,6 +1080,7 @@ function ListPanel({
   onTypeFilter,
   onStatusFilter,
   onOpen,
+  onHover,
   onCreate,
   onDragStart,
   onDragEnd,
@@ -1091,6 +1093,7 @@ function ListPanel({
   onTypeFilter: (t: TypeFilter) => void
   onStatusFilter: (s: string) => void
   onOpen: (path: string) => void
+  onHover: (path: string) => void
   onCreate: () => void
   onDragStart: (path: string) => void
   onDragEnd: () => void
@@ -1153,6 +1156,7 @@ function ListPanel({
             key={e.path}
             className={`ws-note-row${e.path === selectedPath ? ' ws-note-row--active' : ''}`}
             onClick={() => onOpen(e.path)}
+            onMouseEnter={() => onHover(e.path)}
             draggable
             onDragStart={(ev) => {
               ev.dataTransfer.effectAllowed = 'move'
@@ -2125,15 +2129,19 @@ function PaletteOverlay({
   const [results, setResults] = useState<SearchResult[]>([])
   const [selected, setSelected] = useState(0)
   const [searching, setSearching] = useState(false)
+  // Monotonic sequence — a slow older response must never overwrite a newer one.
+  const seqRef = useRef(0)
 
   useEffect(() => {
     if (!query.trim()) {
+      seqRef.current++
       setResults([])
       setSearching(false)
       return
     }
     setSearching(true)
     const t = window.setTimeout(() => {
+      const seq = ++seqRef.current
       const q = query.trim()
       const tags = q
         .split(/\s+/)
@@ -2144,12 +2152,15 @@ function PaletteOverlay({
         .filter((w) => !w.startsWith('#'))
         .join(' ')
       void api
-        .search(text, tags)
+        .search(text, tags, 8)
         .then((r) => {
+          if (seq !== seqRef.current) return
           setResults(r.slice(0, 8))
           setSelected(0)
         })
-        .finally(() => setSearching(false))
+        .finally(() => {
+          if (seq === seqRef.current) setSearching(false)
+        })
     }, 180)
     return () => window.clearTimeout(t)
   }, [api, query])

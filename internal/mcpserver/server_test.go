@@ -199,7 +199,9 @@ func TestCRUDFlow(t *testing.T) {
 	call(t, s, "append_to_note", map[string]any{"path": w.Path, "content": "## Log\n\nentry"}, nil)
 	call(t, s, "patch_note", map[string]any{"path": w.Path, "section": "Log", "content": "patched entry"}, nil)
 
-	var after struct{ Content string `json:"content"` }
+	var after struct {
+		Content string `json:"content"`
+	}
 	call(t, s, "read_note", map[string]any{"path": w.Path}, &after)
 	if !strings.Contains(after.Content, "## Log\npatched entry") {
 		t.Errorf("patched content = %q", after.Content)
@@ -234,7 +236,12 @@ func TestSearchTagsAndBacklinks(t *testing.T) {
 		t.Fatalf("search = %+v", search)
 	}
 
-	var tags struct{ Tags []struct{ Tag string; Count int } }
+	var tags struct {
+		Tags []struct {
+			Tag   string
+			Count int
+		}
+	}
 	call(t, s, "list_tags", nil, &tags)
 	if len(tags.Tags) != 1 || tags.Tags[0].Tag != "linked" {
 		t.Fatalf("list_tags = %+v", tags)

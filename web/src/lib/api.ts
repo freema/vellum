@@ -1,5 +1,6 @@
-// REST client for /api/* (PHY-114). Token lives in memory only — no
-// localStorage/sessionStorage by design.
+// REST client for /api/* (PHY-114). The token lives in sessionStorage so a
+// page refresh keeps the login; notes are cached client-side and revalidated
+// with If-None-Match, so reopening a note is instant.
 
 export interface NoteEntry {
   path: string
@@ -121,6 +122,9 @@ const TOKEN_KEY = 'vellum_token'
 
 export class ApiClient {
   private token: string | null = null
+  /** Client-side note cache, revalidated with If-None-Match → 304. */
+  private noteCache = new Map<string, Note>()
+  private prefetching = new Set<string>()
   onAuthError?: () => void
 
   constructor() {
@@ -184,7 +188,41 @@ export class ApiClient {
   }
 
   async getNote(path: string): Promise<Note> {
-    return (await this.request('GET', `/api/notes/${encodePath(path)}`)) as Note
+    const cached = this.noteCache.get(path)
+    const headers: Record<string, string> = {}
+    if (cached) headers['If-None-Match'] = `"${cached.hash}"`
+    const res = await this.rawRequest('GET', `/api/notes/${encodePath(path)}`, undefined, headers)
+    if (res.status === 304 && cached) return cached
+    if (!res.ok) throw new Error(`GET note ${path}: ${res.status}`)
+    const note = (await res.json()) as Note
+    this.cacheNote(note)
+    return note
+  }
+
+  /** Warm the note cache in the background (e.g. on list-row hover). */
+  prefetchNote(path: string): void {
+    if (this.noteCache.has(path) || this.prefetching.has(path)) return
+    this.prefetching.add(path)
+    void this.getNote(path)
+      .catch(() => {})
+      .finally(() => this.prefetching.delete(path))
+  }
+
+  private cacheNote(note: Note): void {
+    this.noteCache.delete(note.path) // refresh insertion order
+    this.noteCache.set(note.path, note)
+    if (this.noteCache.size > 100) {
+      const oldest = this.noteCache.keys().next().value
+      if (oldest) this.noteCache.delete(oldest)
+    }
+  }
+
+  private evictNotes(prefix: string, exact = false): void {
+    for (const key of this.noteCache.keys()) {
+      if (exact ? key === prefix : key === prefix || key.startsWith(prefix + '/')) {
+        this.noteCache.delete(key)
+      }
+    }
   }
 
   /** PUT with optional If-Match; throws ConflictError on 409. */
@@ -198,23 +236,28 @@ export class ApiClient {
     }
     if (!res.ok) throw new Error(`save failed (${res.status})`)
     const body = (await res.json()) as { etag: string }
+    this.evictNotes(path, true) // next GET refetches the saved note
     return body.etag
   }
 
   async deleteNote(path: string): Promise<void> {
     await this.request('DELETE', `/api/notes/${encodePath(path)}`)
+    this.evictNotes(path, true)
   }
 
   async moveNote(from: string, to: string): Promise<void> {
     await this.request('POST', '/api/notes/move', JSON.stringify({ from, to }), {
       'Content-Type': 'application/json',
     })
+    this.evictNotes(from, true)
+    this.evictNotes(to, true)
   }
 
-  async search(q: string, tags: string[] = []): Promise<SearchResult[]> {
+  async search(q: string, tags: string[] = [], limit = 0): Promise<SearchResult[]> {
     const params = new URLSearchParams()
     if (q) params.set('q', q)
     if (tags.length) params.set('tags', tags.join(','))
+    if (limit > 0) params.set('limit', String(limit))
     const body = (await this.request('GET', `/api/search?${params}`)) as {
       results: SearchResult[] | null
     }
@@ -238,10 +281,12 @@ export class ApiClient {
   }
 
   async deleteFolder(path: string): Promise<{ deleted: string; notes: number }> {
-    return (await this.request('DELETE', `/api/folders/${encodePath(path)}`)) as {
+    const res = (await this.request('DELETE', `/api/folders/${encodePath(path)}`)) as {
       deleted: string
       notes: number
     }
+    this.evictNotes(path) // everything under the folder is gone
+    return res
   }
 
   async connections(): Promise<ConnectionsData> {
