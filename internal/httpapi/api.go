@@ -106,6 +106,15 @@ func (a *API) handleList(w http.ResponseWriter, r *http.Request) {
 func (a *API) handleGetNote(w http.ResponseWriter, r *http.Request) {
 	note, err := a.Vault.Read(r.PathValue("path"))
 	if err != nil {
+		// On a read, a path that can never resolve to a note (wrong
+		// extension, invalid shape) is simply "not found" — 400 is reserved
+		// for malformed writes. This also keeps the UI's not-found state (a
+		// nonsense deep link must not present as a server error) and avoids
+		// hinting path-validation details to probes.
+		if errors.Is(err, vault.ErrNotMarkdown) || errors.Is(err, vault.ErrInvalidPath) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "note not found"})
+			return
+		}
 		apiError(w, err)
 		return
 	}

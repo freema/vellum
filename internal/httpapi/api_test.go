@@ -166,6 +166,31 @@ func TestAPIConflictPut(t *testing.T) {
 	}
 }
 
+func TestAPIGetNoteBogusPathIs404(t *testing.T) {
+	srv := newAPIServer(t)
+
+	// A read of a path that can never be a note (wrong extension, invalid
+	// shape) is 404, not 400 — a nonsense deep link must render the UI's
+	// not-found state, never the server-error one.
+	for _, p := range []string{
+		"projects/alpha/alpha.mddafsd", // wrong extension
+		"projects/alpha/alpha",         // no extension
+		"nope.txt",
+	} {
+		resp, _ := doReq(t, http.MethodGet, srv.URL+"/api/notes/"+p, "", nil)
+		if resp.StatusCode != http.StatusNotFound {
+			t.Errorf("GET %s: status = %d, want 404", p, resp.StatusCode)
+		}
+	}
+
+	// Writes keep the explicit 400 so API clients learn the path is invalid.
+	resp, _ := doReq(t, http.MethodPut, srv.URL+"/api/notes/bad.txt", "hi",
+		map[string]string{"Content-Type": "text/markdown"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("PUT bad.txt: status = %d, want 400", resp.StatusCode)
+	}
+}
+
 func TestAPITraversalRejected(t *testing.T) {
 	srv := newAPIServer(t)
 	resp, _ := doReq(t, http.MethodPut, srv.URL+"/api/notes/..%2Fescape.md", "x", nil)
