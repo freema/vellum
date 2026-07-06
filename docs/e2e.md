@@ -43,6 +43,32 @@ Core:
 - [ ] Deep link `/n/projects/demo/deep-dive.md` renders after reload
       (SPA fallback)
 
+Persistence & sync (see [workspace.md](workspace.md)):
+
+- [ ] Click a tag + folder + type/status filters → URL gains
+      `?tags=…&dir=…&type=…&status=…`; hard reload keeps the whole view
+- [ ] Open a note from the filtered list → `/n/…?tags=…` (query preserved);
+      Back steps to the previous note, not through filter clicks
+- [ ] Delete the selected folder via ⋯ → `dir` disappears from the URL,
+      other params stay
+- [ ] Toggle theme, reload → theme sticks (and no white flash in dark);
+      switch editor to Preview, reload and switch notes → mode sticks
+- [ ] Type into a note and reload within 1 s → the text survives
+      (pagehide keepalive flush)
+- [ ] Append to the open note via MCP, focus the window → content updates
+      without a reload; delete it via MCP → 410 state; recreate → editor
+      recovers
+
+MCP resources & annotations (see [mcp.md](mcp.md)):
+
+- [ ] Inspector: tools show titles + read-only/destructive annotations;
+      `initialize` carries instructions, no `logging` capability
+- [ ] Resources tab lists the vault notes; reading one returns raw
+      markdown; a bogus URI answers `-32002`
+- [ ] Subscribe to a note, edit it in the web UI → the SSE stream gets
+      `notifications/resources/updated`; `list_changed` fires only on
+      create/delete/title change, not on autosaves
+
 OAuth (auth enabled):
 
 - [ ] Fresh load shows the connect card (artboard 1a)

@@ -69,6 +69,30 @@ plus, with `VELLUM_CURATOR=on`: `suggest_location`, `suggest_tags`,
 Writes are conflict-safe: `read_note` returns a content hash, write tools
 accept `expected_hash` and fail on mismatch instead of clobbering.
 
+Every tool carries MCP annotations (`readOnlyHint`, `destructiveHint`,
+`idempotentHint`), and the handshake ships short server instructions with
+the vault conventions, so agents behave well out of the box. The full
+tool/resource reference lives in [docs/mcp.md](docs/mcp.md).
+
+### MCP resources
+
+Notes are also exposed as resources: `vellum://note/{path}` serves the raw
+markdown (`text/markdown`), so clients with a resource picker can attach a
+note as context without a tool call. Clients can `resources/subscribe` to a
+note URI and receive `notifications/resources/updated` whenever that note
+changes — regardless of whether the change came through MCP or the web
+editor.
+
+## Web workspace
+
+The embedded UI is a three-pane workspace (tree, list, editor) that stays
+in sync with the vault on its own: MCP writes appear without a reload, a
+deleted note switches to a designed 410 state, and a deploy restart shows
+a reconnect overlay instead of a dead page. Filters (folder, tags,
+type/status) live in the URL so views are shareable and refresh-safe;
+theme and editor mode persist locally. Details — URL scheme, storage
+keys, autosave/conflict/flush semantics: [docs/workspace.md](docs/workspace.md).
+
 ## Vault structure, tasks, curator
 
 - **Structure**: an empty vault is initialized with `inbox/`, `projects/`,
