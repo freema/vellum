@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.8.0] — 2026-07-06
+
+Synced from the updated Claude Design "Vellum Workspace" project.
+
+### Added
+- **Tag filter in the left panel.** A "Filter tags…" box narrows the tag
+  list by name; tags are sorted by frequency (most used first) and each
+  shows its note count. The list caps at 12 tags with a "Show all N"
+  toggle (scrollable when expanded), and a "clear" link appears while a
+  tag filter is active. Active tags stay pinned to the top.
+- **Folder ⋯ menu.** Hovering a folder shows a ⋯ button opening a small
+  menu with "New note here" and "Delete folder…" — replacing the inline ×
+  that was too easy to hit by accident. Deleting is now a deliberate
+  two-step action; the confirm dialog stays.
+
+### Fixed
+- **A nonsense note URL no longer presents as a server error.** Reading a
+  path that can never be a note (wrong extension, invalid shape) returned
+  400, which the workspace rendered as the 500 "The vault couldn't be read"
+  state. `GET /api/notes/{path}` now answers 404 for such paths, so the UI
+  shows "No note lives here". Writes keep the explicit 400.
+
 ## [1.7.0] — 2026-07-06
 
 Designed error pages, a self-syncing workspace, and localhost CORS.
@@ -260,7 +282,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.8.0...HEAD
+[1.8.0]: https://github.com/freema/vellum/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/freema/vellum/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/freema/vellum/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/freema/vellum/compare/v1.4.0...v1.5.0
