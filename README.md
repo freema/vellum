@@ -95,8 +95,8 @@ accept `expected_hash` and fail on mismatch instead of clobbering.
 | `VELLUM_CLIENT_SECRET` | — | The access key (`openssl rand -hex 32`, min 32 chars) |
 | `VELLUM_ISSUER_URL` | `http://localhost:PORT` | **Public HTTPS URL when behind a proxy** — without it OAuth metadata advertises localhost and clients fail |
 | `TRUST_PROXY` | `false` | Set `1` behind Caddy/Traefik so rate limiting sees real client IPs |
-| `CORS_ORIGINS` | claude.ai, claude.com | Origins receiving CORS headers |
-| `VELLUM_ALLOWED_ORIGINS` | claude.ai, claude.com | Browser origins allowed on `/mcp` + `/api` (same-origin always passes) |
+| `CORS_ORIGINS` | claude.ai, claude.com | Origins receiving CORS headers (localhost always allowed) |
+| `VELLUM_ALLOWED_ORIGINS` | claude.ai, claude.com | Browser origins allowed on `/mcp` + `/api` (same-origin and localhost always pass) |
 | `VELLUM_REDIRECT_URIS` | any | Optional exact OAuth redirect allowlist |
 | `VELLUM_INIT_STRUCTURE` | `true` | Create inbox/projects/archive in an empty vault |
 | `VELLUM_INBOX_DIR` / `VELLUM_PROJECTS_DIR` / `VELLUM_ARCHIVE_DIR` | `inbox`/`projects`/`archive` | Conventional directory names |

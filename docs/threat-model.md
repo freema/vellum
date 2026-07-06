@@ -10,7 +10,12 @@ agent (Claude) ──HTTPS──▶ reverse proxy ──▶ vellum ──▶ vau
 
 1. **Agent → vellum (`/mcp`)**: untrusted until proven otherwise. Every
    request needs a valid Bearer token issued by vellum's own OAuth flow.
-   Browser calls additionally pass an Origin allowlist.
+   Browser calls additionally pass an Origin allowlist. Loopback origins
+   (`localhost` / `127.0.0.1` / `[::1]`) are exempt from the allowlist so
+   local tools like the MCP Inspector work out of the box — that exemption
+   relaxes only CORS, never authentication: a loopback Origin can only
+   originate from software already running on the client's machine, tokens
+   are still required, and no `Allow-Credentials` header is ever sent.
 2. **vellum → vault**: the vault layer treats every path as hostile.
    `filepath.Clean` + root-prefix check, symlink rejection (file symlinks
    outright, directory symlinks may not escape the root), null-byte

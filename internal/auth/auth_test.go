@@ -544,4 +544,47 @@ func TestCORS(t *testing.T) {
 	if resp2.Header.Get("Access-Control-Allow-Origin") != "" {
 		t.Error("disallowed origin must not get CORS headers")
 	}
+
+	// Loopback origins (MCP Inspector & co.) are allowed without config.
+	req3, _ := http.NewRequest(http.MethodOptions, srv.URL, nil)
+	req3.Header.Set("Origin", "http://localhost:6274")
+	resp3, err := http.DefaultClient.Do(req3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp3.Body.Close()
+	if resp3.StatusCode != http.StatusNoContent {
+		t.Errorf("loopback preflight = %d, want 204", resp3.StatusCode)
+	}
+	if got := resp3.Header.Get("Access-Control-Allow-Origin"); got != "http://localhost:6274" {
+		t.Errorf("loopback ACAO = %q", got)
+	}
+}
+
+func TestLoopbackOrigin(t *testing.T) {
+	yes := []string{
+		"http://localhost:6274",
+		"http://localhost",
+		"https://localhost:8443",
+		"http://127.0.0.1:3000",
+		"http://[::1]:8080",
+	}
+	no := []string{
+		"https://evil.example",
+		"http://localhost.evil.example",
+		"http://evil.example/localhost",
+		"file://localhost/etc/passwd",
+		"null",
+		"",
+	}
+	for _, o := range yes {
+		if !LoopbackOrigin(o) {
+			t.Errorf("LoopbackOrigin(%q) = false, want true", o)
+		}
+	}
+	for _, o := range no {
+		if LoopbackOrigin(o) {
+			t.Errorf("LoopbackOrigin(%q) = true, want false", o)
+		}
+	}
 }

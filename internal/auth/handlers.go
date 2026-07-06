@@ -391,8 +391,24 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 	_ = json.NewEncoder(w).Encode(v)
 }
 
+// LoopbackOrigin reports whether a browser Origin points at the client's
+// own machine (localhost, 127.0.0.1 or [::1], any port). Such origins are
+// always CORS-allowed: the page behind them already runs on the user's
+// machine (MCP Inspector, local dev tools), the browser sets the Origin
+// header so a remote site cannot fake one, and authentication is still
+// required for anything the response would reveal.
+func LoopbackOrigin(origin string) bool {
+	u, err := url.Parse(origin)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Path != "" {
+		return false
+	}
+	host := u.Hostname()
+	return host == "localhost" || host == "127.0.0.1" || host == "::1"
+}
+
 // CORS returns a middleware applying CORS headers for the allowed browser
-// origins (CORS_ORIGINS). OPTIONS preflights short-circuit with 204.
+// origins (CORS_ORIGINS) plus loopback origins. OPTIONS preflights
+// short-circuit with 204.
 func CORS(origins []string, next http.Handler) http.Handler {
 	allowed := map[string]bool{}
 	for _, o := range origins {
@@ -400,7 +416,7 @@ func CORS(origins []string, next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && allowed[origin] {
+		if origin != "" && (allowed[origin] || LoopbackOrigin(origin)) {
 			h := w.Header()
 			h.Set("Access-Control-Allow-Origin", origin)
 			h.Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")

@@ -31,6 +31,30 @@ Public URL — substitute your own domain:
   MCP endpoint — connecting Claude to `https://host/` instead of
   `https://host/mcp` yields a 404 after OAuth.
 
+## CORS: browser origins
+
+Browser requests to `/mcp` and `/api` pass an Origin allowlist
+(`VELLUM_ALLOWED_ORIGINS`, default claude.ai + claude.com) and only
+allowlisted origins get CORS response headers (`CORS_ORIGINS`, defaults to
+the same list).
+
+**Loopback origins are always allowed** — `http(s)://localhost`,
+`127.0.0.1` or `[::1]` on any port. That's what lets the
+[MCP Inspector](https://github.com/modelcontextprotocol/inspector)
+(`npx @modelcontextprotocol/inspector`, UI on `localhost:6274`) connect
+straight to a deployed server without touching its env. This is safe by
+construction: a loopback Origin can only be sent by a page already running
+on the *client's* machine (the browser sets the header; a remote site
+cannot forge it), no `Access-Control-Allow-Credentials` is ever emitted,
+and every request still needs a valid Bearer token — CORS relaxation never
+bypasses auth. See the [threat model](threat-model.md).
+
+For any other origin (say, a web app you host yourself), add it explicitly:
+
+```sh
+VELLUM_ALLOWED_ORIGINS=https://claude.ai,https://claude.com,https://myapp.example.com
+```
+
 ## Release → server cycle
 
 1. Tag `v*` → GitHub Actions builds the multi-arch image → GHCR.
