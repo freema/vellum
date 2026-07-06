@@ -5,6 +5,19 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>vellum</title>
+    <script>
+      // Apply the persisted theme before first paint so dark-mode users
+      // don't get a white flash. Mirrors the vellum_theme key the app writes.
+      try {
+        var t = JSON.parse(localStorage.getItem('vellum_theme') || 'null')
+        if (t !== 'dark' && t !== 'light') {
+          t = matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        }
+        document.documentElement.setAttribute('data-theme', t)
+      } catch (e) {
+        /* private mode — default light */
+      }
+    </script>
   </head>
   <body>
     <div id="root"></div>

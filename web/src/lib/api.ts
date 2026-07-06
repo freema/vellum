@@ -239,10 +239,21 @@ export class ApiClient {
   }
 
   /** PUT with optional If-Match; throws ConflictError on 409. */
-  async putNote(path: string, content: string, etag?: string): Promise<string> {
+  async putNote(
+    path: string,
+    content: string,
+    etag?: string,
+    opts?: { keepalive?: boolean },
+  ): Promise<string> {
     const headers: Record<string, string> = { 'Content-Type': 'text/markdown' }
     if (etag) headers['If-Match'] = `"${etag}"`
-    const res = await this.rawRequest('PUT', `/api/notes/${encodePath(path)}`, content, headers)
+    const res = await this.rawRequest(
+      'PUT',
+      `/api/notes/${encodePath(path)}`,
+      content,
+      headers,
+      opts?.keepalive,
+    )
     if (res.status === 409) {
       const body = (await res.json()) as { content: string; etag: string }
       throw new ConflictError(body.content, body.etag)
@@ -344,11 +355,15 @@ export class ApiClient {
     url: string,
     body?: string,
     headers: Record<string, string> = {},
+    // keepalive lets a save started during pagehide outlive the page
+    // (refresh, tab close). Browsers cap keepalive bodies at ~64 KB, so it
+    // is opt-in for the draft flush only.
+    keepalive = false,
   ): Promise<Response> {
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`
     let res: Response
     try {
-      res = await fetch(url, { method, body, headers })
+      res = await fetch(url, { method, body, headers, keepalive })
     } catch (err) {
       // fetch only rejects on network-level failure — the server (or the
       // proxy in front of it) is down, most likely a deploy restart.

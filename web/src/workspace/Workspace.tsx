@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import {
@@ -21,6 +21,7 @@ import {
 import { CommandPalette, PaletteItem, Highlight } from '../components/palette'
 import { LogoMark } from '../components/Logo'
 import { Icon, GithubMark, type IconName } from '../components/Icon'
+import { usePersistedState } from '../lib/usePersistedState'
 
 type TypeFilter = 'all' | 'task' | 'knowledge'
 type ViewMode = 'edit' | 'split' | 'preview'
@@ -135,16 +136,55 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
 
   const [entries, setEntries] = useState<NoteEntry[]>([])
   const [tags, setTags] = useState<TagCount[]>([])
-  const [selectedDir, setSelectedDir] = useState('')
-  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [activeTags, setActiveTags] = useState<string[]>([])
+
+  // List filters live in the URL (?dir=…&tags=a,b&type=task&status=done) so
+  // a refresh keeps the view and a filtered view can be shared or
+  // bookmarked. Writes use replace: Back steps between notes, not filters.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedDir = searchParams.get('dir') ?? ''
+  const rawType = searchParams.get('type')
+  const typeFilter: TypeFilter = rawType === 'task' || rawType === 'knowledge' ? rawType : 'all'
+  const rawStatus = searchParams.get('status') ?? ''
+  const statusFilter = rawStatus in STATUS ? rawStatus : ''
+  const activeTags = useMemo(
+    () => searchParams.get('tags')?.split(',').filter(Boolean) ?? [],
+    [searchParams],
+  )
+  const patchFilters = useCallback(
+    (patch: Record<string, string>) => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          for (const [k, v] of Object.entries(patch)) {
+            if (v) next.set(k, v)
+            else next.delete(k)
+          }
+          return next
+        },
+        { replace: true },
+      )
+    },
+    [setSearchParams],
+  )
+  const setSelectedDir = useCallback((dir: string) => patchFilters({ dir }), [patchFilters])
+  const setTypeFilter = useCallback(
+    (t: TypeFilter) => patchFilters({ type: t === 'all' ? '' : t }),
+    [patchFilters],
+  )
+  const setStatusFilter = useCallback((s: string) => patchFilters({ status: s }), [patchFilters])
+  const setActiveTags = useCallback(
+    (list: string[]) => patchFilters({ tags: list.join(',') }),
+    [patchFilters],
+  )
+
   const [paletteOpen, setPaletteOpen] = useState(false)
   const [helpOpen, setHelpOpen] = useState(false)
-  const [theme, setTheme] = useState<'light' | 'dark'>('light')
+  const [theme, setTheme] = usePersistedState<'light' | 'dark'>('vellum_theme', () =>
+    window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light',
+  )
   const [toast, setToast] = useState<Toast | null>(null)
   const [saving, setSaving] = useState(false)
-  const [projectsOpen, setProjectsOpen] = useState(true)
+  const [projectsOpen, setProjectsOpen] = usePersistedState('vellum_projects_open', true)
   const [dragPath, setDragPath] = useState<string | null>(null)
   const [dropDir, setDropDir] = useState<string | null>(null)
   const [tourStep, setTourStep] = useState<number | null>(null)
@@ -357,11 +397,12 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     setUnread((u) => Math.max(0, u - 1))
   }, [])
 
-  const toggleTheme = () => {
-    const next = theme === 'light' ? 'dark' : 'light'
-    setTheme(next)
-    document.documentElement.setAttribute('data-theme', next)
-  }
+  // Applied as an effect so both the persisted initial value and later
+  // toggles reach the <html> attribute the CSS tokens key off.
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme === 'dark' ? 'dark' : 'light')
+  }, [theme])
+  const toggleTheme = () => setTheme((t) => (t === 'light' ? 'dark' : 'light'))
 
   // ---- keyboard: ⌘K palette, Escape closes overlays ----
   useEffect(() => {
@@ -480,12 +521,22 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       .sort((a, b) => b.modTime - a.modTime)
   }, [entries, selectedDir, typeFilter, statusFilter, activeTags, inDir])
 
+  // All client-side navigation goes through goto so the filter query string
+  // survives — switching notes must not drop an active folder/tag filter.
+  const goto = useCallback(
+    (pathname: string, replace = false) => {
+      const search = searchParams.toString()
+      navigate({ pathname, search: search ? `?${search}` : '' }, { replace })
+    },
+    [navigate, searchParams],
+  )
+
   const openNote = useCallback(
     (path: string) => {
       setPaletteOpen(false)
-      navigate(`/n/${path}`)
+      goto(`/n/${path}`)
     },
-    [navigate],
+    [goto],
   )
 
   const createNote = async (inDir?: string) => {
@@ -513,7 +564,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.moveNote(from, to)
         await refresh()
-        if (from === selectedPath) navigate(`/n/${to}`, { replace: true })
+        if (from === selectedPath) goto(`/n/${to}`, true)
         showToast(`Moved to ${dir.split('/').pop()}`)
       } catch (err) {
         if (!(err instanceof AuthError)) showToast('Move failed', 'danger')
@@ -522,7 +573,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         setDropDir(null)
       }
     },
-    [api, refresh, selectedPath, navigate, showToast],
+    [api, refresh, selectedPath, goto, showToast],
   )
 
   const renameNote = useCallback(
@@ -535,13 +586,13 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.moveNote(from, to)
         await refresh()
-        if (from === selectedPath) navigate(`/n/${to}`, { replace: true })
+        if (from === selectedPath) goto(`/n/${to}`, true)
         showToast('Renamed')
       } catch (err) {
         if (!(err instanceof AuthError)) showToast('Rename failed', 'danger')
       }
     },
-    [api, refresh, selectedPath, navigate, showToast],
+    [api, refresh, selectedPath, goto, showToast],
   )
 
   const deleteNote = useCallback(
@@ -549,13 +600,13 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.deleteNote(path)
         await refresh()
-        if (path === selectedPath) navigate('/', { replace: true })
+        if (path === selectedPath) goto('/', true)
         showToast('Note deleted', 'danger')
       } catch (err) {
         if (!(err instanceof AuthError)) showToast('Delete failed', 'danger')
       }
     },
-    [api, refresh, selectedPath, navigate, showToast],
+    [api, refresh, selectedPath, goto, showToast],
   )
 
   const deleteFolder = useCallback(
@@ -564,14 +615,22 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         const r = await api.deleteFolder(dir)
         await refresh()
-        if (selectedPath === dir || selectedPath.startsWith(dir + '/')) navigate('/', { replace: true })
-        if (selectedDir === dir || selectedDir.startsWith(dir + '/')) setSelectedDir('')
+        // One history operation: drop the dir filter and leave the open note
+        // together when both pointed inside the deleted folder.
+        const inside = (p: string) => p === dir || p.startsWith(dir + '/')
+        const next = new URLSearchParams(searchParams)
+        if (inside(selectedDir)) next.delete('dir')
+        if (inside(selectedPath)) {
+          navigate({ pathname: '/', search: next.toString() ? `?${next}` : '' }, { replace: true })
+        } else if (inside(selectedDir)) {
+          setSearchParams(next, { replace: true })
+        }
         showToast(`Folder deleted${r.notes ? ` · ${r.notes} note${r.notes === 1 ? '' : 's'}` : ''}`, 'danger')
       } catch (err) {
         if (!(err instanceof AuthError)) showToast('Could not delete folder', 'danger')
       }
     },
-    [api, refresh, selectedPath, selectedDir, navigate, showToast],
+    [api, refresh, selectedPath, selectedDir, searchParams, setSearchParams, navigate, showToast],
   )
 
   const addFolder = useCallback(
@@ -590,7 +649,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         if (!(err instanceof AuthError)) showToast('Could not create folder', 'danger')
       }
     },
-    [api, refresh, selectedDir, showToast],
+    [api, refresh, selectedDir, setSelectedDir, setProjectsOpen, showToast],
   )
 
   return (
@@ -672,7 +731,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onRename={renameNote}
           onDelete={deleteNote}
           onOpenPalette={() => setPaletteOpen(true)}
-          onBack={() => navigate('/')}
+          onBack={() => goto('/')}
           showToast={showToast}
         />
       </div>
@@ -979,9 +1038,10 @@ function TreePanel({
   } | null>(null)
 
   // Tag filter state: the query narrows by name; the list caps at TAG_LIMIT
-  // until expanded (searching always shows every match).
+  // until expanded (searching always shows every match). The expansion is a
+  // sticky preference; the query is per-visit.
   const [tagQuery, setTagQuery] = useState('')
-  const [tagsExpanded, setTagsExpanded] = useState(false)
+  const [tagsExpanded, setTagsExpanded] = usePersistedState('vellum_tags_expanded', false)
 
   const dropProps = (dir: string) => ({
     onDragOver: (e: React.DragEvent) => {
@@ -1511,7 +1571,10 @@ function EditorPanel({
   const [draft, setDraft] = useState('')
   const [titleDraft, setTitleDraft] = useState('')
   const [etag, setEtag] = useState('')
-  const [mode, setMode] = useState<ViewMode>('split')
+  // The view mode is a sticky global preference: the panel remounts per note
+  // (key={path}), so plain state would snap back to split on every switch.
+  const [rawMode, setMode] = usePersistedState<ViewMode>('vellum_editor_mode', 'split')
+  const mode: ViewMode = rawMode === 'edit' || rawMode === 'preview' ? rawMode : 'split'
   const [conflict, setConflict] = useState<{ content: string; etag: string } | null>(null)
   const [statusMenu, setStatusMenu] = useState(false)
   const [moveMenu, setMoveMenu] = useState(false)
@@ -1585,6 +1648,43 @@ function EditorPanel({
       window.removeEventListener('focus', onFocus)
     }
   }, [api, path])
+
+  // The autosave debounce (1 s) leaves a window where a refresh or tab close
+  // eats the last keystrokes. When the page hides, flush the dirty draft with
+  // a keepalive request that outlives the page. flushedRef dedupes the two
+  // events (visibilitychange + pagehide) firing for the same content — a
+  // second PUT would carry a stale etag and manufacture a conflict.
+  const flushedRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!path) return
+    const flush = () => {
+      const { note: cur, draft: d, etag: tag } = liveRef.current
+      if (!cur || d === cur.content || flushedRef.current === d) return
+      flushedRef.current = d
+      window.clearTimeout(saveTimer.current)
+      api
+        .putNote(path, d, tag, { keepalive: true })
+        .then((newTag) => {
+          setEtag(newTag)
+          setNote((c) => (c ? { ...c, content: d, hash: newTag } : c))
+          onSavingChange(false)
+        })
+        .catch(() => {
+          // Conflict or network loss — if the page survives, the regular
+          // save/revalidation flow picks the draft up again.
+          flushedRef.current = null
+        })
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    window.addEventListener('pagehide', flush)
+    document.addEventListener('visibilitychange', onVisibility)
+    return () => {
+      window.removeEventListener('pagehide', flush)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }, [api, path, onSavingChange])
 
   const save = useCallback(
     async (content: string, ifMatch: string) => {
