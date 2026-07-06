@@ -123,6 +123,46 @@ func TestToolSurface(t *testing.T) {
 	}
 }
 
+func TestToolAnnotationsAndTitles(t *testing.T) {
+	s := newSession(t, func(d *Deps) { d.Curator = true })
+	res, err := s.ListTools(context.Background(), &mcp.ListToolsParams{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	readOnly := map[string]bool{
+		"list_notes": true, "read_note": true, "search_notes": true,
+		"list_tags": true, "get_backlinks": true, "list_tasks": true,
+		"suggest_location": true, "suggest_tags": true, "suggest_links": true,
+		"find_untagged": true, "find_orphans": true, "find_inbox_stale": true,
+	}
+	// Destructive = can discard existing note content; metadata-only,
+	// reversible edits (tags, status, move) stay non-destructive.
+	destructive := map[string]bool{"write_note": true, "patch_note": true, "delete_note": true}
+
+	for _, tool := range res.Tools {
+		if tool.Title == "" {
+			t.Errorf("%s: missing title", tool.Name)
+		}
+		a := tool.Annotations
+		if a == nil {
+			t.Errorf("%s: missing annotations", tool.Name)
+			continue
+		}
+		if a.ReadOnlyHint != readOnly[tool.Name] {
+			t.Errorf("%s: readOnlyHint = %v, want %v", tool.Name, a.ReadOnlyHint, readOnly[tool.Name])
+		}
+		if a.OpenWorldHint == nil || *a.OpenWorldHint {
+			t.Errorf("%s: openWorldHint must be false — the vault is a closed world", tool.Name)
+		}
+		if !readOnly[tool.Name] {
+			if a.DestructiveHint == nil || *a.DestructiveHint != destructive[tool.Name] {
+				t.Errorf("%s: destructiveHint = %v, want %v", tool.Name, a.DestructiveHint, destructive[tool.Name])
+			}
+		}
+	}
+}
+
 func TestCuratorToolsBehindFlag(t *testing.T) {
 	// Off by default: no curator tools.
 	s := newSession(t)

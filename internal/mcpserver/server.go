@@ -36,12 +36,67 @@ func New(d Deps) *mcp.Server {
 		Icons: []mcp.Icon{
 			{Source: vellumIconDataURI(), MIMEType: "image/svg+xml", Sizes: []string{"any"}},
 		},
-	}, nil)
+	}, &mcp.ServerOptions{
+		Instructions: instructions(d),
+		// The empty Capabilities drops the SDK's historical `logging` default
+		// (vellum never emits log messages); tools and resources — including
+		// resources.subscribe — are still inferred from what is registered.
+		Capabilities:       &mcp.ServerCapabilities{},
+		SubscribeHandler:   subscribeNote,
+		UnsubscribeHandler: func(context.Context, *mcp.UnsubscribeRequest) error { return nil },
+	})
 	registerTools(server, d)
 	if d.Curator {
 		registerCuratorTools(server, d)
 	}
+	registerResources(server, d)
 	return server
+}
+
+// instructions is the server-info guide agents read once per session. It
+// carries the vault conventions a model cannot infer from tool schemas.
+func instructions(d Deps) string {
+	s := `vellum is a personal markdown vault. Notes are vault-relative .md paths like projects/x/note.md.
+
+- New unclassified content: call write_note without a path — it lands in the inbox and the resolved path is returned. Don't invent folder structure; check list_notes first.
+- Edits: prefer patch_note / append_to_note / prepend_to_note over rewriting whole notes. Every write returns the note's content hash — pass it as expected_hash on the next edit of the same note for conflict-safe updates; after a hash-mismatch error, read_note again and retry.
+- search_notes is case-, diacritics- and typo-insensitive; tags act as an AND-filter, and an empty query with tags is a pure tag filter.
+- Notes connect via [[wikilinks]]; move_note keeps backlinks resolving. get_backlinks shows both directions.
+- Tasks are notes with status frontmatter: set_status / list_tasks use backlog | in-progress | done.
+- Notes are also exposed as MCP resources (vellum://note/{path}); subscribe to one to receive resources/updated notifications when it changes.`
+	if d.Curator {
+		s += "\n- Curator tools (suggest_*, find_*) return ranked context only — nothing moves automatically. Read the suggestions, decide, then act via the write/move/tag tools."
+	}
+	return s
+}
+
+// hintFalse gives the *bool annotation fields an address.
+var hintFalse = false
+
+// readTool describes a tool that never modifies the vault. All vellum tools
+// are closed-world: they touch nothing beyond the vault directory.
+func readTool(name, title, desc string) *mcp.Tool {
+	return &mcp.Tool{
+		Name: name, Title: title, Description: desc,
+		Annotations: &mcp.ToolAnnotations{ReadOnlyHint: true, OpenWorldHint: &hintFalse},
+	}
+}
+
+// editTool describes a vault mutation. destructive marks tools that can
+// discard existing note content (delete, whole-note or section replace);
+// metadata-only edits that are trivially reversible (tags, status) stay
+// non-destructive. idempotent marks calls whose repetition leaves the
+// vault as the first call left it.
+func editTool(name, title, desc string, destructive, idempotent bool) *mcp.Tool {
+	d := destructive
+	return &mcp.Tool{
+		Name: name, Title: title, Description: desc,
+		Annotations: &mcp.ToolAnnotations{
+			DestructiveHint: &d,
+			IdempotentHint:  idempotent,
+			OpenWorldHint:   &hintFalse,
+		},
+	}
 }
 
 // Handler wraps the Streamable HTTP transport for mounting at /mcp.
@@ -175,10 +230,9 @@ func registerTools(s *mcp.Server, d Deps) {
 		return ""
 	}
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "list_notes",
-		Description: "List markdown notes in the vault (optionally recursive).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in listNotesIn) (*mcp.CallToolResult, listNotesOut, error) {
+	mcp.AddTool(s, readTool("list_notes", "List notes",
+		"List markdown notes in the vault (optionally recursive).",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in listNotesIn) (*mcp.CallToolResult, listNotesOut, error) {
 		notes, err := d.Vault.List(in.Dir, in.Recursive)
 		if err != nil {
 			return nil, listNotesOut{}, err
@@ -186,10 +240,9 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, listNotesOut{Notes: notes}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "read_note",
-		Description: "Read a note: content, frontmatter, tags, links and the content hash used for conflict-safe edits.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in readNoteIn) (*mcp.CallToolResult, *vault.Note, error) {
+	mcp.AddTool(s, readTool("read_note", "Read note",
+		"Read a note: content, frontmatter, tags, links and the content hash used for conflict-safe edits.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in readNoteIn) (*mcp.CallToolResult, *vault.Note, error) {
 		note, err := d.Vault.Read(in.Path)
 		if err != nil {
 			return nil, nil, err
@@ -197,10 +250,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, note, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "write_note",
-		Description: "Create or replace a note. Without a path (or with a bare filename) the note lands in the inbox; the resolved path is returned. Pass expected_hash to update safely.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in writeNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
+	mcp.AddTool(s, editTool("write_note", "Write note",
+		"Create or replace a note. Without a path (or with a bare filename) the note lands in the inbox; the resolved path is returned. Pass expected_hash to update safely.",
+		true, true, // overwrite replaces the whole note; same content, same result
+	), func(ctx context.Context, req *mcp.CallToolRequest, in writeNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
 		path, err := d.Vault.ResolveWritePath(in.Path, in.Content, d.Structure)
 		if err != nil {
 			return nil, writeNoteOut{}, err
@@ -215,10 +268,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, writeNoteOut{Path: path, Hash: rehash(path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "patch_note",
-		Description: "Replace the content under one heading, leaving the rest of the note untouched.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in patchNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
+	mcp.AddTool(s, editTool("patch_note", "Patch section",
+		"Replace the content under one heading, leaving the rest of the note untouched.",
+		true, true, // discards the section's previous content
+	), func(ctx context.Context, req *mcp.CallToolRequest, in patchNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
 		if err := d.Vault.Patch(in.Path, in.Section, in.Content, in.ExpectedHash); err != nil {
 			return nil, writeNoteOut{}, err
 		}
@@ -226,10 +279,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, writeNoteOut{Path: in.Path, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "append_to_note",
-		Description: "Append markdown to the end of a note.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in editNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
+	mcp.AddTool(s, editTool("append_to_note", "Append to note",
+		"Append markdown to the end of a note.",
+		false, false, // purely additive; appending twice duplicates
+	), func(ctx context.Context, req *mcp.CallToolRequest, in editNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
 		if err := d.Vault.Append(in.Path, in.Content, in.ExpectedHash); err != nil {
 			return nil, writeNoteOut{}, err
 		}
@@ -237,10 +290,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, writeNoteOut{Path: in.Path, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "prepend_to_note",
-		Description: "Insert markdown at the top of a note's body (after frontmatter).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in editNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
+	mcp.AddTool(s, editTool("prepend_to_note", "Prepend to note",
+		"Insert markdown at the top of a note's body (after frontmatter).",
+		false, false,
+	), func(ctx context.Context, req *mcp.CallToolRequest, in editNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
 		if err := d.Vault.Prepend(in.Path, in.Content, in.ExpectedHash); err != nil {
 			return nil, writeNoteOut{}, err
 		}
@@ -248,10 +301,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, writeNoteOut{Path: in.Path, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "delete_note",
-		Description: "Delete a note.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in deleteNoteIn) (*mcp.CallToolResult, deleteNoteOut, error) {
+	mcp.AddTool(s, editTool("delete_note", "Delete note",
+		"Delete a note.",
+		true, true,
+	), func(ctx context.Context, req *mcp.CallToolRequest, in deleteNoteIn) (*mcp.CallToolResult, deleteNoteOut, error) {
 		if err := d.Vault.Delete(in.Path); err != nil {
 			return nil, deleteNoteOut{}, err
 		}
@@ -259,10 +312,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, deleteNoteOut{Deleted: in.Path}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "move_note",
-		Description: "Move or rename a note. Backlink resolution follows the new location.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in moveNoteIn) (*mcp.CallToolResult, moveNoteOut, error) {
+	mcp.AddTool(s, editTool("move_note", "Move note",
+		"Move or rename a note. Backlink resolution follows the new location.",
+		false, false, // refuses existing targets, so content is never lost
+	), func(ctx context.Context, req *mcp.CallToolRequest, in moveNoteIn) (*mcp.CallToolResult, moveNoteOut, error) {
 		if err := d.Vault.Move(in.From, in.To); err != nil {
 			return nil, moveNoteOut{}, err
 		}
@@ -270,10 +323,9 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, moveNoteOut(in), nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "search_notes",
-		Description: "Ranked full-text search (title > tag > path > body), case-, diacritics- and typo-insensitive, with optional tag AND-filter and directory scope. Returns snippets with context; empty query lists notes matching the filters.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in searchNotesIn) (*mcp.CallToolResult, searchNotesOut, error) {
+	mcp.AddTool(s, readTool("search_notes", "Search vault",
+		"Ranked full-text search (title > tag > path > body), case-, diacritics- and typo-insensitive, with optional tag AND-filter and directory scope. Returns snippets with context; empty query lists notes matching the filters.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in searchNotesIn) (*mcp.CallToolResult, searchNotesOut, error) {
 		results, err := d.Searcher.Search(in.Query, vault.SearchOpts{
 			Tags:       in.Tags,
 			Dir:        in.Dir,
@@ -286,17 +338,16 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, searchNotesOut{Results: results}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "list_tags",
-		Description: "List all tags in the vault with note counts.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, listTagsOut, error) {
+	mcp.AddTool(s, readTool("list_tags", "List tags",
+		"List all tags in the vault with note counts.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, listTagsOut, error) {
 		return nil, listTagsOut{Tags: d.Index.Tags()}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "add_tags",
-		Description: "Add tags to a note's frontmatter.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
+	mcp.AddTool(s, editTool("add_tags", "Add tags",
+		"Add tags to a note's frontmatter.",
+		false, true,
+	), func(ctx context.Context, req *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
 		tags, err := d.Vault.AddTags(in.Path, in.Tags, in.ExpectedHash)
 		if err != nil {
 			return nil, tagsOut{}, err
@@ -305,10 +356,10 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, tagsOut{Path: in.Path, Tags: tags, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "remove_tags",
-		Description: "Remove tags from a note's frontmatter (inline #tags in the body are left alone).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
+	mcp.AddTool(s, editTool("remove_tags", "Remove tags",
+		"Remove tags from a note's frontmatter (inline #tags in the body are left alone).",
+		false, true, // metadata-only and reversible via add_tags
+	), func(ctx context.Context, req *mcp.CallToolRequest, in tagsIn) (*mcp.CallToolResult, tagsOut, error) {
 		tags, err := d.Vault.RemoveTags(in.Path, in.Tags, in.ExpectedHash)
 		if err != nil {
 			return nil, tagsOut{}, err
@@ -317,20 +368,19 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, tagsOut{Path: in.Path, Tags: tags, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "get_backlinks",
-		Description: "Notes linking to this note (backlinks) and its outgoing resolved links.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in backlinksIn) (*mcp.CallToolResult, backlinksOut, error) {
+	mcp.AddTool(s, readTool("get_backlinks", "Get backlinks",
+		"Notes linking to this note (backlinks) and its outgoing resolved links.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in backlinksIn) (*mcp.CallToolResult, backlinksOut, error) {
 		return nil, backlinksOut{
 			Backlinks: d.Index.Backlinks(in.Path),
 			Links:     d.Index.Links(in.Path),
 		}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "set_status",
-		Description: "Mark a note as a task with status backlog | in-progress | done. Only the status/type frontmatter lines change.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in setStatusIn) (*mcp.CallToolResult, setStatusOut, error) {
+	mcp.AddTool(s, editTool("set_status", "Set task status",
+		"Mark a note as a task with status backlog | in-progress | done. Only the status/type frontmatter lines change.",
+		false, true,
+	), func(ctx context.Context, req *mcp.CallToolRequest, in setStatusIn) (*mcp.CallToolResult, setStatusOut, error) {
 		if err := d.Vault.SetStatus(in.Path, in.Status, in.ExpectedHash); err != nil {
 			return nil, setStatusOut{}, err
 		}
@@ -338,10 +388,9 @@ func registerTools(s *mcp.Server, d Deps) {
 		return nil, setStatusOut{Path: in.Path, Status: in.Status, Hash: rehash(in.Path)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "list_tasks",
-		Description: "List task notes, optionally filtered by status and project folder.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in listTasksIn) (*mcp.CallToolResult, listTasksOut, error) {
+	mcp.AddTool(s, readTool("list_tasks", "List tasks",
+		"List task notes, optionally filtered by status and project folder.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in listTasksIn) (*mcp.CallToolResult, listTasksOut, error) {
 		if in.Status != "" && !vault.ValidStatus(in.Status) {
 			return nil, listTasksOut{}, vault.ErrInvalidPath
 		}

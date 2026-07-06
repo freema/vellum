@@ -116,6 +116,43 @@ func TestIndexIncrementalUpdate(t *testing.T) {
 	}
 }
 
+func TestIndexOnChange(t *testing.T) {
+	v, ix := buildTestIndex(t) // Build must not have emitted anything
+
+	var got []Change
+	ix.OnChange(func(c Change) { got = append(got, c) })
+
+	mustWrite(t, v, "inbox/fresh.md", "# Fresh\n")
+	if err := ix.Update("inbox/fresh.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Move("inbox/fresh.md", "notes/fresh.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := ix.Rename("inbox/fresh.md", "notes/fresh.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := v.Delete("notes/fresh.md"); err != nil {
+		t.Fatal(err)
+	}
+	ix.Remove("notes/fresh.md")
+	// Update of a path that vanished from disk degrades to a removal.
+	if err := ix.Update("notes/fresh.md"); err != nil {
+		t.Fatal(err)
+	}
+
+	want := []Change{
+		{Path: "inbox/fresh.md"},                // Update
+		{Path: "inbox/fresh.md", Deleted: true}, // Rename: old path
+		{Path: "notes/fresh.md"},                // Rename: new path
+		{Path: "notes/fresh.md", Deleted: true}, // Remove
+		{Path: "notes/fresh.md", Deleted: true}, // Update -> ErrNotFound -> Remove
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("changes = %+v\nwant %+v", got, want)
+	}
+}
+
 func TestIndexRenameReresolvesWikilinks(t *testing.T) {
 	v, ix := buildTestIndex(t)
 

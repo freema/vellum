@@ -42,17 +42,15 @@ type inboxStaleIn struct {
 }
 
 func registerCuratorTools(s *mcp.Server, d Deps) {
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "suggest_location",
-		Description: "Rank existing vault folders for new content by tag overlap. Returns candidates with reasons; the agent decides.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in suggestLocationIn) (*mcp.CallToolResult, suggestLocationOut, error) {
+	mcp.AddTool(s, readTool("suggest_location", "Suggest location",
+		"Rank existing vault folders for new content by tag overlap. Returns candidates with reasons; the agent decides.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in suggestLocationIn) (*mcp.CallToolResult, suggestLocationOut, error) {
 		return nil, suggestLocationOut{Suggestions: d.Index.SuggestLocation(in.Content, d.Structure)}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "suggest_tags",
-		Description: "Context for tagging a note: excerpt, current tags, the vault tag vocabulary and tags of linked notes.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in notePathIn) (*mcp.CallToolResult, *vault.TagsContext, error) {
+	mcp.AddTool(s, readTool("suggest_tags", "Suggest tags",
+		"Context for tagging a note: excerpt, current tags, the vault tag vocabulary and tags of linked notes.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in notePathIn) (*mcp.CallToolResult, *vault.TagsContext, error) {
 		tc, err := d.Index.SuggestTags(d.Vault, in.Path)
 		if err != nil {
 			return nil, nil, err
@@ -60,10 +58,9 @@ func registerCuratorTools(s *mcp.Server, d Deps) {
 		return nil, tc, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "suggest_links",
-		Description: "Link candidates for a note: unreciprocated backlinks, title mentions, shared tags — each with a reason.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in notePathIn) (*mcp.CallToolResult, suggestLinksOut, error) {
+	mcp.AddTool(s, readTool("suggest_links", "Suggest links",
+		"Link candidates for a note: unreciprocated backlinks, title mentions, shared tags — each with a reason.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in notePathIn) (*mcp.CallToolResult, suggestLinksOut, error) {
 		cands, err := d.Index.SuggestLinks(d.Vault, in.Path)
 		if err != nil {
 			return nil, suggestLinksOut{}, err
@@ -71,24 +68,21 @@ func registerCuratorTools(s *mcp.Server, d Deps) {
 		return nil, suggestLinksOut{Candidates: cands}, nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "find_untagged",
-		Description: "Notes without any tags (from the metadata index).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, findOut, error) {
+	mcp.AddTool(s, readTool("find_untagged", "Find untagged notes",
+		"Notes without any tags (from the metadata index).",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, findOut, error) {
 		return nil, toFindOut(d.Index.FindUntagged()), nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "find_orphans",
-		Description: "Notes with no links in either direction (from the link graph).",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, findOut, error) {
+	mcp.AddTool(s, readTool("find_orphans", "Find orphan notes",
+		"Notes with no links in either direction (from the link graph).",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in struct{}) (*mcp.CallToolResult, findOut, error) {
 		return nil, toFindOut(d.Index.FindOrphans()), nil
 	})
 
-	mcp.AddTool(s, &mcp.Tool{
-		Name:        "find_inbox_stale",
-		Description: "Inbox notes that have been sitting untouched (default 14 days), oldest first.",
-	}, func(ctx context.Context, req *mcp.CallToolRequest, in inboxStaleIn) (*mcp.CallToolResult, findOut, error) {
+	mcp.AddTool(s, readTool("find_inbox_stale", "Find stale inbox notes",
+		"Inbox notes that have been sitting untouched (default 14 days), oldest first.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in inboxStaleIn) (*mcp.CallToolResult, findOut, error) {
 		days := in.Days
 		if days <= 0 {
 			days = 14

@@ -35,6 +35,33 @@ type Index struct {
 	tags      map[string]map[string]bool // tag -> set of paths
 	forward   map[string]map[string]bool // path -> set of resolved targets
 	backlinks map[string]map[string]bool // path -> set of paths linking to it
+	observers []func(Change)
+}
+
+// Change is one incremental index mutation, published to OnChange observers.
+// A rename arrives as two changes: the old path deleted, the new one updated.
+type Change struct {
+	Path    string
+	Deleted bool
+}
+
+// OnChange registers an observer called after every incremental mutation
+// (Update/Remove/Rename). Build does not emit — it runs once at startup,
+// before observers exist. Observers run synchronously outside the index
+// lock, so they may read the index but must not block for long.
+func (ix *Index) OnChange(fn func(Change)) {
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+	ix.observers = append(ix.observers, fn)
+}
+
+func (ix *Index) emit(c Change) {
+	ix.mu.RLock()
+	observers := ix.observers
+	ix.mu.RUnlock()
+	for _, fn := range observers {
+		fn(c)
+	}
 }
 
 // NewIndex creates an empty index bound to a vault. Call Build to populate.
@@ -154,18 +181,20 @@ func (ix *Index) Update(path string) error {
 		return err
 	}
 	ix.mu.Lock()
-	defer ix.mu.Unlock()
 	ix.entries[entry.Path] = entry
 	ix.rebuildDerived()
+	ix.mu.Unlock()
+	ix.emit(Change{Path: entry.Path})
 	return nil
 }
 
 // Remove drops a note from the index (after Delete).
 func (ix *Index) Remove(path string) {
 	ix.mu.Lock()
-	defer ix.mu.Unlock()
 	delete(ix.entries, path)
 	ix.rebuildDerived()
+	ix.mu.Unlock()
+	ix.emit(Change{Path: path, Deleted: true})
 }
 
 // Rename moves an entry (after Move) without re-reading unaffected files.
@@ -173,6 +202,7 @@ func (ix *Index) Rename(from, to string) error {
 	ix.mu.Lock()
 	delete(ix.entries, from)
 	ix.mu.Unlock()
+	ix.emit(Change{Path: from, Deleted: true})
 	return ix.Update(to)
 }
 
