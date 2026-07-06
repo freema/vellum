@@ -6,6 +6,55 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.0] — 2026-07-06
+
+MCP resources & subscriptions, tool annotations, and a workspace that
+remembers its view.
+
+### Added
+- **Notes are MCP resources.** Every note is listed as a resource
+  (`vellum://note/{path}`, `text/markdown`) with a URI template for
+  arbitrary paths, so MCP clients can attach notes as context without a
+  tool call. Clients can **subscribe** to a note and receive
+  `notifications/resources/updated` whenever it changes — through any door
+  (MCP tools or the web editor). The resource list re-announces only on
+  create/delete/title change, not on every keystroke autosave.
+- **Tool annotations and titles.** All 21 tools now carry
+  `readOnlyHint` / `destructiveHint` / `idempotentHint` /
+  `openWorldHint: false` plus a human-readable title, so clients can
+  auto-allow reads and warn only on genuinely destructive calls
+  (`delete_note`, `write_note` overwrite, `patch_note`).
+- **Server instructions.** The MCP handshake now includes a short guide to
+  the vault conventions (inbox flow, `expected_hash` concurrency,
+  wikilinks, task statuses, resource URIs) — agents no longer have to
+  discover them by trial and error.
+- **Filters live in the URL.** The selected folder, active tags and the
+  type/status filters persist as query parameters
+  (`?dir=…&tags=a,b&type=task&status=done`): a refresh keeps the view and
+  a filtered view can be bookmarked or shared. Opening notes keeps the
+  filters; Back still steps between notes, not filter clicks.
+- **UI preferences survive a refresh.** Theme (initialised from the OS
+  `prefers-color-scheme`, applied before first paint — no white flash),
+  the editor view mode (edit/split/preview, now also stable across note
+  switches), the Projects group expansion and the tag-list "Show all"
+  state are stored in `localStorage`.
+
+### Fixed
+- **The last second of typing no longer dies with the tab.** Autosave is
+  debounced at 1 s; a refresh or tab close inside that window used to drop
+  the keystrokes. The dirty draft is now flushed with a `keepalive`
+  request when the page hides.
+- The MCP server no longer advertises the `logging` capability it never
+  used.
+
+### Docs
+- New [docs/mcp.md](docs/mcp.md) — the full MCP reference (transports,
+  handshake, every tool with annotations, resources, subscriptions,
+  client setup) — and [docs/workspace.md](docs/workspace.md) — the web
+  UI reference (URL scheme, storage keys, autosave/conflict/flush,
+  self-sync). The e2e checklist gained persistence & resources
+  scenarios.
+
 ## [1.8.0] — 2026-07-06
 
 Synced from the updated Claude Design "Vellum Workspace" project.
@@ -283,6 +332,7 @@ First stable release.
   Actions CI and multi-arch release to GHCR, Taskfile.
 
 [Unreleased]: https://github.com/freema/vellum/compare/v1.8.0...HEAD
+[1.9.0]: https://github.com/freema/vellum/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/freema/vellum/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/freema/vellum/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/freema/vellum/compare/v1.5.0...v1.6.0
