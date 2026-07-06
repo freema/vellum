@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"unicode/utf8"
 )
 
 // Entry is the indexed metadata of a single note. Raw link targets are kept
@@ -128,7 +129,13 @@ func excerptOf(body string) string {
 			continue
 		}
 		if len(line) > 160 {
-			return line[:160] + "…"
+			// Cut on a rune boundary — a byte slice through the middle of a
+			// multi-byte character (č, ř, …) renders as U+FFFD in the UI.
+			cut := 160
+			for cut > 0 && !utf8.RuneStart(line[cut]) {
+				cut--
+			}
+			return line[:cut] + "…"
 		}
 		return line
 	}

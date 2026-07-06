@@ -3,8 +3,10 @@ package vault
 import (
 	"fmt"
 	"reflect"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func buildTestIndex(t *testing.T) (*Vault, *Index) {
@@ -157,6 +159,33 @@ func TestIndexPathWikilink(t *testing.T) {
 	}
 	if got := ix.Links("linker.md"); !reflect.DeepEqual(got, []string{"projects/x/deep.md"}) {
 		t.Errorf("path wikilink resolved to %v", got)
+	}
+}
+
+func TestExcerptRuneSafeTruncation(t *testing.T) {
+	// A long Czech line whose 160th byte lands inside a multi-byte rune — the
+	// excerpt must cut on a rune boundary, never producing U+FFFD in the UI.
+	long := strings.Repeat("cache a session anti-cheat běží přes middleware ", 8)
+	got := excerptOf(long)
+	if !utf8.ValidString(got) {
+		t.Fatalf("excerpt is not valid UTF-8: %q", got)
+	}
+	if strings.ContainsRune(got, utf8.RuneError) {
+		t.Fatalf("excerpt contains U+FFFD: %q", got)
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("long excerpt should end with an ellipsis: %q", got)
+	}
+	if len(got) > 160+len("…") {
+		t.Errorf("excerpt too long: %d bytes", len(got))
+	}
+	// Sweep the cut point across every offset of a multi-byte run for good
+	// measure — padding with i ASCII bytes shifts which byte position 160 hits.
+	for i := 0; i < 4; i++ {
+		s := strings.Repeat("x", 150+i) + " řěščřžýáíé"
+		if e := excerptOf(s); !utf8.ValidString(e) || strings.ContainsRune(e, utf8.RuneError) {
+			t.Errorf("pad %d: invalid excerpt %q", i, e)
+		}
 	}
 }
 
