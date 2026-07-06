@@ -118,6 +118,12 @@ export class AuthError extends Error {
   }
 }
 
+export class NotFoundError extends Error {
+  constructor(path: string) {
+    super(`not found: ${path}`)
+  }
+}
+
 const TOKEN_KEY = 'vellum_token'
 
 export class ApiClient {
@@ -126,6 +132,9 @@ export class ApiClient {
   private noteCache = new Map<string, Note>()
   private prefetching = new Set<string>()
   onAuthError?: () => void
+  /** Fired when the server looks down (network error or 502–504) — the
+   * workspace shows the reconnect overlay and polls /healthz. */
+  onUnavailable?: () => void
 
   constructor() {
     // Restore the session token so a page refresh doesn't force a re-login.
@@ -193,6 +202,10 @@ export class ApiClient {
     if (cached) headers['If-None-Match'] = `"${cached.hash}"`
     const res = await this.rawRequest('GET', `/api/notes/${encodePath(path)}`, undefined, headers)
     if (res.status === 304 && cached) return cached
+    if (res.status === 404) {
+      this.evictNotes(path, true) // deleted on the server — drop the stale copy
+      throw new NotFoundError(path)
+    }
     if (!res.ok) throw new Error(`GET note ${path}: ${res.status}`)
     const note = (await res.json()) as Note
     this.cacheNote(note)
@@ -333,7 +346,19 @@ export class ApiClient {
     headers: Record<string, string> = {},
   ): Promise<Response> {
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`
-    const res = await fetch(url, { method, body, headers })
+    let res: Response
+    try {
+      res = await fetch(url, { method, body, headers })
+    } catch (err) {
+      // fetch only rejects on network-level failure — the server (or the
+      // proxy in front of it) is down, most likely a deploy restart.
+      this.onUnavailable?.()
+      throw err
+    }
+    if (res.status >= 502 && res.status <= 504) {
+      this.onUnavailable?.()
+      throw new Error(`${method} ${url}: ${res.status}`)
+    }
     if (res.status === 401) {
       this.setToken(null)
       this.onAuthError?.()

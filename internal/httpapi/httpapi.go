@@ -96,7 +96,9 @@ func recoverAndReport(rec *activity.Recorder, next http.Handler) http.Handler {
 // back to index.html for client-side routing. A missing path that looks like a
 // static asset (its last segment has an extension) returns 404 instead of the
 // HTML shell — otherwise e.g. /favicon.ico would return HTML and MCP clients
-// could not discover a real icon.
+// could not discover a real icon. Client routes (/n/…, /wl/…) are exempt from
+// that heuristic: note deep links naturally end in .md and must load the app,
+// which then renders its own not-found state.
 //
 // Cache policy: Vite writes a content hash into every /assets/ filename, so
 // those are immutable — cache them for a year. Everything else (index.html,
@@ -105,7 +107,7 @@ func spaHandler(dist fs.FS) http.Handler {
 	fileServer := http.FileServerFS(dist)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		path := strings.TrimPrefix(r.URL.Path, "/")
-		if path != "" {
+		if path != "" && !spaRoute(path) {
 			if f, err := dist.Open(path); err == nil {
 				_ = f.Close()
 				if strings.HasPrefix(path, "assets/") {
@@ -121,13 +123,19 @@ func spaHandler(dist fs.FS) http.Handler {
 				base = path[i+1:]
 			}
 			if strings.Contains(base, ".") {
-				http.NotFound(w, r)
+				notFound(w, r)
 				return
 			}
 		}
 		w.Header().Set("Cache-Control", "no-cache")
 		http.ServeFileFS(w, r, dist, "index.html")
 	})
+}
+
+// spaRoute reports whether path (no leading slash) belongs to the SPA's
+// client-side router rather than the static file tree.
+func spaRoute(path string) bool {
+	return strings.HasPrefix(path, "n/") || strings.HasPrefix(path, "wl/")
 }
 
 // faviconHandler serves the vellum SVG mark for /favicon.ico so clients that
@@ -147,8 +155,9 @@ func faviconHandler(dist fs.FS) http.HandlerFunc {
 }
 
 // originCheck rejects browser cross-origin requests whose Origin is not
-// allowlisted. Same-origin requests (the embedded SPA) and non-browser
-// clients (no Origin header) are unaffected; authentication is separate.
+// allowlisted. Same-origin requests (the embedded SPA), loopback origins
+// (local tools like the MCP Inspector) and non-browser clients (no Origin
+// header) are unaffected; authentication is separate.
 func originCheck(allowed []string, next http.Handler) http.Handler {
 	set := map[string]bool{}
 	for _, o := range allowed {
@@ -156,7 +165,8 @@ func originCheck(allowed []string, next http.Handler) http.Handler {
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		origin := r.Header.Get("Origin")
-		if origin != "" && !set[origin] && !sameOrigin(origin, r.Host) {
+		if origin != "" && !set[origin] && !sameOrigin(origin, r.Host) &&
+			!auth.LoopbackOrigin(origin) {
 			http.Error(w, "origin not allowed", http.StatusForbidden)
 			return
 		}

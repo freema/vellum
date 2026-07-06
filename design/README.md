@@ -15,6 +15,7 @@ into CSS custom properties — see [`../DESIGN.md`](../DESIGN.md).
 | `Vellum-Design-System.dc.html` | 10 sections: color, type, buttons, inputs, tags & status, tree + note list, command palette, markdown preview, feedback (toast/modal/empty/status bar), midnight-ink dark mode |
 | `Vellum-Workspace.dc.html` | The main 1440×900 three-pane workspace — tree, note list, editor with markdown toolbar, move/rename/delete, status dropdown, command palette, help modal, onboarding tour, toasts |
 | `Vellum-Auth.dc.html` | 1a connect / login card · 1b OAuth authorize with tool selection & scopes |
+| `Vellum-Error-Pages.dc.html` | Error states — 404 not found, 410 note deleted, 403 forbidden, 500 vault error, 503 restarting/reconnecting |
 | `Vellum-Logo.dc.html` | Mark (folded leaf), wordmark, lockups, surfaces, favicons |
 | `support.js` | Claude-Design runtime — **do not edit** |
 

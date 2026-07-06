@@ -6,6 +6,7 @@ import {
   ApiClient,
   ConflictError,
   AuthError,
+  NotFoundError,
   relativeAge,
   type Note,
   type NoteEntry,
@@ -186,6 +187,57 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   useEffect(() => {
     void refresh()
   }, [refresh])
+
+  // Continuous vault scan: MCP clients write to the vault behind the SPA's
+  // back, so the tree/list silently re-syncs every 30 s and whenever the tab
+  // regains focus. The manual re-scan button stays for impatient moments.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (!document.hidden) void refresh()
+    }, 30_000)
+    const onFocus = () => void refresh()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      window.clearInterval(id)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [refresh])
+
+  // Server-down detection (deploy restart): any failed API call flips the
+  // reconnect overlay on; /healthz polling flips it back off.
+  const [offline, setOffline] = useState(false)
+  const [retryIn, setRetryIn] = useState(4)
+  useEffect(() => {
+    api.onUnavailable = () => setOffline(true)
+    return () => {
+      api.onUnavailable = undefined
+    }
+  }, [api])
+  const probeHealth = useCallback(async () => {
+    try {
+      const res = await fetch('/healthz')
+      if (res.ok) {
+        setOffline(false)
+        void refresh()
+        return true
+      }
+    } catch {
+      /* still down */
+    }
+    return false
+  }, [refresh])
+  useEffect(() => {
+    if (!offline) return
+    setRetryIn(4)
+    const id = window.setInterval(() => {
+      setRetryIn((s) => {
+        if (s > 1) return s - 1
+        void probeHealth()
+        return 4
+      })
+    }, 1000)
+    return () => window.clearInterval(id)
+  }, [offline, probeHealth])
 
   const showToast = useCallback((text: string, tone: 'ok' | 'danger' = 'ok') => {
     window.clearTimeout(toastTimer.current)
@@ -617,6 +669,8 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onMove={moveToDir}
           onRename={renameNote}
           onDelete={deleteNote}
+          onOpenPalette={() => setPaletteOpen(true)}
+          onBack={() => navigate('/')}
           showToast={showToast}
         />
       </div>
@@ -648,6 +702,28 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       </footer>
       {paletteOpen && (
         <PaletteOverlay api={api} onClose={() => setPaletteOpen(false)} onOpen={openNote} />
+      )}
+      {offline && (
+        <div className="ws-overlay-scrim">
+          <div className="ws-err ws-err--card">
+            <div className="ws-err__code ws-err__code--warn">503</div>
+            <div className="ws-err__label ws-err__label--warn">HTTP 503 · Unavailable</div>
+            <div className="ws-err__title">Vellum is restarting</div>
+            <div className="ws-err__body">
+              The server is coming back up after an update. This usually takes a few seconds — the
+              page will reconnect on its own.
+            </div>
+            <div className="ws-err__pill">
+              <span className="ws-err__pill-dot" />
+              retrying in {retryIn}s…
+            </div>
+            <div className="ws-err__actions">
+              <button className="v-btn v-btn--primary" onClick={() => void probeHealth()}>
+                Reconnect now
+              </button>
+            </div>
+          </div>
+        </div>
       )}
       {toast && (
         <div className="ws-toast">
@@ -1213,6 +1289,97 @@ const TOOLBAR: { icon?: IconName; label?: string; title: string; kind: FormatKin
   { icon: 'link', title: 'Link a note', kind: 'wiki' },
 ]
 
+/** Editor-pane error states per design/Vellum-Error-Pages.dc.html: a missing
+ * deep link (404), a note deleted while open (410) and a failed read (500). */
+function NoteErrorState({
+  kind,
+  path,
+  onOpenPalette,
+  onBack,
+  onRetry,
+}: {
+  kind: 'notfound' | 'gone' | 'error'
+  path: string
+  onOpenPalette: () => void
+  onBack: () => void
+  onRetry: () => void
+}) {
+  const dir = path.includes('/') ? path.slice(0, path.lastIndexOf('/') + 1) : ''
+  const searchBtn = (
+    <button className="v-btn v-btn--secondary" onClick={onOpenPalette}>
+      Search the vault ⌘K
+    </button>
+  )
+  const backBtn = (primary: boolean) => (
+    <button className={`v-btn ${primary ? 'v-btn--primary' : 'v-btn--secondary'}`} onClick={onBack}>
+      Back to inbox
+    </button>
+  )
+
+  if (kind === 'gone') {
+    return (
+      <div className="ws-err">
+        <div className="ws-err__glyph">⌫</div>
+        <div className="ws-err__label ws-err__label--danger">HTTP 410 · Gone</div>
+        <div className="ws-err__title">This note was deleted</div>
+        <div className="ws-err__body">
+          It was removed from the vault — by an agent or another editor — and is no longer
+          available.
+        </div>
+        <div className="ws-err__detail">
+          <s>{path}</s>
+        </div>
+        <div className="ws-err__actions">
+          {backBtn(true)}
+          {searchBtn}
+        </div>
+      </div>
+    )
+  }
+
+  if (kind === 'error') {
+    return (
+      <div className="ws-err">
+        <div className="ws-err__code ws-err__code--danger">500</div>
+        <div className="ws-err__label ws-err__label--danger">HTTP 500 · Server error</div>
+        <div className="ws-err__title">The vault couldn&apos;t be read</div>
+        <div className="ws-err__body">
+          Something broke while reading the note. Your files are safe — this is on the server. Try
+          again in a moment.
+        </div>
+        <div className="ws-err__actions">
+          <button className="v-btn v-btn--primary" onClick={onRetry}>
+            Retry
+          </button>
+          {backBtn(false)}
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="ws-err">
+      <div className="ws-err__code">404</div>
+      <div className="ws-err__label">HTTP 404 · Not found</div>
+      <div className="ws-err__title">No note lives here</div>
+      <div className="ws-err__body">
+        The path didn&apos;t resolve to anything in the vault. It may have been renamed or moved to
+        another folder.
+      </div>
+      <div className="ws-err__detail">
+        {dir}
+        <b>{basename(path)}</b>
+      </div>
+      <div className="ws-err__actions">
+        <button className="v-btn v-btn--primary" onClick={onOpenPalette}>
+          Search the vault ⌘K
+        </button>
+        {backBtn(false)}
+      </div>
+    </div>
+  )
+}
+
 function EditorPanel({
   api,
   path,
@@ -1222,6 +1389,8 @@ function EditorPanel({
   onMove,
   onRename,
   onDelete,
+  onOpenPalette,
+  onBack,
   showToast,
 }: {
   api: ApiClient
@@ -1232,10 +1401,14 @@ function EditorPanel({
   onMove: (from: string, dir: string) => void
   onRename: (from: string, name: string) => void
   onDelete: (path: string) => void
+  onOpenPalette: () => void
+  onBack: () => void
   showToast: (text: string, tone?: 'ok' | 'danger') => void
 }) {
   const [note, setNote] = useState<Note | null>(null)
   const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<'notfound' | 'gone' | 'error' | null>(null)
+  const [retryTick, setRetryTick] = useState(0)
   const [draft, setDraft] = useState('')
   const [titleDraft, setTitleDraft] = useState('')
   const [etag, setEtag] = useState('')
@@ -1246,11 +1419,18 @@ function EditorPanel({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
   const rawRef = useRef<HTMLTextAreaElement>(null)
+  // Latest note/draft/etag for the revalidation poll — reading state through a
+  // ref keeps the poll callback stable and out of the effect deps.
+  const liveRef = useRef({ note, draft, etag })
+  useEffect(() => {
+    liveRef.current = { note, draft, etag }
+  })
 
   useEffect(() => {
     if (!path) return
     let cancelled = false
     setLoading(true)
+    setLoadError(null)
     void api
       .getNote(path)
       .then((n) => {
@@ -1261,19 +1441,60 @@ function EditorPanel({
         setEtag(n.hash)
         onSavingChange(false)
       })
+      .catch((err) => {
+        if (cancelled || err instanceof AuthError) return
+        setLoadError(err instanceof NotFoundError ? 'notfound' : 'error')
+      })
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
     return () => {
       cancelled = true
     }
-  }, [api, path, onSavingChange])
+  }, [api, path, onSavingChange, retryTick])
+
+  // Keep the open note in sync with the vault: an MCP write shows up without a
+  // reload, an external delete switches to the "deleted" state. Local edits are
+  // never touched — a remote change only lands when the draft is clean (a dirty
+  // draft keeps the existing If-Match → conflict flow).
+  useEffect(() => {
+    if (!path) return
+    let alive = true
+    const revalidate = async () => {
+      const { note: cur } = liveRef.current
+      if (!cur || document.hidden) return
+      try {
+        const n = await api.getNote(path) // cached + If-None-Match → cheap 304
+        if (!alive) return
+        setLoadError((e) => (e === 'gone' ? null : e)) // recreated meanwhile
+        const { note: still, draft: d } = liveRef.current
+        if (!still || n.hash === still.hash || d !== still.content) return
+        setNote(n)
+        setDraft(n.content)
+        setTitleDraft(n.title)
+        setEtag(n.hash)
+      } catch (err) {
+        if (alive && err instanceof NotFoundError) setLoadError('gone')
+      }
+    }
+    const id = window.setInterval(() => void revalidate(), 20000)
+    const onFocus = () => void revalidate()
+    window.addEventListener('focus', onFocus)
+    return () => {
+      alive = false
+      window.clearInterval(id)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [api, path])
 
   const save = useCallback(
     async (content: string, ifMatch: string) => {
       try {
         const newTag = await api.putNote(path, content, ifMatch)
         setEtag(newTag)
+        // Mirror the saved state into the note object — the revalidation poll
+        // compares against it to tell "clean draft" from "unsaved edits".
+        setNote((cur) => (cur ? { ...cur, content, hash: newTag } : cur))
         onSavingChange(false)
         onSaved()
       } catch (err) {
@@ -1352,6 +1573,20 @@ function EditorPanel({
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, etag, save])
+
+  if (path && loadError) {
+    return (
+      <main className="ws-editor">
+        <NoteErrorState
+          kind={loadError}
+          path={path}
+          onOpenPalette={onOpenPalette}
+          onBack={onBack}
+          onRetry={() => setRetryTick((t) => t + 1)}
+        />
+      </main>
+    )
+  }
 
   if (!path || !note) {
     return (

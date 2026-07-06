@@ -1578,3 +1578,126 @@
 }
 .ws-tree__row:hover .ws-tree__del { opacity: 1; }
 .ws-tree__del:hover { background: var(--danger-soft); color: var(--danger); }
+
+/* ---- error states (design/Vellum-Error-Pages.dc.html) ---- */
+/* Numeral tints and the retry pill reuse the closest tokens from the sheet
+   (line-chip / danger-border / highlight-bg) — no new colors invented. */
+.ws-err {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 48px 40px;
+}
+.ws-err__code {
+  font-family: var(--font-serif);
+  font-size: 92px;
+  font-weight: 500;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--line-chip);
+}
+.ws-err__code--danger { color: var(--danger-border); }
+.ws-err__code--warn { color: var(--highlight-bg); }
+.ws-err__glyph {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger-border);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 26px;
+  color: var(--danger);
+}
+.ws-err__label {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin: 22px 0 12px;
+}
+.ws-err__label--danger { color: var(--danger); }
+.ws-err__label--warn { color: var(--status-inprogress); }
+.ws-err__title {
+  font-family: var(--font-serif);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.ws-err__body {
+  font-size: 15px;
+  line-height: 1.65;
+  color: var(--ink-muted);
+  max-width: 430px;
+  margin-top: 12px;
+}
+.ws-err__detail {
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--ink-muted);
+  background: var(--bg-panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-result);
+  padding: 10px 14px;
+  margin-top: 22px;
+  word-break: break-all;
+  max-width: 100%;
+}
+.ws-err__detail b {
+  color: var(--danger);
+  font-weight: 400;
+}
+.ws-err__detail s { color: var(--danger); }
+.ws-err__pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--status-inprogress-text);
+  background: var(--status-inprogress-soft);
+  border: 1px solid var(--line-chip);
+  border-radius: var(--radius-result);
+  padding: 10px 14px;
+  margin-top: 22px;
+}
+.ws-err__pill-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--status-inprogress);
+  animation: ws-pulse 1.2s ease-in-out infinite;
+}
+@keyframes ws-pulse {
+  50% { opacity: 0.35; }
+}
+.ws-err__actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 28px;
+}
+.ws-overlay-scrim {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-scrim);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 90;
+}
+.ws-err--card {
+  flex: none;
+  background: var(--bg);
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-auth);
+  box-shadow: var(--shadow-modal);
+  max-width: 560px;
+  width: calc(100% - 48px);
+  padding: 56px 40px 60px;
+}
