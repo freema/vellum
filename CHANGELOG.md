@@ -6,6 +6,45 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.7.0] — 2026-07-06
+
+Designed error pages, a self-syncing workspace, and localhost CORS.
+
+### Added
+- **Designed error states** (design: `Vellum-Error-Pages.dc.html`). A note
+  deep link that doesn't resolve shows "No note lives here" (404) with the
+  path and search/back actions; a note deleted while open switches to "This
+  note was deleted" (410); a failed read offers Retry (500). A missing
+  static path now gets a styled 404 page instead of Go's plain text (browser
+  requests only — API clients keep plain/JSON errors).
+- **The workspace keeps itself in sync with the vault.** The tree and note
+  list silently re-scan every 30 s and on tab focus, so notes created,
+  changed or deleted by an MCP agent appear without the manual re-scan
+  button. The open note revalidates by ETag (a cheap 304 when unchanged) and
+  folds in remote changes as long as there are no unsaved local edits —
+  dirty drafts keep the existing conflict flow.
+- **"Vellum is restarting" reconnect overlay** — when the server goes away
+  mid-session (deploy restart), the workspace shows the 503 state, polls
+  `/healthz` with a countdown and reconnects on its own.
+
+### Fixed
+- **Note deep links no longer 404.** `/n/<path>.md` looked like a static
+  asset to the SPA fallback (dot in the last segment) and returned a plain
+  "404 page not found" instead of loading the app.
+- **Czech characters no longer break in list excerpts** — the excerpt was
+  cut at a fixed byte offset, which could split a multi-byte character
+  (č, ř, ě …) and render `�` in the note list. It now cuts on a rune
+  boundary.
+
+### Changed
+- **Loopback origins are always CORS-allowed** — the MCP Inspector (and any
+  other tool served from `localhost` / `127.0.0.1` / `[::1]`) can now
+  connect to a deployed vellum without editing `VELLUM_ALLOWED_ORIGINS`.
+  Auth is unaffected: a Bearer token is still required, no
+  `Allow-Credentials` is sent, and a loopback `Origin` can only come from
+  software already running on the client's own machine
+  ([docs/deployment.md](docs/deployment.md#cors-browser-origins)).
+
 ## [1.6.0] — 2026-07-04
 
 Full-text search, second pass: typo-tolerant, diacritics-insensitive, and
@@ -221,7 +260,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/freema/vellum/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/freema/vellum/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/freema/vellum/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/freema/vellum/compare/v1.3.0...v1.4.0
