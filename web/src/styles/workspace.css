@@ -175,18 +175,100 @@
   padding: 1px 7px;
 }
 .ws-tree__divider { height: 1px; background: var(--line); margin: 12px 8px; }
-.ws-tree__cloud { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 8px; }
+.ws-tree__cloud {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 0 8px 2px;
+  align-content: flex-start;
+}
+.ws-tree__cloud--all {
+  max-height: 220px;
+  overflow-y: auto;
+}
 .ws-tag-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   font-family: var(--font-mono);
   font-size: 11px;
   color: var(--ink-muted);
   background: var(--bg-statusbar);
   border-radius: 5px;
-  padding: 2px 7px;
+  padding: 2px 5px 2px 7px;
   cursor: pointer;
-  border: none;
+  border: 1px solid transparent;
 }
-.ws-tag-pill--active { color: var(--accent); background: var(--accent-soft); }
+.ws-tag-pill--active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: var(--line-chip);
+}
+.ws-tag-pill__count { font-size: 9.5px; color: var(--ink-dismiss); }
+.ws-tag-pill--active .ws-tag-pill__count { color: var(--accent); opacity: 0.75; }
+
+.ws-tags__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 8px 7px;
+}
+.ws-tags__head .ws-tree__label { padding: 0; }
+.ws-tags__total {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--knowledge);
+}
+.ws-tags__clear {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--accent);
+  cursor: pointer;
+}
+.ws-tags__clear:hover { color: var(--accent-hover); }
+.ws-tags__search {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--bg-statusbar);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  padding: 4px 8px;
+  margin: 0 8px 8px;
+}
+.ws-tags__search-icon { color: var(--ink-faint); font-size: 11px; flex: none; }
+.ws-tags__search input {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink);
+}
+.ws-tags__search input::placeholder { color: var(--ink-faint); }
+.ws-tags__search-clear {
+  flex: none;
+  color: var(--ink-faint);
+  font-size: 13px;
+  cursor: pointer;
+  line-height: 1;
+}
+.ws-tags__search-clear:hover { color: var(--accent); }
+.ws-tags__empty {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink-faint);
+}
+.ws-tags__more {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--accent);
+  cursor: pointer;
+  padding: 8px 8px 4px;
+}
+.ws-tags__more:hover { color: var(--accent-hover); }
 
 /* ---------- middle list ---------- */
 
@@ -1565,19 +1647,71 @@
   color: var(--ink-muted);
 }
 .ws-tree__add:disabled { opacity: 0.5; cursor: default; }
-.ws-tree__del {
+/* Folder ⋯ menu (design: Vellum-Workspace.dc.html) — replaces the old inline
+   × so deleting a folder is a deliberate two-step action. */
+.ws-tree__kebab {
   opacity: 0;
-  color: var(--ink-faint);
-  cursor: pointer;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  margin-right: 2px;
+  border-radius: 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-size: 14px;
   line-height: 1;
-  padding: 1px 5px;
-  border-radius: 4px;
-  flex: none;
+  color: var(--ink-faint);
+  cursor: pointer;
   transition: opacity 0.12s ease;
 }
-.ws-tree__row:hover .ws-tree__del { opacity: 1; }
-.ws-tree__del:hover { background: var(--danger-soft); color: var(--danger); }
+.ws-tree__row:hover .ws-tree__kebab { opacity: 1; }
+.ws-tree__kebab:hover { background: var(--line-rail); color: var(--ink-muted); }
+.ws-tree__kebab--open {
+  opacity: 1;
+  background: var(--line-rail);
+  color: var(--ink-muted);
+}
+.ws-folder-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 38;
+}
+.ws-folder-menu {
+  position: fixed;
+  z-index: 39;
+  width: 186px;
+  background: var(--bg-panel);
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-badge);
+  box-shadow: var(--shadow-popover);
+  padding: 5px;
+}
+.ws-folder-menu__label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  color: var(--ink-faint);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 10px 7px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ws-folder-menu__item {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+  font-size: 13px;
+  color: var(--ink);
+}
+.ws-folder-menu__item:hover { background: var(--bg-active-child); }
+.ws-folder-menu__glyph { color: var(--ink-faint); }
+.ws-folder-menu__item--danger { color: var(--danger); }
+.ws-folder-menu__item--danger:hover { background: var(--danger-soft); }
 
 /* ---- error states (design/Vellum-Error-Pages.dc.html) ---- */
 /* Numeral tints and the retry pill reuse the closest tokens from the sheet

@@ -488,8 +488,8 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     [navigate],
   )
 
-  const createNote = async () => {
-    const dir = selectedDir || 'inbox'
+  const createNote = async (inDir?: string) => {
+    const dir = inDir || selectedDir || 'inbox'
     let name = 'untitled.md'
     for (let i = 2; entries.some((e) => e.path === `${dir}/${name}`); i++) {
       name = `untitled-${i}.md`
@@ -629,6 +629,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           refreshing={refreshing}
           onRefresh={doRefresh}
           onDeleteFolder={setFolderToDelete}
+          onNewNoteIn={(dir) => void createNote(dir)}
           tags={tags}
           activeTags={activeTags}
           onToggleTag={(t) =>
@@ -636,6 +637,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
               activeTags.includes(t) ? activeTags.filter((x) => x !== t) : [...activeTags, t],
             )
           }
+          onClearTags={() => setActiveTags([])}
           totalNotes={entries.length}
           dropDir={dropDir}
           dragging={dragPath !== null}
@@ -652,7 +654,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onStatusFilter={setStatusFilter}
           onOpen={openNote}
           onHover={(p) => api.prefetchNote(p)}
-          onCreate={createNote}
+          onCreate={() => void createNote()}
           onDragStart={setDragPath}
           onDragEnd={() => {
             setDragPath(null)
@@ -936,6 +938,8 @@ function TreePanel({
   refreshing,
   onRefresh,
   onDeleteFolder,
+  onNewNoteIn,
+  onClearTags,
 }: {
   counts: Map<string, number>
   matchCounts: Map<string, number>
@@ -962,7 +966,23 @@ function TreePanel({
   refreshing: boolean
   onRefresh: () => void
   onDeleteFolder: (dir: string) => void
+  onNewNoteIn: (dir: string) => void
+  onClearTags: () => void
 }) {
+  // Folder ⋯ menu — deleting is a deliberate two-step action (the old inline ×
+  // was too easy to hit by accident).
+  const [folderMenu, setFolderMenu] = useState<{
+    dir: string
+    label: string
+    x: number
+    y: number
+  } | null>(null)
+
+  // Tag filter state: the query narrows by name; the list caps at TAG_LIMIT
+  // until expanded (searching always shows every match).
+  const [tagQuery, setTagQuery] = useState('')
+  const [tagsExpanded, setTagsExpanded] = useState(false)
+
   const dropProps = (dir: string) => ({
     onDragOver: (e: React.DragEvent) => {
       if (!dragging) return
@@ -993,6 +1013,20 @@ function TreePanel({
     if (asBadge && total > 0) return <span className="ws-tree__badge">{total}</span>
     return <span className="ws-tree__count">{total}</span>
   }
+
+  const kebab = (dir: string, label: string) => (
+    <span
+      className={`ws-tree__kebab${folderMenu?.dir === dir ? ' ws-tree__kebab--open' : ''}`}
+      title="Folder actions"
+      onClick={(e) => {
+        e.stopPropagation()
+        const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+        setFolderMenu(folderMenu?.dir === dir ? null : { dir, label, x: r.right, y: r.bottom })
+      }}
+    >
+      ⋯
+    </span>
+  )
 
   const row = (
     dir: string,
@@ -1030,18 +1064,7 @@ function TreePanel({
           <Icon name={icon} size={14} />
         </span>
         <span className="ws-tree__name">{label}</span>
-        {opts.deletable && (
-          <span
-            className="ws-tree__del"
-            title="Delete folder"
-            onClick={(e) => {
-              e.stopPropagation()
-              onDeleteFolder(dir)
-            }}
-          >
-            ×
-          </span>
-        )}
+        {opts.deletable && kebab(dir, label)}
         {renderCount(dir, !!opts.badge)}
       </div>
     )
@@ -1112,16 +1135,7 @@ function TreePanel({
                 <Icon name="folder" size={13} />
               </span>
               <span className="ws-tree__name">{dir.split('/')[1]}</span>
-              <span
-                className="ws-tree__del"
-                title="Delete folder"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  onDeleteFolder(dir)
-                }}
-              >
-                ×
-              </span>
+              {kebab(dir, dir.split('/')[1])}
               {renderCount(dir, false)}
             </div>
           )
@@ -1129,18 +1143,103 @@ function TreePanel({
       {otherTopDirs.map((dir) => row(dir, dir, 'folder', { deletable: true }))}
       {row('archive', 'Archive', 'archive')}
       <div className="ws-tree__divider" />
-      <div className="ws-tree__label">Tags</div>
-      <div className="ws-tree__cloud">
-        {tags.map((t) => (
-          <button
-            key={t.tag}
-            className={`ws-tag-pill${activeTags.includes(t.tag) ? ' ws-tag-pill--active' : ''}`}
-            onClick={() => onToggleTag(t.tag)}
+      {(() => {
+        const TAG_LIMIT = 12
+        const tq = tagQuery.trim().toLowerCase()
+        const sorted = [...tags].sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
+        let matched = tq ? sorted.filter((t) => t.tag.toLowerCase().includes(tq)) : sorted
+        if (activeTags.length) {
+          // pinned first, so an active tag never hides below the cap
+          const act = matched.filter((t) => activeTags.includes(t.tag))
+          if (act.length) matched = [...act, ...matched.filter((t) => !activeTags.includes(t.tag))]
+        }
+        const searching = tq !== ''
+        const showAll = searching || tagsExpanded
+        const shown = showAll ? matched : matched.slice(0, TAG_LIMIT)
+        return (
+          <>
+            <div className="ws-tags__head">
+              <span className="ws-tree__label">Tags</span>
+              <span className="ws-tags__total">{tags.length}</span>
+              <span style={{ flex: 1 }} />
+              {activeTags.length > 0 && (
+                <span className="ws-tags__clear" onClick={onClearTags}>
+                  clear
+                </span>
+              )}
+            </div>
+            <div className="ws-tags__search">
+              <span className="ws-tags__search-icon">⌕</span>
+              <input
+                value={tagQuery}
+                onChange={(e) => {
+                  setTagQuery(e.target.value)
+                  setTagsExpanded(false)
+                }}
+                placeholder="Filter tags…"
+              />
+              {tagQuery !== '' && (
+                <span className="ws-tags__search-clear" title="Clear" onClick={() => setTagQuery('')}>
+                  ×
+                </span>
+              )}
+            </div>
+            <div className={`ws-tree__cloud${showAll ? ' ws-tree__cloud--all' : ''}`}>
+              {shown.map((t) => (
+                <button
+                  key={t.tag}
+                  className={`ws-tag-pill${activeTags.includes(t.tag) ? ' ws-tag-pill--active' : ''}`}
+                  onClick={() => onToggleTag(t.tag)}
+                >
+                  #{t.tag}
+                  <span className="ws-tag-pill__count">{t.count}</span>
+                </button>
+              ))}
+              {searching && matched.length === 0 && (
+                <span className="ws-tags__empty">No tags match “{tagQuery.trim()}”.</span>
+              )}
+            </div>
+            {matched.length > TAG_LIMIT && !searching && (
+              <div className="ws-tags__more" onClick={() => setTagsExpanded((e) => !e)}>
+                {tagsExpanded ? '▴ Show less' : `▾ Show all ${matched.length}`}
+              </div>
+            )}
+          </>
+        )
+      })()}
+      {folderMenu && (
+        <div className="ws-folder-menu-backdrop" onClick={() => setFolderMenu(null)}>
+          <div
+            className="ws-folder-menu"
+            style={{ top: folderMenu.y + 4, left: Math.max(8, folderMenu.x - 186) }}
+            onClick={(e) => e.stopPropagation()}
           >
-            #{t.tag}
-          </button>
-        ))}
-      </div>
+            <div className="ws-folder-menu__label">{folderMenu.label}</div>
+            <div
+              className="ws-folder-menu__item"
+              onClick={() => {
+                const d = folderMenu.dir
+                setFolderMenu(null)
+                onNewNoteIn(d)
+              }}
+            >
+              <span className="ws-folder-menu__glyph">＋</span>
+              New note here
+            </div>
+            <div
+              className="ws-folder-menu__item ws-folder-menu__item--danger"
+              onClick={() => {
+                const d = folderMenu.dir
+                setFolderMenu(null)
+                onDeleteFolder(d)
+              }}
+            >
+              <Icon name="trash" size={13} />
+              Delete folder…
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

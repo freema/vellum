@@ -102,18 +102,34 @@
             <span style="{{ row.iconStyle }}">{{ row.icon }}</span>
             <span style="{{ row.labelStyle }}">{{ row.label }}</span>
             <span style="{{ row.countStyle }}">{{ row.count }}</span>
-            <sc-if value="{{ row.showDelete }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.onDelete }}" title="Delete folder" style="{{ row.delStyle }}" style-hover="background:#F3E6E1; color:#B3543D;">×</span></sc-if>
+            <sc-if value="{{ row.showKebab }}" hint-placeholder-val="{{ false }}"><span onClick="{{ row.onKebab }}" title="Folder actions" style="{{ row.kebabStyle }}" style-hover="background:#EAE3D7; color:#6E665B;">⋯</span></sc-if>
           </div>
         </div>
       </sc-for>
 
       <div style="height:1px; background:#E8E2D8; margin:12px 8px;"></div>
-      <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em; padding:4px 8px 8px;">Tags</div>
-      <div style="display:flex; flex-wrap:wrap; gap:6px; padding:0 8px;">
-        <sc-for list="{{ tagChips }}" as="t" hint-placeholder-count="5">
-          <span onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}</span>
-        </sc-for>
+      <div style="display:flex; align-items:center; gap:6px; padding:4px 8px 7px;">
+        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.08em;">Tags</span>
+        <span style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#C4BBA9;">{{ tagTotal }}</span>
+        <span style="flex:1;"></span>
+        <sc-if value="{{ activeTag }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearTag }}" style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#8B6F47; cursor:pointer;" style-hover="color:#6E5638;">clear</span></sc-if>
       </div>
+      <div style="padding:0 8px 8px;">
+        <div style="display:flex; align-items:center; gap:6px; background:#F3F1EC; border:1px solid #E8E2D8; border-radius:6px; padding:4px 8px;">
+          <span style="color:#B4A897; font-size:11px; flex:none;">⌕</span>
+          <input value="{{ tagQuery }}" onInput="{{ onTagQuery }}" placeholder="Filter tags…" style="flex:1; min-width:0; border:none; background:transparent; outline:none; font-family:'JetBrains Mono',monospace; font-size:11px; color:#2A2622;">
+          <sc-if value="{{ hasTagQuery }}" hint-placeholder-val="{{ false }}"><span onClick="{{ clearTagQuery }}" title="Clear" style="flex:none; color:#B4A897; font-size:13px; cursor:pointer; line-height:1;" style-hover="color:#8B6F47;">×</span></sc-if>
+        </div>
+      </div>
+      <div class="vscroll" style="{{ tagListStyle }}">
+        <sc-for list="{{ tagChips }}" as="t" hint-placeholder-count="6">
+          <span onClick="{{ t.onClick }}" style="{{ t.style }}">{{ t.label }}<span style="{{ t.countStyle }}">{{ t.count }}</span></span>
+        </sc-for>
+        <sc-if value="{{ tagEmpty }}" hint-placeholder-val="{{ false }}"><span style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#B4A897;">No tags match “{{ tagQuery }}”.</span></sc-if>
+      </div>
+      <sc-if value="{{ tagShowToggle }}" hint-placeholder-val="{{ false }}">
+        <div onClick="{{ toggleTagsExpanded }}" style="font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; cursor:pointer; padding:8px 8px 4px;" style-hover="color:#6E5638;">{{ tagMoreLabel }}</div>
+      </sc-if>
     </aside>
 
     <!-- MIDDLE: NOTE LIST -->
@@ -255,6 +271,17 @@
         <div style="display:flex; align-items:center; gap:16px; padding:9px 16px; border-top:1px solid #F0EBE2; font-family:'JetBrains Mono',monospace; font-size:10.5px; color:#9A938A;">
           <span>↵ open</span><span>#tag filter</span><span>esc close</span>
         </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <!-- ===== FOLDER ACTION MENU ===== -->
+  <sc-if value="{{ folderMenuOpen }}" hint-placeholder-val="{{ false }}">
+    <div onClick="{{ closeFolderMenu }}" style="position:fixed; inset:0; z-index:38;">
+      <div onClick="{{ stop }}" style="{{ folderMenuStyle }}">
+        <div style="font-family:'JetBrains Mono',monospace; font-size:10px; color:#9A938A; text-transform:uppercase; letter-spacing:0.06em; padding:6px 10px 7px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ folderMenuLabel }}</div>
+        <div onClick="{{ folderMenuNew }}" style="display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; color:#2A2622;" style-hover="background:#F5F1EA;"><span style="color:#9A938A;">＋</span>New note here</div>
+        <div onClick="{{ folderMenuDelete }}" style="display:flex; align-items:center; gap:9px; padding:8px 10px; border-radius:6px; cursor:pointer; font-size:13px; color:#B3543D;" style-hover="background:#F7ECE8;"><span>🗑</span>Delete folder…</div>
       </div>
     </div>
   </sc-if>
@@ -705,6 +732,9 @@ class Component extends DCLogic {
       expanded: { projects:true, vellum:true, areas:false },
       addingFolder: false,
       hoveredRow: null,
+      folderMenu: null,
+      tagQuery: '',
+      tagsExpanded: false,
       newFolderName: '',
       dropTarget: null,
       dragId: null,
@@ -801,7 +831,7 @@ class Component extends DCLogic {
     }
     if(inRaw && (e.metaKey||e.ctrlKey) && (e.key==='b'||e.key==='B')){ e.preventDefault(); this.fmt('bold'); return; }
     if(inRaw && (e.metaKey||e.ctrlKey) && (e.key==='i'||e.key==='I')){ e.preventDefault(); this.fmt('italic'); return; }
-    if(e.key==='Escape'){ this.setState({paletteOpen:false, moveMenuOpen:false, statusMenuOpen:false, confirmOpen:false, helpOpen:false, connOpen:false, activityOpen:false, notifOpen:false, addingFolder:false}); if(this.state.tourStep!=null) this.endTour(); }
+    if(e.key==='Escape'){ this.setState({paletteOpen:false, moveMenuOpen:false, statusMenuOpen:false, confirmOpen:false, helpOpen:false, connOpen:false, activityOpen:false, notifOpen:false, addingFolder:false, folderMenu:null}); if(this.state.tourStep!=null) this.endTour(); }
   }
 
   // ---- markdown formatting
@@ -848,7 +878,7 @@ class Component extends DCLogic {
     const json = JSON.stringify({
       id:err.id, level:err.level, code:err.code, status:err.status, tool:err.tool,
       message:err.message, actor:err.actor, session:err.session, at:err.time,
-      endpoint:'https://vellum.example.com/api/errors/'+err.id,
+      endpoint:'https://vellum.tomasgrasl.cz/api/errors/'+err.id,
       payload:err.payload, stack:err.stack,
     }, null, 2);
     try{ if(navigator.clipboard) navigator.clipboard.writeText(json); }catch(e){}
@@ -957,7 +987,7 @@ class Component extends DCLogic {
     this.setToast('Folder “'+name+'” created', 'ok');
   }
 
-  newNote(){ const id='n'+Date.now(); const f=this.state.selectedFolder;
+  newNote(fid){ const id='n'+Date.now(); const f=fid||this.state.selectedFolder;
     const note={ id, title:'Untitled', folder:f, type:'task', status:'backlog', tags:[], modified:'now', body:mb('# Untitled','','Start writing…') };
     this.setState(s=>({ notes:[note,...s.notes], selectedId:id, mode:'edit' }));
     this.setToast('New note in '+this.labelOf(f), 'ok');
@@ -1027,20 +1057,37 @@ class Component extends DCLogic {
         onDrop: e=>{ e.preventDefault(); if(S.dragId) this.moveNote(S.dragId, n.id); },
         onMouseEnter: ()=>{ if(S.hoveredRow!==n.id) this.setState({hoveredRow:n.id}); },
         onMouseLeave: ()=>{ if(S.hoveredRow===n.id) this.setState({hoveredRow:null}); },
-        showDelete: n.kind==='folder' && S.hoveredRow===n.id,
-        delStyle:'flex:none; width:20px; height:20px; margin-right:2px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:13px; line-height:1; color:#B4A897; cursor:pointer;',
-        onDelete: e=>{ e.stopPropagation(); this.askDeleteFolder(n.id); },
+        showKebab: n.kind==='folder' && (S.hoveredRow===n.id || (S.folderMenu&&S.folderMenu.id===n.id)),
+        kebabStyle:'flex:none; width:22px; height:22px; margin-right:2px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:14px; line-height:1; color:'+((S.folderMenu&&S.folderMenu.id===n.id)?'#6E665B':'#B4A897')+'; background:'+((S.folderMenu&&S.folderMenu.id===n.id)?'#EAE3D7':'transparent')+'; cursor:pointer;',
+        onKebab: e=>{ e.stopPropagation(); const r=e.currentTarget.getBoundingClientRect(); this.setState(s=>({folderMenu:(s.folderMenu&&s.folderMenu.id===n.id)?null:{id:n.id, x:r.right, y:r.bottom}})); },
       });
       if(hasKids && expanded) walk(n.children, depth+1);
     }); };
     walk(this.tree,0);
 
-    // ----- tag chips
-    const allTags=[...new Set(this.state.notes.flatMap(n=>n.tags))];
-    const tagChips=allTags.map(t=>({ label:'#'+t, onClick:()=>this.setState(s=>({activeTag:s.activeTag===t?null:t})),
-      style: (S.activeTag===t
-        ? "font-family:'JetBrains Mono',monospace; font-size:11px; color:#8B6F47; background:#F1EAE0; border:1px solid #E0D4C1; border-radius:5px; padding:2px 7px; cursor:pointer;"
-        : "font-family:'JetBrains Mono',monospace; font-size:11px; color:#7A7266; background:#F3F1EC; border-radius:5px; padding:2px 7px; cursor:pointer;") }));
+    // ----- tag filter (search · sort by frequency · capped with show-all)
+    const tagCounts={}; this.state.notes.forEach(n=>n.tags.forEach(t=>{ tagCounts[t]=(tagCounts[t]||0)+1; }));
+    const tagTotal=Object.keys(tagCounts).length;
+    const tq=(S.tagQuery||'').trim().toLowerCase();
+    const sortedTags=Object.keys(tagCounts).sort((a,b)=> tagCounts[b]-tagCounts[a] || a.localeCompare(b));
+    let matched=tq ? sortedTags.filter(t=>t.toLowerCase().includes(tq)) : sortedTags;
+    if(S.activeTag && matched.includes(S.activeTag)) matched=[S.activeTag, ...matched.filter(t=>t!==S.activeTag)];
+    const TAG_LIMIT=12;
+    const tagSearching=!!tq;
+    const tagOverflow=matched.length>TAG_LIMIT;
+    const tagShowAll=tagSearching||S.tagsExpanded;
+    const tagsShown=tagShowAll?matched:matched.slice(0,TAG_LIMIT);
+    const chipBase="display:inline-flex; align-items:center; gap:5px; font-family:'JetBrains Mono',monospace; font-size:11px; border-radius:5px; padding:2px 5px 2px 7px; cursor:pointer;";
+    const tagChips=tagsShown.map(t=>({ label:'#'+t, count:String(tagCounts[t]),
+      onClick:()=>this.setState(s=>({activeTag:s.activeTag===t?null:t})),
+      style: chipBase + (S.activeTag===t
+        ? "color:#8B6F47; background:#F1EAE0; border:1px solid #E0D4C1;"
+        : "color:#7A7266; background:#F3F1EC; border:1px solid transparent;"),
+      countStyle: (S.activeTag===t ? "font-size:9.5px; color:#B79B6E;" : "font-size:9.5px; color:#B4A897;") }));
+    const tagEmpty=tagSearching && matched.length===0;
+    const tagListStyle='display:flex; flex-wrap:wrap; gap:6px; padding:0 8px 2px; align-content:flex-start;' + (tagShowAll?' max-height:220px; overflow-y:auto;':'');
+    const tagShowToggle=tagOverflow && !tagSearching;
+    const tagMoreLabel=S.tagsExpanded?'▴ Show less':('▾ Show all '+matched.length);
 
     // ----- note list
     const vis=this.visibleNotes();
@@ -1099,7 +1146,7 @@ class Component extends DCLogic {
       statusDotStyle: active ? 'width:7px; height:7px; border-radius:50%; background:#5F8D5F; animation:vpulse 2s ease-out infinite;' : 'width:7px; height:7px; border-radius:50%; background:#C08A3E;',
       onRevoke:()=>this.revokeConn(c.id),
     }; });
-    const connEndpoint='https://vellum.example.com/mcp';
+    const connEndpoint='https://vellum.tomasgrasl.cz/mcp';
     const cliCmd='claude mcp add --transport http vellum '+connEndpoint;
 
     // ----- activity / curator log
@@ -1123,7 +1170,7 @@ class Component extends DCLogic {
     const activityItems = shown.map(e=>{
       if(e._err){
         const lv=LEVEL[e.level]||LEVEL.error; const expanded=S.expandedError===e.id; const showFix=S.showFixFor===e.id;
-        const endpoint='https://vellum.example.com/api/errors/'+e.id;
+        const endpoint='https://vellum.tomasgrasl.cz/api/errors/'+e.id;
         const cmd=mb('claude -p "Diagnose and fix this Vellum MCP error" \\','  --mcp-error '+endpoint+' \\','  --header "Authorization: Bearer $VELLUM_MCP_KEY"');
         const maskedKey='sk-ant-api03-'+'•'.repeat(18)+e.session.slice(-4);
         const realKey='sk-ant-api03-Vq7Kf2Rn8xTbW3'+e.session.slice(-4);
@@ -1209,7 +1256,17 @@ class Component extends DCLogic {
     return {
       totalNotes: this.state.notes.length,
       treeRows: rows,
-      tagChips,
+      tagChips, tagTotal, tagEmpty, tagListStyle, tagShowToggle, tagMoreLabel,
+      tagQuery:S.tagQuery, hasTagQuery: !!(S.tagQuery||'').trim(),
+      onTagQuery:e=>this.setState({tagQuery:e.target.value, tagsExpanded:false}),
+      clearTagQuery:()=>this.setState({tagQuery:''}),
+      toggleTagsExpanded:()=>this.setState(s=>({tagsExpanded:!s.tagsExpanded})),
+      folderMenuOpen: !!S.folderMenu,
+      folderMenuLabel: S.folderMenu ? this.labelOf(S.folderMenu.id) : '',
+      folderMenuStyle: S.folderMenu ? ('position:fixed; z-index:39; top:'+(S.folderMenu.y+4)+'px; left:'+Math.max(8,S.folderMenu.x-186)+'px; width:186px; background:#FFFFFF; border:1px solid #E0D9CD; border-radius:9px; box-shadow:0 14px 36px -12px rgba(42,38,34,0.28); padding:5px;') : '',
+      closeFolderMenu:()=>this.setState({folderMenu:null}),
+      folderMenuNew:()=>{ const id=this.state.folderMenu&&this.state.folderMenu.id; this.setState({folderMenu:null}); if(id) this.newNote(id); },
+      folderMenuDelete:()=>{ const id=this.state.folderMenu&&this.state.folderMenu.id; this.setState({folderMenu:null}); if(id) this.askDeleteFolder(id); },
       activeTag: S.activeTag, activeTagLabel: S.activeTag?('#'+S.activeTag):'', clearTag:()=>this.setState({activeTag:null}),
 
       folderPath: this.pathOf(S.selectedFolder).join(' / '),
