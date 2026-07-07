@@ -206,6 +206,44 @@ vellum stays on the internal network; only your reverse proxy is exposed.
 Set `VELLUM_ISSUER_URL=https://<domain>`, `TRUST_PROXY=1` and terminate TLS
 in the proxy. Details and a smoke-test checklist: [docs/deployment.md](docs/deployment.md).
 
+### One-click PaaS (Railway / Render / Fly.io)
+
+The easiest path if you don't want to run a VPS: deploy the published image
+on a platform that gives you TLS and a public URL for free. vellum honours
+the `PORT` the platform injects, so the only three things that matter are the
+**same everywhere**:
+
+1. **Image**: `ghcr.io/freema/vellum:1.9.0` (pin a version, not `:latest`).
+2. **A persistent volume mounted at `/vault`** — this is not optional. vellum
+   stores every note as a file; without a persistent disk your vault is wiped
+   on the next redeploy. (Serverless hosts like Vercel/Netlify/Cloudflare
+   Pages have no persistent writable disk and can't run vellum — use one of
+   the platforms below.)
+3. **Env** (from the [configuration table](#configuration)):
+
+   ```sh
+   AUTH_ENABLED=true
+   VELLUM_CLIENT_SECRET=<openssl rand -hex 32>
+   VELLUM_ISSUER_URL=https://<your-public-url>   # the URL the platform gives you
+   TRUST_PROXY=1                                 # you're behind the platform's proxy
+   ```
+
+Set `VELLUM_ISSUER_URL` once you know the assigned URL, then redeploy — OAuth
+metadata must advertise the real HTTPS host or Claude fails after the consent
+step.
+
+- **Railway**: New Project → Deploy from Docker image →
+  `ghcr.io/freema/vellum:1.9.0`. Add a Volume mounted at `/vault`, set the env
+  above (Railway provides `PORT` and a `*.up.railway.app` domain).
+- **Render**: New → Web Service → *Deploy an existing image* →
+  `ghcr.io/freema/vellum:1.9.0`. Add a Disk mounted at `/vault`, set the env.
+- **Fly.io**: `fly launch --image ghcr.io/freema/vellum:1.9.0`, then
+  `fly volume create vault` and mount it at `/vault` in `fly.toml`; set the env
+  with `fly secrets set VELLUM_CLIENT_SECRET=… VELLUM_ISSUER_URL=… TRUST_PROXY=1 AUTH_ENABLED=true`.
+
+Then connect Claude to `https://<your-public-url>/mcp` (see
+[Connect Claude](#connect-claude)).
+
 **Coolify / Traefik**: point Coolify at the repo or image
 `ghcr.io/freema/vellum` (pin a version, e.g. `:1.9.0`, not `:latest`),
 mount a volume at `/vault`, set the env from the table above. Running raw
