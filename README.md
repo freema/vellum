@@ -28,9 +28,66 @@ or a small team:
 
 ## Quick start
 
+Pre-built multi-arch images (amd64 + arm64) are published to
+[GitHub Container Registry](https://github.com/freema/vellum/pkgs/container/vellum)
+on every release:
+
 ```sh
-mkdir vellum && cd vellum
-curl -fsSLO https://raw.githubusercontent.com/freema/vellum/main/docker-compose.yml
+docker pull ghcr.io/freema/vellum:latest
+```
+
+### Try it in one command
+
+```sh
+mkdir -p vault
+docker run --rm -p 8080:8080 -v "$PWD/vault:/vault" ghcr.io/freema/vellum
+```
+
+Open http://localhost:8080 — that's your vault, served straight from
+`./vault`. Auth is off by default, which is fine on localhost; enable it
+before exposing anything (see below).
+
+> **Linux bind mounts:** the container runs as a non-root user
+> (uid 65532, distroless), so the mounted directory must be writable by
+> it: `sudo chown 65532 vault`. Docker Desktop on macOS/Windows handles
+> this for you.
+
+### Docker Compose (recommended)
+
+Create a `docker-compose.yml` — this is [the same file](docker-compose.yml)
+the repo ships (`curl -fsSLO
+https://raw.githubusercontent.com/freema/vellum/main/docker-compose.yml`
+grabs it if you'd rather not paste):
+
+```yaml
+services:
+  vellum:
+    image: ${VELLUM_IMAGE:-ghcr.io/freema/vellum:latest}
+    container_name: vellum
+    restart: unless-stopped
+    ports:
+      - "${VELLUM_PORT:-8080}:8080"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      PORT: "8080"
+      VELLUM_VAULT_PATH: /vault
+    volumes:
+      - ./vault:/vault
+    # hardening: the binary only ever writes into the mounted vault
+    read_only: true
+    security_opt:
+      - no-new-privileges
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+```
+
+Generate a secret and start:
+
+```sh
 cat > .env <<EOF
 AUTH_ENABLED=true
 VELLUM_CLIENT_SECRET=$(openssl rand -hex 32)
@@ -40,6 +97,23 @@ curl http://localhost:8080/healthz
 ```
 
 Open http://localhost:8080, paste the client secret — that's your vault.
+
+Everything else is tunable from the same `.env`: pin the image with
+`VELLUM_IMAGE=ghcr.io/freema/vellum:1.9.0` (recommended for production —
+`latest` moves), change the host port with `VELLUM_PORT`, plus any
+variable from the [configuration table](#configuration).
+
+### No Docker
+
+```sh
+go install github.com/freema/vellum/cmd/vellum@latest
+vellum                # HTTP API + MCP on :8080, vault in ./vault
+vellum -mcp-stdio     # MCP over stdio for local clients
+```
+
+A plain Go build serves the API and MCP but not the web UI — the SPA is
+embedded only in the Docker image and in `task build-full` builds
+(`-tags embedspa`, needs Node; see [Development](#development)).
 
 ## Connect Claude
 
@@ -133,7 +207,7 @@ Set `VELLUM_ISSUER_URL=https://<domain>`, `TRUST_PROXY=1` and terminate TLS
 in the proxy. Details and a smoke-test checklist: [docs/deployment.md](docs/deployment.md).
 
 **Coolify / Traefik**: point Coolify at the repo or image
-`ghcr.io/freema/vellum` (pin a version, e.g. `:0.2.0`, not `:latest`),
+`ghcr.io/freema/vellum` (pin a version, e.g. `:1.9.0`, not `:latest`),
 mount a volume at `/vault`, set the env from the table above. Running raw
 compose behind Traefik, uncomment the labels in `docker-compose.yml`:
 
