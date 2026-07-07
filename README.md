@@ -26,6 +26,12 @@ or a small team:
 - **Small MCP tool surface** (15 tools) — less agent context burned on
   tool definitions.
 
+Every note is also a first-class **MCP resource** — `vellum://note/{path}` —
+so your agent can attach a note as context straight from its resource picker,
+no tool call needed:
+
+![Vellum notes surfaced as MCP resources in the client's resource picker](docs/img/mcp-resources.png)
+
 ## Quick start
 
 Pre-built multi-arch images (amd64 + arm64) are published to
