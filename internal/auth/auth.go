@@ -23,11 +23,12 @@ import (
 	"time"
 )
 
-// Lifetimes recycled 1:1 from openclaw-mcp (production-proven).
+// Lifetimes recycled from openclaw-mcp (production-proven), except the refresh
+// token, extended to 30 days so a client re-authorizes far less often.
 const (
 	AccessTokenTTL  = time.Hour
 	AuthCodeTTL     = 10 * time.Minute
-	RefreshTokenTTL = 24 * time.Hour
+	RefreshTokenTTL = 30 * 24 * time.Hour
 	reaperInterval  = 5 * time.Minute
 )
 

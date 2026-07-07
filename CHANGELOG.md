@@ -6,6 +6,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.9.1] — 2026-07-07
+
+### Changed
+- **Refresh tokens now last 30 days** (was 24 hours). A connected client
+  re-authorizes far less often — only after 30 days of inactivity, since
+  every refresh rotates the token and resets the clock. Access tokens stay
+  short-lived at 1 hour.
+
 ## [1.9.0] — 2026-07-06
 
 MCP resources & subscriptions, tool annotations, and a workspace that
