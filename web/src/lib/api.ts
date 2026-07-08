@@ -1,6 +1,9 @@
-// REST client for /api/* (PHY-114). The token lives in sessionStorage so a
-// page refresh keeps the login; notes are cached client-side and revalidated
-// with If-None-Match, so reopening a note is instant.
+// REST client for /api/* (PHY-114). The session lives in localStorage: the 1h
+// access token is silently renewed from the 30-day refresh token (rotated on
+// every use), so the login survives tab close, browser restart and the hourly
+// access-token expiry — up to the refresh token's 30-day lifetime. Notes are
+// cached client-side and revalidated with If-None-Match, so reopening a note is
+// instant.
 
 export interface NoteEntry {
   path: string
@@ -125,9 +128,21 @@ export class NotFoundError extends Error {
 }
 
 const TOKEN_KEY = 'vellum_token'
+const REFRESH_KEY = 'vellum_refresh'
+const CLIENT_KEY = 'vellum_client'
+const DEFAULT_CLIENT_ID = 'vellum'
+
+interface TokenResponse {
+  access_token: string
+  refresh_token?: string
+}
 
 export class ApiClient {
   private token: string | null = null
+  private refreshToken: string | null = null
+  private clientId = DEFAULT_CLIENT_ID
+  /** In-flight refresh, shared so parallel 401s rotate the token only once. */
+  private refreshing: Promise<boolean> | null = null
   /** Client-side note cache, revalidated with If-None-Match → 304. */
   private noteCache = new Map<string, Note>()
   private prefetching = new Set<string>()
@@ -137,31 +152,47 @@ export class ApiClient {
   onUnavailable?: () => void
 
   constructor() {
-    // Restore the session token so a page refresh doesn't force a re-login.
-    // sessionStorage (not localStorage) — survives reload, cleared on tab close.
+    // Restore the session so neither a reload nor a browser restart forces a
+    // re-login. localStorage (not sessionStorage): it must outlive tab close.
     try {
-      this.token = sessionStorage.getItem(TOKEN_KEY)
+      this.token = localStorage.getItem(TOKEN_KEY)
+      this.refreshToken = localStorage.getItem(REFRESH_KEY)
+      this.clientId = localStorage.getItem(CLIENT_KEY) || DEFAULT_CLIENT_ID
     } catch {
       /* private mode / storage disabled */
     }
   }
 
+  /** A restorable session exists if either token is present — an expired access
+   * token still refreshes as long as the refresh token is live. */
   hasToken(): boolean {
-    return !!this.token
+    return !!(this.token || this.refreshToken)
   }
 
   setToken(token: string | null) {
     this.token = token
-    try {
-      if (token) sessionStorage.setItem(TOKEN_KEY, token)
-      else sessionStorage.removeItem(TOKEN_KEY)
-    } catch {
-      /* ignore */
-    }
+    writeStorage(TOKEN_KEY, token)
   }
 
-  /** Exchange the client secret for a bearer token (client_credentials). */
-  async connect(secret: string, clientId = 'vellum'): Promise<void> {
+  /** Persist a freshly issued access/refresh pair (refresh tokens rotate, so
+   * the new one must be stored immediately or the next refresh fails). */
+  private setTokens(access: string, refresh: string | null) {
+    this.token = access
+    this.refreshToken = refresh
+    writeStorage(TOKEN_KEY, access)
+    writeStorage(REFRESH_KEY, refresh)
+  }
+
+  /** Drop the whole session (both tokens + client id). */
+  private clearSession() {
+    this.token = null
+    this.refreshToken = null
+    writeStorage(TOKEN_KEY, null)
+    writeStorage(REFRESH_KEY, null)
+  }
+
+  /** Exchange the client secret for a token pair (client_credentials). */
+  async connect(secret: string, clientId = DEFAULT_CLIENT_ID): Promise<void> {
     const res = await fetch('/token', {
       method: 'POST',
       headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -174,8 +205,44 @@ export class ApiClient {
     if (!res.ok) {
       throw new Error(res.status === 401 ? 'Invalid client secret' : `Connect failed (${res.status})`)
     }
-    const body = (await res.json()) as { access_token: string }
-    this.setToken(body.access_token)
+    const body = (await res.json()) as TokenResponse
+    this.clientId = clientId
+    writeStorage(CLIENT_KEY, clientId)
+    this.setTokens(body.access_token, body.refresh_token ?? null)
+  }
+
+  /** Renew the access token from the stored refresh token. Concurrent callers
+   * share one in-flight request. Returns false (and clears the session) when
+   * the refresh token is missing or rejected; a network failure leaves the
+   * session intact so a transient outage isn't mistaken for a logout. */
+  private async refresh(): Promise<boolean> {
+    if (!this.refreshToken) return false
+    if (this.refreshing) return this.refreshing
+    this.refreshing = (async () => {
+      try {
+        const res = await fetch('/token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            grant_type: 'refresh_token',
+            client_id: this.clientId,
+            refresh_token: this.refreshToken as string,
+          }),
+        })
+        if (!res.ok) {
+          this.clearSession() // refresh token expired/revoked — real logout
+          return false
+        }
+        const body = (await res.json()) as TokenResponse
+        this.setTokens(body.access_token, body.refresh_token ?? this.refreshToken)
+        return true
+      } catch {
+        return false // server unreachable — keep the session, retry later
+      } finally {
+        this.refreshing = null
+      }
+    })()
+    return this.refreshing
   }
 
   /** Server health: whether auth is on + the running version. */
@@ -359,6 +426,9 @@ export class ApiClient {
     // (refresh, tab close). Browsers cap keepalive bodies at ~64 KB, so it
     // is opt-in for the draft flush only.
     keepalive = false,
+    // set once we've already renewed the token for this request, to bound the
+    // 401 → refresh → replay to a single retry.
+    retried = false,
   ): Promise<Response> {
     if (this.token) headers['Authorization'] = `Bearer ${this.token}`
     let res: Response
@@ -375,7 +445,12 @@ export class ApiClient {
       throw new Error(`${method} ${url}: ${res.status}`)
     }
     if (res.status === 401) {
-      this.setToken(null)
+      // The access token expired (or the server dropped it). Silently renew
+      // from the refresh token and replay once before surfacing a logout.
+      if (!retried && (await this.refresh())) {
+        return this.rawRequest(method, url, body, headers, keepalive, true)
+      }
+      this.clearSession()
       this.onAuthError?.()
       throw new AuthError()
     }
@@ -385,6 +460,17 @@ export class ApiClient {
 
 function encodePath(path: string): string {
   return path.split('/').map(encodeURIComponent).join('/')
+}
+
+/** Write (or, for a null value, remove) a localStorage key, ignoring failures
+ * in private mode / when storage is disabled. */
+function writeStorage(key: string, value: string | null): void {
+  try {
+    if (value) localStorage.setItem(key, value)
+    else localStorage.removeItem(key)
+  } catch {
+    /* ignore */
+  }
 }
 
 export function relativeAge(unixSeconds: number): string {

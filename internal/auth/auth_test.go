@@ -356,6 +356,53 @@ func TestFullOAuthFlow(t *testing.T) {
 	}
 }
 
+// TestRefreshWithoutClientSecret covers the embedded SPA path: it logs in with
+// the secret once (client_credentials) but keeps no secret afterwards, so it
+// must be able to refresh the confidential "vellum" client on the strength of
+// the rotating refresh token alone. The refresh token still rotates and an
+// unknown client is still rejected.
+func TestRefreshWithoutClientSecret(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+
+	// Initial login — the secret gates minting the first pair.
+	body, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"client_credentials"},
+		"client_id":  {"vellum"}, "client_secret": {testSecret},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("client_credentials = %d: %v", status, body)
+	}
+	refresh := body["refresh_token"].(string)
+
+	// Refresh with NO client_secret succeeds — the refresh token is the proof.
+	body2, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"refresh_token"}, "refresh_token": {refresh},
+		"client_id": {"vellum"},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("secretless refresh = %d: %v", status, body2)
+	}
+	if body2["access_token"] == nil || body2["refresh_token"] == nil {
+		t.Errorf("secretless refresh missing tokens: %v", body2)
+	}
+
+	// The consumed refresh token is single-use (rotation), even secretless.
+	if _, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"refresh_token"}, "refresh_token": {refresh},
+		"client_id": {"vellum"},
+	}); status != http.StatusBadRequest {
+		t.Errorf("rotated refresh reuse = %d, want 400", status)
+	}
+
+	// An unknown client_id is still rejected up front.
+	if _, status := tokenRequest(t, srv, url.Values{
+		"grant_type": {"refresh_token"}, "refresh_token": {body2["refresh_token"].(string)},
+		"client_id": {"nope"},
+	}); status != http.StatusUnauthorized {
+		t.Errorf("unknown client refresh = %d, want 401", status)
+	}
+}
+
 func TestClientCredentialsGrant(t *testing.T) {
 	srv := newAuthServer(t, newTestProvider(t))
 

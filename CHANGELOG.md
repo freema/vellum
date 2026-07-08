@@ -6,6 +6,28 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.10.0] — 2026-07-08
+
+The web vault stays signed in.
+
+### Added
+- **The web UI now keeps you signed in for up to 30 days.** It renews its
+  1-hour access token silently in the background from the rotating refresh
+  token and stores the session in `localStorage`, so a page reload, a closed
+  tab or a browser restart no longer drops you back at the connect screen.
+  Previously the web vault held only the 1-hour access token in
+  `sessionStorage` and logged you out on the hour or when the tab closed —
+  the 30-day refresh token shipped in 1.9.1 was never used by the web client.
+
+### Changed
+- **The web client refreshes without re-sending the client secret.** A valid,
+  rotating refresh token is now sufficient for the `refresh_token` grant, so
+  the embedded SPA — which keeps no secret after the initial login — renews on
+  the refresh token alone, exactly as the public MCP clients already did.
+  Minting the first token pair still requires the client secret. Existing web
+  sessions re-authenticate once after upgrading, since the session moved from
+  `sessionStorage` to `localStorage`.
+
 ## [1.9.1] — 2026-07-07
 
 ### Changed

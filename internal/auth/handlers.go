@@ -257,7 +257,15 @@ func (p *Provider) handleToken(w http.ResponseWriter, r *http.Request) {
 		)
 	case "refresh_token":
 		clientID := r.PostForm.Get("client_id")
-		if !p.authenticateTokenClient(w, r, clientID) {
+		// A valid, unexpired refresh token — rotated on every use and bound to
+		// its client_id by exchangeRefresh — is itself sufficient proof for this
+		// grant. The embedded SPA keeps no client secret after the initial
+		// client_credentials login, so it (a confidential client) refreshes on
+		// the refresh token alone, exactly as the public MCP clients already do.
+		// The secret still gates minting the first token pair, so possession of a
+		// refresh token already implies a prior successful secret auth.
+		if _, ok := p.lookupClient(clientID); !ok {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "invalid_client"})
 			return
 		}
 		var requested []string
