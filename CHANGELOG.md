@@ -6,6 +6,19 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.11.0] — 2026-07-11
+
+### Added
+- **Resource reads carry the content hash, modtime and size.** Reading a
+  note through its resource URI (`vellum://note/{path}`) now returns
+  `hash`, `modTime` and `size` in `ResourceContents._meta`, mirroring what
+  the `read_note` tool already reports. A note attached as context —
+  through a resource picker or an @-mention — can therefore seed the
+  `expected_hash` on a later write, so the resource path gets the same
+  conflict-safe footing as the tool path instead of being a snapshot with
+  weaker freshness semantics. Since 1.9.0 resource reads returned only the
+  markdown text, with no way to tie an attached note back to a safe write.
+
 ## [1.10.0] — 2026-07-08
 
 The web vault stays signed in.
@@ -361,7 +374,10 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.8.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.11.0...HEAD
+[1.11.0]: https://github.com/freema/vellum/compare/v1.10.0...v1.11.0
+[1.10.0]: https://github.com/freema/vellum/compare/v1.9.1...v1.10.0
+[1.9.1]: https://github.com/freema/vellum/compare/v1.9.0...v1.9.1
 [1.9.0]: https://github.com/freema/vellum/compare/v1.8.0...v1.9.0
 [1.8.0]: https://github.com/freema/vellum/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/freema/vellum/compare/v1.6.0...v1.7.0
