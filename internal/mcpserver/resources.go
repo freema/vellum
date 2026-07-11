@@ -60,10 +60,19 @@ func registerResources(s *mcp.Server, d Deps) {
 			}
 			return nil, err
 		}
+		// The read carries the same hash/mtime that read_note returns, so a
+		// note attached as context (picker, @-mention) can be used as the
+		// expected_hash on a later write — the resource path gets the same
+		// conflict-safe footing as the tool path, not a worse-freshness copy.
 		return &mcp.ReadResourceResult{Contents: []*mcp.ResourceContents{{
 			URI:      req.Params.URI,
 			MIMEType: "text/markdown",
 			Text:     note.Content,
+			Meta: mcp.Meta{
+				"hash":    note.Hash,
+				"modTime": note.ModTime,
+				"size":    note.Size,
+			},
 		}}}, nil
 	}
 

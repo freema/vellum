@@ -110,6 +110,16 @@ func TestResourcesListReadAndTemplate(t *testing.T) {
 		t.Errorf("contents = %+v", rd.Contents)
 	}
 
+	// The read carries the same hash the tool path returns, so an attached
+	// note can seed a later expected_hash write.
+	seed, err := h.deps.Vault.Read("inbox/seed.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := rd.Contents[0].Meta["hash"]; got != seed.Hash || seed.Hash == "" {
+		t.Errorf("resource read _meta hash = %v, want %q", got, seed.Hash)
+	}
+
 	// A note on disk but not (yet) in the index is served via the template.
 	if err := h.deps.Vault.Write("inbox/direct.md", "# Direct\n", vault.WriteOptions{}); err != nil {
 		t.Fatal(err)
