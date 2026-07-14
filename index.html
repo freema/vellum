@@ -1,0 +1,409 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>vellum — self-hosted memory your agent can read &amp; write</title>
+<meta name="description" content="A lightweight, self-hosted MCP server over a folder of markdown. One 24 MB Docker image, ~5 MB idle RAM. No database, no embeddings, no lock-in. docker compose up -d and you're done.">
+<link rel="icon" href="data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2032%2032'%3E%3Cpath%20d='M6%200%20H21%20L32%2011%20V26%20A6%206%200%200%201%2026%2032%20H6%20A6%206%200%200%201%200%2026%20V6%20A6%206%200%200%201%206%200%20Z'%20fill='%238B6F47'/%3E%3Cpath%20d='M21%200%20L32%2011%20L21%2011%20Z'%20fill='%236F5836'/%3E%3Ctext%20x='16'%20y='25'%20text-anchor='middle'%20font-family='Georgia,serif'%20font-size='20'%20font-weight='500'%20fill='%23FBF7F0'%3Ev%3C/text%3E%3C/svg%3E">
+
+<!-- Open Graph / social -->
+<meta property="og:type" content="website">
+<meta property="og:title" content="vellum — self-hosted memory your agent can read &amp; write">
+<meta property="og:description" content="A tiny MCP server over a plain folder of markdown. No database, no embeddings, no lock-in.">
+<meta property="og:image" content="./assets/og.png">
+<meta property="og:url" content="https://freema.github.io/vellum/">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="vellum — self-hosted memory your agent can read &amp; write">
+<meta name="twitter:description" content="A tiny MCP server over a plain folder of markdown. No database, no embeddings, no lock-in.">
+<meta name="twitter:image" content="./assets/og.png">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&family=Inter:wght@400;450;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root{
+  --bg:#15121D; --bg-2:#131019; --panel:rgba(255,255,255,.025); --panel-2:rgba(255,255,255,.04);
+  --line:rgba(255,255,255,.09); --line-2:rgba(255,255,255,.14);
+  --ink:#F3EEE4; --cream:#EDE7DC; --muted:#A29CB0; --faint:#7C7689;
+  --accent:#C9A876; --accent-2:#D8B784; --accent-deep:#8B6F47;
+  --code-bg:#0E0B14;
+  --serif:'Newsreader',Georgia,serif; --sans:'Inter',system-ui,sans-serif; --mono:'JetBrains Mono',monospace;
+  --maxw:1120px;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  font-family:var(--sans); color:var(--cream); line-height:1.6;
+  background:
+    radial-gradient(1200px 620px at 84% -8%, rgba(139,111,71,.20), transparent 60%),
+    radial-gradient(900px 500px at 8% 4%, rgba(139,111,71,.10), transparent 62%),
+    linear-gradient(165deg,var(--bg) 0%,var(--bg-2) 100%);
+  background-attachment:fixed;
+  -webkit-font-smoothing:antialiased; text-rendering:optimizeLegibility;
+  overflow-x:hidden;
+}
+body::before{
+  content:"";position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:linear-gradient(rgba(255,255,255,.022) 1px,transparent 1px),
+                   linear-gradient(90deg,rgba(255,255,255,.022) 1px,transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(1000px 640px at 24% 12%,#000,transparent 78%);
+}
+.wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px;position:relative;z-index:1}
+a{color:inherit;text-decoration:none}
+img{max-width:100%;display:block}
+
+/* ---------- header ---------- */
+header{position:sticky;top:0;z-index:50;backdrop-filter:blur(10px);
+  background:linear-gradient(180deg,rgba(19,16,25,.82),rgba(19,16,25,.42));
+  border-bottom:1px solid var(--line)}
+.nav{display:flex;align-items:center;gap:14px;height:60px}
+.brand{display:flex;align-items:center;gap:11px;font-family:var(--serif);font-weight:500;font-size:22px;letter-spacing:-.01em}
+.brand .tile{width:28px;height:28px;flex:none}
+.nav .spacer{flex:1}
+.nav .links{display:flex;align-items:center;gap:22px;font-size:14px;color:var(--muted)}
+.nav .links a{transition:color .15s}
+.nav .links a:hover{color:var(--cream)}
+.nav .ghbtn{display:inline-flex;align-items:center;gap:8px;font-size:13.5px;font-weight:500;color:var(--ink);
+  border:1px solid var(--line-2);border-radius:8px;padding:7px 13px;transition:border-color .15s,background .15s}
+.nav .ghbtn:hover{border-color:var(--accent);background:rgba(201,168,118,.08)}
+@media(max-width:720px){.nav .links{display:none}}
+
+/* ---------- hero ---------- */
+.hero{padding:84px 0 48px;position:relative}
+.kicker{font-family:var(--mono);font-size:13px;font-weight:600;letter-spacing:.22em;text-transform:uppercase;color:var(--accent)}
+.hero h1{font-family:var(--serif);font-weight:500;font-size:clamp(42px,6.4vw,74px);line-height:1.03;letter-spacing:-.018em;margin:20px 0 0;max-width:15ch;text-wrap:balance}
+.hero h1 em{font-style:italic;color:var(--accent-2)}
+.hero .lede{font-size:clamp(17px,2.1vw,20px);color:var(--muted);margin-top:22px;max-width:52ch;line-height:1.55}
+.cta{display:flex;flex-wrap:wrap;gap:13px;margin-top:32px}
+.btn{display:inline-flex;align-items:center;gap:9px;font-weight:500;font-size:15px;border-radius:9px;padding:12px 20px;transition:transform .12s,background .15s,border-color .15s}
+.btn:active{transform:translateY(1px)}
+.btn-primary{background:var(--accent);color:#20190E;font-weight:600}
+.btn-primary:hover{background:var(--accent-2)}
+.btn-ghost{border:1px solid var(--line-2);color:var(--ink)}
+.btn-ghost:hover{border-color:var(--accent);background:rgba(201,168,118,.07)}
+.chips{display:flex;flex-wrap:wrap;gap:9px;margin-top:34px}
+.chip{font-family:var(--mono);font-size:12.5px;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:6px 13px;white-space:nowrap}
+.chip.on{color:#20190E;background:var(--accent);border-color:var(--accent);font-weight:600}
+.chip b{color:var(--cream);font-weight:500}
+
+/* ---------- screenshot frame ---------- */
+.shot{position:relative;margin-top:56px;border:1px solid var(--line);border-radius:15px;overflow:hidden;
+  box-shadow:0 50px 110px -55px rgba(0,0,0,.92),0 0 0 1px rgba(255,255,255,.02) inset;background:#0f0d15}
+.shot::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:15px;box-shadow:0 0 0 1px rgba(201,168,118,.10) inset}
+.shot img{width:100%;height:auto;display:block}
+.shot .bar{display:flex;align-items:center;gap:7px;padding:12px 16px;background:rgba(255,255,255,.03);border-bottom:1px solid var(--line)}
+.shot .bar span{width:11px;height:11px;border-radius:50%;background:rgba(255,255,255,.16)}
+.shot.narrow{max-width:880px;margin-left:auto;margin-right:auto}
+.hero .shot{
+  box-shadow:0 60px 130px -60px rgba(0,0,0,.95),0 0 90px -30px rgba(201,168,118,.16),0 0 0 1px rgba(255,255,255,.02) inset;
+}
+.caption{text-align:center;color:var(--faint);font-size:13.5px;margin-top:16px;font-family:var(--mono)}
+
+/* ---------- section frame ---------- */
+section{padding:66px 0;position:relative}
+section .shot{margin-top:0}
+.eyebrow{font-family:var(--mono);font-size:12.5px;font-weight:600;letter-spacing:.2em;text-transform:uppercase;color:var(--accent);margin-bottom:14px}
+h2{font-family:var(--serif);font-weight:500;font-size:clamp(30px,4vw,44px);line-height:1.08;letter-spacing:-.015em;max-width:22ch;text-wrap:balance}
+h2 em{font-style:italic;color:var(--accent-2)}
+.sec-lede{color:var(--muted);font-size:17px;margin-top:16px;max-width:64ch;line-height:1.62}
+.divider{height:1px;background:linear-gradient(90deg,var(--line),transparent);border:0}
+
+/* showcase (full-width screenshot under its own heading) */
+.showhead{margin-bottom:36px}
+.keypoints{display:flex;flex-wrap:wrap;gap:12px 30px;margin-top:24px}
+.keypoints span{font-size:14.5px;color:var(--muted);position:relative;padding-left:20px;max-width:34ch}
+.keypoints span::before{content:"";position:absolute;left:1px;top:8px;width:7px;height:7px;border-radius:2px;background:var(--accent);transform:rotate(45deg)}
+.keypoints b{color:var(--cream);font-weight:500}
+.keypoints code{font-family:var(--mono);font-size:.85em;color:var(--accent-2)}
+
+/* ---------- code block ---------- */
+.code{position:relative;background:var(--code-bg);border:1px solid var(--line);border-radius:12px;margin-top:22px;overflow:hidden}
+.code pre{margin:0;padding:20px 22px;overflow-x:auto;font-family:var(--mono);font-size:14px;line-height:1.75;color:#DED7EA}
+.code pre .p{color:var(--accent);user-select:none}
+.code pre .s{color:var(--accent-2)}
+.copy{position:absolute;top:10px;right:10px;font-family:var(--mono);font-size:11.5px;color:var(--muted);
+  background:rgba(255,255,255,.05);border:1px solid var(--line);border-radius:7px;padding:5px 10px;cursor:pointer;transition:all .14s}
+.copy:hover{color:var(--cream);border-color:var(--accent)}
+.copy.done{color:#8FD08F;border-color:rgba(143,208,143,.5)}
+.hint{color:var(--faint);font-size:14px;margin-top:14px;line-height:1.6}
+.hint code{font-family:var(--mono);font-size:.9em;color:var(--accent-2);background:rgba(201,168,118,.09);padding:1px 6px;border-radius:5px}
+
+/* ---------- feature grid ---------- */
+.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:40px}
+@media(max-width:860px){.grid{grid-template-columns:1fr 1fr}}
+@media(max-width:560px){.grid{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:24px 22px;transition:border-color .18s,background .18s}
+.card:hover{border-color:var(--line-2);background:var(--panel-2)}
+.card .ico{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;background:rgba(201,168,118,.12);
+  border:1px solid rgba(201,168,118,.28);color:var(--accent-2);font-family:var(--mono);font-size:15px;font-weight:600;margin-bottom:15px}
+.card h3{font-family:var(--serif);font-weight:500;font-size:20px;letter-spacing:-.01em;margin-bottom:8px}
+.card p{color:var(--muted);font-size:14.5px;line-height:1.58}
+.card p code{font-family:var(--mono);font-size:.86em;color:var(--accent-2)}
+
+/* why-not */
+.compare{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:38px}
+@media(max-width:760px){.compare{grid-template-columns:1fr}}
+.compare .card h3{font-size:18px;color:var(--cream)}
+.compare .card .vs{font-family:var(--mono);font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin-bottom:10px}
+
+/* deploy strip */
+.deploy{display:flex;flex-wrap:wrap;gap:10px;margin-top:26px}
+.deploy .tag{font-family:var(--mono);font-size:13px;color:var(--cream);border:1px solid var(--line);border-radius:8px;padding:9px 14px;background:var(--panel)}
+
+/* CTA band */
+.band{margin:40px 0 0;border:1px solid var(--line);border-radius:18px;padding:56px 40px;text-align:center;
+  background:radial-gradient(700px 300px at 50% -40%,rgba(201,168,118,.16),transparent 65%),var(--panel)}
+.band h2{margin:16px auto 0}
+.band .cta{justify-content:center}
+
+/* footer */
+footer{border-top:1px solid var(--line);margin-top:72px;padding:40px 0 56px}
+.foot{display:flex;flex-wrap:wrap;gap:24px;align-items:center;justify-content:space-between}
+.foot .cols{display:flex;flex-wrap:wrap;gap:26px;font-size:14px;color:var(--muted)}
+.foot .cols a:hover{color:var(--cream)}
+.foot .by{font-size:13.5px;color:var(--faint)}
+.foot .by a{color:var(--accent-2)}
+
+/* PH ribbon */
+.ph{display:inline-flex;align-items:center;gap:10px;font-size:13.5px;color:var(--cream);
+  border:1px solid rgba(201,168,118,.35);background:rgba(201,168,118,.08);border-radius:999px;padding:8px 16px;margin-bottom:26px}
+.ph .dot{width:8px;height:8px;border-radius:50%;background:var(--accent-2);box-shadow:0 0 0 4px rgba(216,183,132,.18)}
+.ph b{color:var(--accent-2);font-weight:600}
+
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="vellum home">
+      <svg class="tile" viewBox="0 0 32 32" aria-hidden="true"><path d="M6 0 H21 L32 11 V26 A6 6 0 0 1 26 32 H6 A6 6 0 0 1 0 26 V6 A6 6 0 0 1 6 0 Z" fill="#8B6F47"/><path d="M21 0 L32 11 L21 11 Z" fill="#6F5836"/><text x="16" y="25" text-anchor="middle" font-family="Georgia,serif" font-size="20" font-weight="500" fill="#FBF7F0">v</text></svg>
+      vellum
+    </a>
+    <div class="spacer"></div>
+    <nav class="links">
+      <a href="#quickstart">Quick start</a>
+      <a href="#features">Features</a>
+      <a href="#connect">Connect Claude</a>
+      <a href="#deploy">Deploy</a>
+    </nav>
+    <a class="ghbtn" href="https://github.com/freema/vellum" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      Star
+    </a>
+  </div>
+</header>
+
+<a id="top"></a>
+<div class="wrap hero">
+  <div class="ph"><span class="dot"></span> Launching on Product Hunt · <b>21 July</b></div>
+  <div class="kicker">Self-hosted MCP server · MIT</div>
+  <h1>Self-hosted memory your&nbsp;agent can <em>read &amp; write</em>.</h1>
+  <p class="lede">A tiny MCP server over a plain folder of markdown. One static Go binary with an embedded web UI, one ~24&nbsp;MB Docker image, ~5&nbsp;MB idle RAM. No database, no embeddings, no lock-in.</p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#quickstart">Get started</a>
+    <a class="btn btn-ghost" href="https://github.com/freema/vellum" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8a8 8 0 0 0 5.47 7.59c.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.4 7.4 0 0 1 2-.27c.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8 8 0 0 0 16 8c0-4.42-3.58-8-8-8Z"/></svg>
+      View on GitHub
+    </a>
+  </div>
+  <div class="chips">
+    <span class="chip on">Open source · MIT</span>
+    <span class="chip">One <b>24 MB</b> container</span>
+    <span class="chip"><b>~5 MB</b> idle RAM</span>
+    <span class="chip"><b>15</b> MCP tools</span>
+    <span class="chip">docker compose up -d</span>
+  </div>
+
+  <figure class="shot">
+    <div class="bar"><span></span><span></span><span></span></div>
+    <img src="./assets/workspace.png" alt="vellum three-pane workspace: vault tree, note list, split markdown editor" width="1800" height="1125">
+  </figure>
+  <p class="caption">The embedded three-pane workspace (tree, list, split editor) in the same 24&nbsp;MB binary.</p>
+</div>
+
+<!-- QUICK START -->
+<section id="quickstart">
+  <div class="wrap">
+    <div class="eyebrow">Quick start</div>
+    <h2>Try it in <em>one command</em>.</h2>
+    <p class="sec-lede">Pre-built multi-arch images (amd64 + arm64) ship to GitHub Container Registry on every release. Point it at any folder and open your browser.</p>
+    <div class="code">
+      <button class="copy" data-copy="mkdir -p vault&#10;docker run --rm -p 8080:8080 -v &quot;$PWD/vault:/vault&quot; ghcr.io/freema/vellum">Copy</button>
+      <pre><span class="p">$ </span>mkdir -p vault
+<span class="p">$ </span>docker run --rm -p 8080:8080 -v <span class="s">"$PWD/vault:/vault"</span> ghcr.io/freema/vellum</pre>
+    </div>
+    <p class="hint">Open <code>http://localhost:8080</code>. That's your vault, served straight from <code>./vault</code>. Auth is off on localhost; flip on OAuth before you expose anything.</p>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- LIVE WORKSPACE -->
+<section>
+  <div class="wrap">
+    <div class="showhead">
+      <div class="eyebrow">Live workspace</div>
+      <h2>Your agent writes markdown. You watch it <em>appear</em>.</h2>
+      <p class="sec-lede">The embedded UI stays in sync with the vault on its own. An MCP write lands in the editor without a reload, a deleted note switches to a designed 410 state, and a deploy restart shows a reconnect overlay instead of a dead page.</p>
+      <div class="keypoints">
+        <span><b>No reload.</b> MCP writes and web edits reconcile live.</span>
+        <span><b>Shareable views.</b> Folder, tag and status filters live in the URL.</span>
+        <span><b>Conflict-safe.</b> Every write is guarded by a content hash.</span>
+      </div>
+    </div>
+    <figure class="shot narrow">
+      <div class="bar"><span></span><span></span><span></span></div>
+      <img src="./assets/demo.gif" alt="An MCP write appearing live in the vellum workspace" width="800" height="500">
+    </figure>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section id="features">
+  <div class="wrap">
+    <div class="eyebrow">Why vellum</div>
+    <h2>Deliberately light. The smallest stack that <em>just works</em>.</h2>
+    <div class="grid">
+      <div class="card"><div class="ico">md</div><h3>Flat markdown</h3><p>Your data is portable files, readable in any editor, git or Obsidian. No database, no embeddings, no lock-in.</p></div>
+      <div class="card"><div class="ico">∅</div><h3>Never calls an LLM</h3><p>vellum prepares context; the agent on <em>your</em> side decides. The optional curator tools stay deterministic, no API keys.</p></div>
+      <div class="card"><div class="ico">fs</div><h3>Dumb &amp; deterministic</h3><p>Everything is a file; config is environment variables. Nothing to corrupt, nothing to warm up.</p></div>
+      <div class="card"><div class="ico">/</div><h3>Structure is a feature</h3><p>Real folders: <code>inbox/</code>, <code>projects/</code>, <code>archive/</code>. Unfiled notes land in the inbox, never a pile of files.</p></div>
+      <div class="card"><div class="ico">15</div><h3>Small tool surface</h3><p>15 MCP tools means less agent context burned on definitions. Each carries read-only, destructive and idempotent hints.</p></div>
+      <div class="card"><div class="ico">://</div><h3>Notes as resources</h3><p>Every note is a first-class MCP resource at <code>vellum://note/{path}</code>. Attach one as context with no tool call, and subscribe for live updates.</p></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- MCP RESOURCES -->
+<section>
+  <div class="wrap">
+    <div class="showhead">
+      <div class="eyebrow">MCP resources</div>
+      <h2>Attach a note as context, <em>no tool call</em>.</h2>
+      <p class="sec-lede">Notes are exposed as <code style="font-family:var(--mono);color:var(--accent-2)">vellum://note/{path}</code> serving raw markdown. Clients with a resource picker attach one straight from the list. Subscribe to a URI and you get <code style="font-family:var(--mono);color:var(--accent-2)">notifications/resources/updated</code> the moment it changes, whether the edit came through MCP or the web editor.</p>
+    </div>
+    <figure class="shot">
+      <div class="bar"><span></span><span></span><span></span></div>
+      <img src="./assets/resources.png" alt="vellum notes surfaced in an MCP client's resource picker" width="1800" height="780">
+    </figure>
+  </div>
+</section>
+
+<!-- SEARCH -->
+<section>
+  <div class="wrap">
+    <div class="showhead">
+      <div class="eyebrow">Search &amp; command palette</div>
+      <h2>Instant. Forgiving. <em>Zero index.</em></h2>
+      <p class="sec-lede">A ranked in-RAM scan with nothing to corrupt and no warm-up. Case-, diacritics- and typo-insensitive, so a search for <code style="font-family:var(--mono);color:var(--accent-2)">preklapy</code> still finds <code style="font-family:var(--mono);color:var(--accent-2)">překlepy</code>. About <b>0.4&nbsp;ms</b> across a 2,000-note vault.</p>
+      <div class="keypoints">
+        <span><b>Ranked.</b> Title beats tag beats path beats body; word-starts win.</span>
+        <span><b>No bleve, no vectors.</b> The metadata index narrows, RAM matches the rest.</span>
+        <span><b>⌘K everywhere.</b> Jump to any note or run a command.</span>
+      </div>
+    </div>
+    <figure class="shot">
+      <div class="bar"><span></span><span></span><span></span></div>
+      <img src="./assets/palette.png" alt="vellum command palette open over the workspace" width="1800" height="1125">
+    </figure>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- CONNECT -->
+<section id="connect">
+  <div class="wrap">
+    <div class="eyebrow">Connect Claude</div>
+    <h2>One line, then <em>OAuth 2.1</em>.</h2>
+    <p class="sec-lede">The connector URL must end with <code style="font-family:var(--mono);color:var(--accent-2)">/mcp</code>. Claude runs the flow, a browser opens vellum's consent screen, you approve. vellum is its own OAuth issuer, so there is no external identity provider and no calls out.</p>
+    <div class="code">
+      <button class="copy" data-copy="claude mcp add --transport http vellum https://your-host/mcp">Copy</button>
+      <pre><span class="p">$ </span>claude mcp add --transport http vellum https://your-host/mcp</pre>
+    </div>
+    <p class="hint">Local, no Docker? <code>vellum -mcp-stdio</code> serves MCP over stdio for local clients. The same works as a claude.ai custom connector.</p>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- WHY NOT -->
+<section>
+  <div class="wrap">
+    <div class="eyebrow">Why vellum and not…</div>
+    <h2>It doesn't replace your editor. It <em>serves the same folder</em>.</h2>
+    <div class="compare">
+      <div class="card"><div class="vs">vs. Obsidian + plugins</div><h3>Keep your editor</h3><p>vellum happily serves the same vault folder to your agent while you keep editing anywhere. No sync, no plugin sandbox, no Electron on the server.</p></div>
+      <div class="card"><div class="vs">vs. Notion / Anytype</div><h3>You own the data</h3><p>Those apps own your notes. vellum's "database" is <code>ls</code> and <code>grep</code>-able markdown you can read in any editor.</p></div>
+      <div class="card"><div class="vs">vs. heavier MCP servers</div><h3>One tiny container</h3><p>One 24&nbsp;MB image, no vector DB, no API keys, minimal agent context. The whole index rebuilds in ~50&nbsp;ms at startup.</p></div>
+    </div>
+  </div>
+</section>
+
+<hr class="divider">
+
+<!-- DEPLOY -->
+<section id="deploy">
+  <div class="wrap">
+    <div class="eyebrow">Deploy anywhere</div>
+    <h2>Your reverse proxy is the only thing exposed.</h2>
+    <p class="sec-lede">vellum honours the <code style="font-family:var(--mono);color:var(--accent-2)">PORT</code> the platform injects and stores every note on a volume mounted at <code style="font-family:var(--mono);color:var(--accent-2)">/vault</code>. Pin a version, add a persistent disk, set a secret, done.</p>
+    <div class="deploy">
+      <span class="tag">Docker Compose</span>
+      <span class="tag">Railway</span>
+      <span class="tag">Render</span>
+      <span class="tag">Fly.io</span>
+      <span class="tag">Coolify / Traefik</span>
+      <span class="tag">Caddy</span>
+    </div>
+    <p class="hint" style="margin-top:22px">Full guide, hardening notes and a smoke-test checklist live in the <a href="https://github.com/freema/vellum/blob/main/docs/deployment.md" target="_blank" rel="noopener" style="color:var(--accent-2)">deployment docs</a> and <a href="https://github.com/freema/vellum/blob/main/docs/threat-model.md" target="_blank" rel="noopener" style="color:var(--accent-2)">threat model</a>.</p>
+  </div>
+</section>
+
+<!-- CTA BAND -->
+<section style="padding-top:8px">
+  <div class="wrap">
+    <div class="band">
+      <div class="kicker">a calm window into a folder of markdown</div>
+      <h2>Give your agent a memory<br>you can <em>actually read</em>.</h2>
+      <div class="cta">
+        <a class="btn btn-primary" href="https://github.com/freema/vellum" target="_blank" rel="noopener">Star on GitHub</a>
+        <a class="btn btn-ghost" href="https://github.com/freema/vellum/blob/main/README.md" target="_blank" rel="noopener">Read the docs</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap foot">
+    <div class="cols">
+      <a href="https://github.com/freema/vellum" target="_blank" rel="noopener">GitHub</a>
+      <a href="https://github.com/freema/vellum/blob/main/README.md" target="_blank" rel="noopener">Docs</a>
+      <a href="https://github.com/freema/vellum/blob/main/CHANGELOG.md" target="_blank" rel="noopener">Changelog</a>
+      <a href="https://github.com/freema/vellum/pkgs/container/vellum" target="_blank" rel="noopener">Container</a>
+      <a href="https://github.com/freema/vellum/blob/main/LICENSE" target="_blank" rel="noopener">MIT License</a>
+    </div>
+    <div class="by">Built by <a href="https://github.com/freema" target="_blank" rel="noopener">Tomáš Grasl · @freema</a></div>
+  </div>
+</footer>
+
+<script>
+document.querySelectorAll('.copy').forEach(function(b){
+  b.addEventListener('click',function(){
+    var t=b.getAttribute('data-copy');
+    navigator.clipboard.writeText(t).then(function(){
+      var o=b.textContent; b.textContent='Copied'; b.classList.add('done');
+      setTimeout(function(){b.textContent=o;b.classList.remove('done')},1600);
+    });
+  });
+});
+</script>
+</body>
+</html>
