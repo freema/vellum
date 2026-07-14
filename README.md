@@ -7,6 +7,7 @@
 [![Go](https://img.shields.io/badge/go-1.25%2B-00ADD8?logo=go)](go.mod)
 [![License: MIT](https://img.shields.io/badge/license-MIT-brown.svg)](LICENSE)
 [![GHCR](https://img.shields.io/badge/ghcr.io-freema%2Fvellum-8B6F47)](https://github.com/freema/vellum/pkgs/container/vellum)
+[![Website](https://img.shields.io/badge/website-freema.github.io%2Fvellum-8B6F47)](https://freema.github.io/vellum/)
 
 A lightweight, **self-hosted MCP server** over a folder of markdown files.
 One static Go binary with an embedded web UI, one ~24 MB Docker image,
