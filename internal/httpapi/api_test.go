@@ -166,6 +166,32 @@ func TestAPIConflictPut(t *testing.T) {
 	}
 }
 
+func TestAPICreateOnlyPut(t *testing.T) {
+	srv := newAPIServer(t)
+
+	create := map[string]string{"If-None-Match": "*"}
+	resp, body := doReq(t, http.MethodPut, srv.URL+"/api/notes/inbox/untitled.md", "# Untitled\n", create)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create = %d: %s", resp.StatusCode, body)
+	}
+
+	// The name is taken now: a second create must fail instead of wiping it.
+	resp, _ = doReq(t, http.MethodPut, srv.URL+"/api/notes/inbox/untitled.md", "# Other\n", create)
+	if resp.StatusCode != http.StatusPreconditionFailed {
+		t.Fatalf("create over existing = %d, want 412", resp.StatusCode)
+	}
+	_, body = doReq(t, http.MethodGet, srv.URL+"/api/notes/inbox/untitled.md", "", nil)
+	if !strings.Contains(string(body), "# Untitled") {
+		t.Errorf("existing note was overwritten: %s", body)
+	}
+
+	// The next free name goes through.
+	resp, _ = doReq(t, http.MethodPut, srv.URL+"/api/notes/inbox/untitled-2.md", "# Other\n", create)
+	if resp.StatusCode != http.StatusOK {
+		t.Errorf("create untitled-2 = %d", resp.StatusCode)
+	}
+}
+
 func TestAPIGetNoteBogusPathIs404(t *testing.T) {
 	srv := newAPIServer(t)
 

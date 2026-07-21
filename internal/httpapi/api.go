@@ -130,7 +130,9 @@ func (a *API) handleGetNote(w http.ResponseWriter, r *http.Request) {
 
 // handlePutNote creates or updates a note. If-Match carries the ETag from a
 // previous GET; a stale one yields 409 with the current content + ETag so
-// the UI can offer reload/diff. No If-Match = last-write-wins.
+// the UI can offer reload/diff. If-None-Match: * is the create-only form —
+// an existing note answers 412 instead of being overwritten. No condition at
+// all = last-write-wins.
 func (a *API) handlePutNote(w http.ResponseWriter, r *http.Request) {
 	path := r.PathValue("path")
 	body, err := io.ReadAll(io.LimitReader(r.Body, vault.DefaultMaxFileSize+1))
@@ -140,12 +142,26 @@ func (a *API) handlePutNote(w http.ResponseWriter, r *http.Request) {
 	}
 
 	opts := vault.WriteOptions{Overwrite: true}
+	createOnly := false
 	if match := r.Header.Get("If-Match"); match != "" && match != "*" {
 		opts.ExpectedHash = strings.Trim(match, `"`)
+		opts.Overwrite = false
+	} else if r.Header.Get("If-None-Match") == "*" {
+		// The workspace picks the first free name for a new note from a listing
+		// that may be stale (an agent can have written it a second ago), so a
+		// create must never land on top of an existing note.
+		createOnly = true
 		opts.Overwrite = false
 	}
 
 	if err := a.Vault.Write(path, string(body), opts); err != nil {
+		if createOnly && errors.Is(err, vault.ErrExists) {
+			writeJSON(w, http.StatusPreconditionFailed, map[string]string{
+				"error": "note already exists",
+				"path":  path,
+			})
+			return
+		}
 		if errors.Is(err, vault.ErrConflict) {
 			current, readErr := a.Vault.Read(path)
 			if readErr != nil {
