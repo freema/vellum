@@ -6,6 +6,16 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.0] — 2026-07-21
+
+Notes captured in the web UI get real filenames.
+
+### Added
+- **Create-only note writes.** `PUT /api/notes/{path}` honors
+  `If-None-Match: *`: an existing note answers **412** instead of being
+  replaced. `If-Match` keeps precedence, and the two conditions together are
+  refused with 400 rather than silently resolved one way.
+
 ### Fixed
 - **A note created in the web UI is now named after its title.** New notes
   still start as `untitled.md`, but naming one in the editor moves the file
@@ -49,6 +59,10 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A rename that finishes after you have moved on stays where you are.** The
   navigation used the note that was open when the rename started, so a slow
   rename could yank the workspace back from the note you had just opened.
+- **Leaving a note flushes its draft.** The last keystrokes inside the 1 s
+  autosave window used to ride on a timer that fired after the editor had
+  already moved on — and were lost outright when the note had changed path
+  in the meantime.
 
 ## [1.11.0] — 2026-07-11
 
@@ -418,7 +432,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.11.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.12.0...HEAD
+[1.12.0]: https://github.com/freema/vellum/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/freema/vellum/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/freema/vellum/compare/v1.9.1...v1.10.0
 [1.9.1]: https://github.com/freema/vellum/compare/v1.9.0...v1.9.1
