@@ -222,6 +222,9 @@ func (v *Vault) Write(path, content string, opts WriteOptions) error {
 	if err != nil {
 		return err
 	}
+	if hasHiddenSegment(path) {
+		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, path)
+	}
 	if int64(len(content)) > v.maxSize {
 		return fmt.Errorf("%w: %s (%d bytes)", ErrTooLarge, path, len(content))
 	}
@@ -425,6 +428,9 @@ func (v *Vault) Move(from, to string) error {
 	if err != nil {
 		return err
 	}
+	if hasHiddenSegment(to) {
+		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, to)
+	}
 
 	v.mu.Lock()
 	defer v.mu.Unlock()
@@ -435,8 +441,14 @@ func (v *Vault) Move(from, to string) error {
 		}
 		return err
 	}
-	if _, err := os.Stat(absTo); err == nil {
-		return fmt.Errorf("%w: %s", ErrExists, to)
+	// A case-only rename (notes.md → Notes.md) points at the same file on a
+	// case-insensitive volume (macOS, Windows) — os.Stat finding "the target"
+	// there means the source itself, not a note we would clobber.
+	if toInfo, err := os.Stat(absTo); err == nil {
+		fromInfo, statErr := os.Stat(absFrom)
+		if statErr != nil || !os.SameFile(fromInfo, toInfo) {
+			return fmt.Errorf("%w: %s", ErrExists, to)
+		}
 	} else if !os.IsNotExist(err) {
 		return err
 	}

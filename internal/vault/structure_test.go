@@ -3,7 +3,9 @@ package vault
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestInitStructureOnEmptyRoot(t *testing.T) {
@@ -114,6 +116,23 @@ func TestSlugify(t *testing.T) {
 	for _, tt := range tests {
 		if got := slugify(tt.in); got != tt.want {
 			t.Errorf("slugify(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+// A pasted paragraph as a title must still produce a filename the kernel
+// accepts, cut on a rune boundary so the name stays valid UTF-8.
+func TestSlugifyLongTitle(t *testing.T) {
+	for _, in := range []string{strings.Repeat("a", 400), strings.Repeat("ěščř ", 100)} {
+		got := slugify(in)
+		if len(got) > maxSlugBytes {
+			t.Errorf("slugify(%d chars) = %d bytes, want <= %d", len(in), len(got), maxSlugBytes)
+		}
+		if !utf8.ValidString(got) {
+			t.Errorf("slugify(%d chars) cut mid-rune: %q", len(in), got)
+		}
+		if strings.HasSuffix(got, "-") {
+			t.Errorf("slugify(%d chars) ends in a dash: %q", len(in), got)
 		}
 	}
 }

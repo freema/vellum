@@ -83,6 +83,21 @@ func isMarkdown(path string) bool {
 	return false
 }
 
+// hasHiddenSegment reports whether any segment of a vault path starts with a
+// dot. List and the index skip dotfiles and dot-directories — they are editor
+// and OS metadata — so a note created under one would sit on disk yet vanish
+// from vellum on the next index build. Writes refuse such a path; reads of an
+// existing one still work, so nothing already there is trapped.
+func hasHiddenSegment(rel string) bool {
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(rel)))
+	for _, seg := range strings.Split(clean, "/") {
+		if len(seg) > 1 && seg[0] == '.' && seg != ".." {
+			return true
+		}
+	}
+	return false
+}
+
 // resolveDir validates a vault-relative directory path ("" means the root)
 // and returns its absolute form. The directory does not have to exist.
 func (v *Vault) resolveDir(rel string) (string, error) {

@@ -6,6 +6,7 @@ import (
 	"path"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 // Structure names the conventional top-level directories. It is convention
@@ -86,6 +87,11 @@ var (
 	slugDashRe    = regexp.MustCompile(`-{2,}`)
 )
 
+// maxSlugBytes bounds a derived filename well inside the 255-byte name limit
+// every common filesystem shares, leaving room for a "-12.md" suffix. Without
+// it a long enough title produces a name the kernel refuses (ENAMETOOLONG).
+const maxSlugBytes = 200
+
 // slugify turns a title into a safe, readable filename stem.
 func slugify(title string) string {
 	s := strings.ToLower(strings.TrimSpace(title))
@@ -93,8 +99,25 @@ func slugify(title string) string {
 	s = slugInvalidRe.ReplaceAllString(s, "")
 	s = slugDashRe.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
+	s = truncateSlug(s)
 	if s == "" {
 		return "untitled"
 	}
 	return s
+}
+
+// truncateSlug cuts a slug to maxSlugBytes on a rune boundary.
+func truncateSlug(s string) string {
+	if len(s) <= maxSlugBytes {
+		return s
+	}
+	end := 0
+	for i, r := range s {
+		n := utf8.RuneLen(r)
+		if i+n > maxSlugBytes {
+			break
+		}
+		end = i + n
+	}
+	return strings.Trim(s[:end], "-")
 }

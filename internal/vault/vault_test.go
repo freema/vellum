@@ -345,6 +345,39 @@ func TestMove(t *testing.T) {
 	if err := v.Move("projects/p/n.md", "../out.md"); !errors.Is(err, ErrInvalidPath) {
 		t.Errorf("Move escaping target = %v, want ErrInvalidPath", err)
 	}
+	// A dot-path would be skipped by List and the index — the note would sit
+	// on disk and disappear from vellum on the next build.
+	if err := v.Move("projects/p/n.md", "inbox/.secret.md"); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("Move to a hidden path = %v, want ErrInvalidPath", err)
+	}
+	if err := v.Write("inbox/.secret.md", "x", WriteOptions{Overwrite: true}); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("Write to a hidden path = %v, want ErrInvalidPath", err)
+	}
+	if err := v.Write(".hidden/n.md", "x", WriteOptions{Overwrite: true}); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("Write into a hidden dir = %v, want ErrInvalidPath", err)
+	}
+}
+
+// A case-only rename is a rename, not a collision — on a case-insensitive
+// volume the "existing target" Move sees is the source file itself.
+func TestMoveCaseOnlyRename(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/notes.md", "content")
+
+	if err := v.Move("inbox/notes.md", "inbox/Notes.md"); err != nil {
+		t.Fatalf("case-only rename: %v", err)
+	}
+	note, err := v.Read("inbox/Notes.md")
+	if err != nil || note.Content != "content" {
+		t.Fatalf("read after case-only rename = %+v, %v", note, err)
+	}
+	entries, err := v.List("inbox", false)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 1 || entries[0].Path != "inbox/Notes.md" {
+		t.Errorf("listing after rename = %+v, want a single Notes.md", entries)
+	}
 }
 
 func TestList(t *testing.T) {
@@ -352,7 +385,10 @@ func TestList(t *testing.T) {
 	mustWrite(t, v, "b.md", "---\ntitle: B Note\n---\n")
 	mustWrite(t, v, "a.md", "# A Heading\n")
 	mustWrite(t, v, "sub/deep.md", "deep")
-	mustWrite(t, v, ".hidden.md", "hidden")
+	// Write refuses dot-paths, so plant this one the way an editor would.
+	if err := os.WriteFile(filepath.Join(v.Root(), ".hidden.md"), []byte("hidden"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	if err := os.MkdirAll(filepath.Join(v.Root(), ".git"), 0o755); err != nil {
 		t.Fatal(err)
 	}
