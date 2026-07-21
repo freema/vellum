@@ -6,6 +6,42 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **A note created in the web UI is now named after its title.** New notes
+  still start as `untitled.md`, but naming one in the editor moves the file
+  to the matching slug — `Weekly review` lands in `inbox/weekly-review.md`,
+  the same filename `write_note` would have picked over MCP. Until now the
+  title only ever reached the note's `# heading`, so every note captured
+  from the workspace stayed `untitled.md`, `untitled-2.md`, … in the vault
+  and only the MCP path produced readable filenames
+  ([#1](https://github.com/freema/vellum/issues/1)). A note that already has
+  a name of its own is never renamed behind your back; use *Move to… →
+  Rename file* for those.
+- **Creating a note can no longer overwrite one it did not know about.** The
+  workspace picks the first free `untitled-N.md` from its listing, which can
+  be a second out of date when an agent is writing to the same inbox; the
+  create now goes out as a conditional request (`If-None-Match: *`) and steps
+  to the next free name instead of replacing the existing note.
+- **Keystrokes typed while a note is being moved are no longer lost.** The
+  editor panel reloads when a note changes path (rename, *Move to…*, drag to
+  a folder), and anything typed inside that window used to be autosaved to
+  the path the note had just left — a write that fails, silently. The edits
+  now travel with the note to its new path.
+- **Retitling a note back to a title it already had is written again.** The
+  editor compared the new title against the one the note carried when it was
+  opened, so `Alpha → Beta → Alpha` left the file saying `Beta` while the
+  header said `Alpha`.
+- **A case-only rename works.** `notes.md` → `Notes.md` was refused as
+  "already exists" on macOS and Windows, where the two names are the same
+  file.
+- **Notes can no longer be written to a hidden path.** `.private.md` (or any
+  folder starting with a dot) was accepted by the rename box and by
+  `write_note`, but the vault scan skips dotfiles — the note vanished from
+  the list, search and MCP on the next index build while sitting on disk.
+- **A very long title yields a filename the filesystem accepts.** Slugs are
+  capped at 200 bytes on a character boundary, instead of failing the write
+  with `ENAMETOOLONG`.
+
 ## [1.11.0] — 2026-07-11
 
 ### Added

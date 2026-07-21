@@ -54,6 +54,26 @@ default on a corrupted value. The auth token is **sessionStorage**, not
 localStorage — it dies with the tab, matching the server's in-memory
 tokens.
 
+## Creating and naming notes
+
+- ＋ writes an empty `untitled.md` into the current folder (inbox when no
+  folder is selected) and opens it with the title **selected**, so typing
+  a title is the natural next keystroke.
+- The create goes out as `If-None-Match: *`. The listing the free name is
+  picked from can be a second stale — an agent may be writing to the same
+  inbox — so the server answers **412** on a taken name and the UI steps to
+  `untitled-2.md` rather than overwriting a note it never loaded.
+- Committing the title of a note that is still `untitled*.md` renames the
+  file to the slug of that title (`Weekly review` → `weekly-review.md`,
+  uniquified with `-2` on collision), matching what `write_note` derives
+  server-side. Typing the heading straight into the body does the same when
+  you leave the editor pane. Notes that already carry a name of their own are
+  never renamed automatically — `Move to… → Rename file` is the manual path.
+- Any change of path (naming, rename, move, drag to a folder) remounts the
+  editor on the new path, so the workspace carries an unsaved draft over
+  before it navigates — otherwise the pending autosave would target the path
+  the note just left.
+
 ## Saving and drafts
 
 - Edits autosave with a **1 s debounce**; ⌘S saves immediately; title,

@@ -127,6 +127,13 @@ export class NotFoundError extends Error {
   }
 }
 
+/** A create-only PUT (`createOnly`) landed on a name that is already taken. */
+export class ExistsError extends Error {
+  constructor(path: string) {
+    super(`already exists: ${path}`)
+  }
+}
+
 const TOKEN_KEY = 'vellum_token'
 const REFRESH_KEY = 'vellum_refresh'
 const CLIENT_KEY = 'vellum_client'
@@ -305,15 +312,20 @@ export class ApiClient {
     }
   }
 
-  /** PUT with optional If-Match; throws ConflictError on 409. */
+  /**
+   * PUT with optional If-Match; throws ConflictError on 409. With
+   * `createOnly` the write is refused when the path already exists
+   * (ExistsError) instead of overwriting a note we never loaded.
+   */
   async putNote(
     path: string,
     content: string,
     etag?: string,
-    opts?: { keepalive?: boolean },
+    opts?: { keepalive?: boolean; createOnly?: boolean },
   ): Promise<string> {
     const headers: Record<string, string> = { 'Content-Type': 'text/markdown' }
     if (etag) headers['If-Match'] = `"${etag}"`
+    if (opts?.createOnly) headers['If-None-Match'] = '*'
     const res = await this.rawRequest(
       'PUT',
       `/api/notes/${encodePath(path)}`,
@@ -325,6 +337,7 @@ export class ApiClient {
       const body = (await res.json()) as { content: string; etag: string }
       throw new ConflictError(body.content, body.etag)
     }
+    if (res.status === 412) throw new ExistsError(path)
     if (!res.ok) throw new Error(`save failed (${res.status})`)
     const body = (await res.json()) as { etag: string }
     this.evictNotes(path, true) // next GET refetches the saved note
@@ -336,10 +349,13 @@ export class ApiClient {
     this.evictNotes(path, true)
   }
 
+  /** Move/rename; throws ExistsError when the destination is taken. */
   async moveNote(from: string, to: string): Promise<void> {
-    await this.request('POST', '/api/notes/move', JSON.stringify({ from, to }), {
+    const res = await this.rawRequest('POST', '/api/notes/move', JSON.stringify({ from, to }), {
       'Content-Type': 'application/json',
     })
+    if (res.status === 409) throw new ExistsError(to)
+    if (!res.ok) throw new Error(`move ${from} → ${to}: ${res.status}`)
     this.evictNotes(from, true)
     this.evictNotes(to, true)
   }

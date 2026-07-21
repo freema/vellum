@@ -30,6 +30,20 @@ Core:
 - [ ] ⌘S saves immediately
 - [ ] Create note via ＋ (lands in current folder / inbox), then delete it
       via MCP/REST and confirm it leaves the list
+- [ ] ＋ opens the new note with its title selected; typing a title and
+      blurring renames the file (`inbox/untitled.md` → `inbox/<slug>.md`,
+      status bar + URL follow), while retitling an already-named note
+      leaves its filename alone
+- [ ] Write `inbox/untitled.md` via MCP, then ＋ in the UI without a
+      re-scan → the new note takes `untitled-2.md` and the MCP note is
+      untouched
+- [ ] ＋, then type `# Heading` in the body without touching the title
+      field and click away → the file is named after the heading
+- [ ] Type into the body right after committing a title (inside the rename
+      window) → the text lands in the renamed file, no `untitled.md` is left
+      behind
+- [ ] Rename a note to `.private` → refused with a toast; rename
+      `notes.md` → `Notes.md` (case only) → succeeds
 - [ ] ⌘K palette: type a word from one note (`SEARCH-NEEDLE-ALPHA`),
       snippet shows with the match highlighted, ↑↓ + ↵ opens
 - [ ] Tag filter: click a tag in the TAGS cloud → list narrows; active tag

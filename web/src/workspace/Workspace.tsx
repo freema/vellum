@@ -6,6 +6,7 @@ import {
   ApiClient,
   ConflictError,
   AuthError,
+  ExistsError,
   NotFoundError,
   relativeAge,
   type Note,
@@ -122,6 +123,42 @@ function dirname(path: string): string {
   const i = path.lastIndexOf('/')
   return i < 0 ? '' : path.slice(0, i)
 }
+// Mirrors the server's slugify (internal/vault/structure.go) so a note named
+// in the UI gets the same filename an MCP write_note would have picked. Two
+// details are deliberate: Go's regexp `\s` is ASCII-only (a non-breaking or
+// ideographic space is stripped, not turned into a dash), and Go's ToLower
+// has no final-sigma rule, so `Σ` is folded before lowercasing.
+function slugify(title: string): string {
+  const slug = title
+    .trim()
+    .replace(/Σ/g, 'σ')
+    .toLowerCase()
+    .replace(/[\t\n\f\r ]+/g, '-')
+    .replace(/[^\p{L}\p{N}-]+/gu, '')
+    .replace(/-{2,}/g, '-')
+    .replace(/^-+|-+$/g, '')
+  return truncateSlug(slug) || 'untitled'
+}
+// Same 200-byte cut as the server: a pasted paragraph must not become a
+// filename the kernel rejects.
+function truncateSlug(slug: string): string {
+  const enc = new TextEncoder()
+  if (enc.encode(slug).length <= 200) return slug
+  let out = ''
+  let bytes = 0
+  for (const ch of slug) {
+    const n = enc.encode(ch).length
+    if (bytes + n > 200) break
+    out += ch
+    bytes += n
+  }
+  return out.replace(/^-+|-+$/g, '')
+}
+// `untitled.md` / `untitled-3.md` are the placeholder names a note carries
+// before it has a title — the only ones we ever rename on the user's behalf.
+function isUnnamed(path: string): boolean {
+  return /^untitled(-\d+)?\.md$/i.test(basename(path))
+}
 // friendly label for the currently selected directory (for placeholders)
 function dirLabel(dir: string): string {
   if (!dir) return 'the vault'
@@ -136,6 +173,9 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
 
   const [entries, setEntries] = useState<NoteEntry[]>([])
   const [tags, setTags] = useState<TagCount[]>([])
+  // Path of the note just created from the ＋ button: the editor selects its
+  // title so naming it (and with it the file) is the obvious next keystroke.
+  const [namePath, setNamePath] = useState('')
 
   // List filters live in the URL (?dir=…&tags=a,b&type=task&status=done) so
   // a refresh keeps the view and a filtered view can be shared or
@@ -539,15 +579,24 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
     [goto],
   )
 
+  // A new note starts unnamed: the file follows the title as soon as the user
+  // types one (see nameFromTitle). The writes are create-only — the local
+  // listing can be stale, and picking a taken name must never overwrite it.
   const createNote = async (inDir?: string) => {
     const dir = inDir || selectedDir || 'inbox'
-    let name = 'untitled.md'
-    for (let i = 2; entries.some((e) => e.path === `${dir}/${name}`); i++) {
-      name = `untitled-${i}.md`
-    }
-    const path = `${dir}/${name}`
     try {
-      await api.putNote(path, '# Untitled\n')
+      let path = ''
+      for (let i = 1; ; i++) {
+        path = `${dir}/untitled${i === 1 ? '' : `-${i}`}.md`
+        if (entries.some((e) => e.path === path)) continue
+        try {
+          await api.putNote(path, '# Untitled\n', undefined, { createOnly: true })
+          break
+        } catch (err) {
+          if (!(err instanceof ExistsError) || i > 50) throw err
+        }
+      }
+      setNamePath(path)
       await refresh()
       openNote(path)
       showToast(`New note in ${dir.split('/').pop()}`)
@@ -555,6 +604,64 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       if (!(err instanceof AuthError)) showToast('Could not create note', 'danger')
     }
   }
+
+  // Stable identity: the editor consumes the focus request from an effect.
+  const clearNamePath = useCallback(() => setNamePath(''), [])
+
+  // The open editor's live draft. A move remounts the panel on the new path
+  // (key={selectedPath}), so keystrokes typed while the file was in flight
+  // would be left behind in the old panel — its autosave would land on a path
+  // that no longer exists. Path-level actions carry them over instead.
+  const liveDraft = useRef<{ path: string; content: string; saved: string } | null>(null)
+  const carryDraft = useCallback(
+    async (from: string, to: string) => {
+      const live = liveDraft.current
+      if (!live || live.path !== from || live.content === live.saved) return
+      try {
+        await api.putNote(to, live.content)
+      } catch (err) {
+        if (!(err instanceof AuthError)) showToast('The last edits could not be saved', 'danger')
+      }
+    },
+    [api, showToast],
+  )
+
+  // Give an unnamed note the filename its title asks for (issue #1): a note
+  // created from the UI would otherwise stay untitled.md in the vault no
+  // matter what the user called it in the editor.
+  const nameFromTitle = useCallback(
+    async (from: string, title: string) => {
+      const stem = slugify(title)
+      if (stem === 'untitled') return
+      const dir = dirname(from)
+      const at = (name: string) => (dir ? `${dir}/${name}` : name)
+      try {
+        // Same walk as createNote: skip the names we know are taken, and let
+        // the server's 409 catch the ones our listing has not seen yet.
+        for (let i = 1; ; i++) {
+          const name = `${stem}${i === 1 ? '' : `-${i}`}.md`
+          const to = at(name)
+          if (to === from) return // already the name the title asks for
+          if (entries.some((e) => e.path === to)) continue
+          try {
+            await api.moveNote(from, to)
+          } catch (err) {
+            if (err instanceof ExistsError && i <= 50) continue
+            throw err
+          }
+          await refresh()
+          await carryDraft(from, to)
+          if (from === selectedPath) goto(`/n/${to}`, true)
+          showToast(`Saved as ${name}`)
+          return
+        }
+      } catch (err) {
+        // The note keeps its placeholder name — renaming by hand still works.
+        if (!(err instanceof AuthError)) showToast('Could not name the file', 'danger')
+      }
+    },
+    [api, entries, refresh, carryDraft, selectedPath, goto, showToast],
+  )
 
   // ---- path-level actions ----
   const moveToDir = useCallback(
@@ -564,35 +671,45 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.moveNote(from, to)
         await refresh()
+        await carryDraft(from, to)
         if (from === selectedPath) goto(`/n/${to}`, true)
         showToast(`Moved to ${dir.split('/').pop()}`)
       } catch (err) {
-        if (!(err instanceof AuthError)) showToast('Move failed', 'danger')
+        if (err instanceof ExistsError) showToast('A note of that name is already there', 'danger')
+        else if (!(err instanceof AuthError)) showToast('Move failed', 'danger')
       } finally {
         setDragPath(null)
         setDropDir(null)
       }
     },
-    [api, refresh, selectedPath, goto, showToast],
+    [api, refresh, carryDraft, selectedPath, goto, showToast],
   )
 
   const renameNote = useCallback(
     async (from: string, rawName: string) => {
       let name = rawName.trim()
       if (!name) return
+      // A dot-name is skipped by the vault scan: the note would still be on
+      // disk but gone from the list, search and MCP after the next index build.
+      if (name.startsWith('.')) {
+        showToast('A name starting with a dot would hide the note', 'danger')
+        return
+      }
       if (!/\.(md|markdown)$/i.test(name)) name += '.md'
       const to = dirname(from) ? `${dirname(from)}/${name}` : name
       if (to === from) return
       try {
         await api.moveNote(from, to)
         await refresh()
+        await carryDraft(from, to)
         if (from === selectedPath) goto(`/n/${to}`, true)
         showToast('Renamed')
       } catch (err) {
-        if (!(err instanceof AuthError)) showToast('Rename failed', 'danger')
+        if (err instanceof ExistsError) showToast('That name is already taken', 'danger')
+        else if (!(err instanceof AuthError)) showToast('Rename failed', 'danger')
       }
     },
-    [api, refresh, selectedPath, goto, showToast],
+    [api, refresh, carryDraft, selectedPath, goto, showToast],
   )
 
   const deleteNote = useCallback(
@@ -729,6 +846,10 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onSavingChange={setSaving}
           onMove={moveToDir}
           onRename={renameNote}
+          onNameFromTitle={nameFromTitle}
+          liveDraft={liveDraft}
+          focusTitle={selectedPath !== '' && selectedPath === namePath}
+          onTitleFocused={clearNamePath}
           onDelete={deleteNote}
           onOpenPalette={() => setPaletteOpen(true)}
           onBack={() => goto('/')}
@@ -1547,6 +1668,10 @@ function EditorPanel({
   onSavingChange,
   onMove,
   onRename,
+  onNameFromTitle,
+  liveDraft,
+  focusTitle,
+  onTitleFocused,
   onDelete,
   onOpenPalette,
   onBack,
@@ -1559,6 +1684,10 @@ function EditorPanel({
   onSavingChange: (saving: boolean) => void
   onMove: (from: string, dir: string) => void
   onRename: (from: string, name: string) => void
+  onNameFromTitle: (from: string, title: string) => void
+  liveDraft: React.RefObject<{ path: string; content: string; saved: string } | null>
+  focusTitle: boolean
+  onTitleFocused: () => void
   onDelete: (path: string) => void
   onOpenPalette: () => void
   onBack: () => void
@@ -1581,12 +1710,22 @@ function EditorPanel({
   const [confirmDelete, setConfirmDelete] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
   const rawRef = useRef<HTMLTextAreaElement>(null)
+  const titleRef = useRef<HTMLInputElement>(null)
   // Latest note/draft/etag for the revalidation poll — reading state through a
   // ref keeps the poll callback stable and out of the effect deps.
   const liveRef = useRef({ note, draft, etag })
   useEffect(() => {
     liveRef.current = { note, draft, etag }
+    // Published to the workspace so a move can carry unsaved keystrokes to
+    // the new path instead of stranding them on the old one.
+    liveDraft.current = note ? { path, content: draft, saved: note.content } : null
   })
+  useEffect(() => {
+    const ref = liveDraft
+    return () => {
+      if (ref.current?.path === path) ref.current = null
+    }
+  }, [liveDraft, path])
 
   useEffect(() => {
     if (!path) return
@@ -1614,6 +1753,15 @@ function EditorPanel({
       cancelled = true
     }
   }, [api, path, onSavingChange, retryTick])
+
+  // A freshly created note opens with its placeholder title selected — typing
+  // over it names both the note and the file.
+  useEffect(() => {
+    if (!focusTitle || !note) return
+    onTitleFocused()
+    titleRef.current?.focus()
+    titleRef.current?.select()
+  }, [focusTitle, note, onTitleFocused])
 
   // Keep the open note in sync with the vault: an MCP write shows up without a
   // reload, an external delete switches to the "deleted" state. Local edits are
@@ -1686,8 +1834,10 @@ function EditorPanel({
     }
   }, [api, path, onSavingChange])
 
+  // Reports whether the content reached the vault — callers that follow a save
+  // with another write (the title rename) must not act on a failed one.
   const save = useCallback(
-    async (content: string, ifMatch: string) => {
+    async (content: string, ifMatch: string): Promise<boolean> => {
       try {
         const newTag = await api.putNote(path, content, ifMatch)
         setEtag(newTag)
@@ -1696,6 +1846,7 @@ function EditorPanel({
         setNote((cur) => (cur ? { ...cur, content, hash: newTag } : cur))
         onSavingChange(false)
         onSaved()
+        return true
       } catch (err) {
         if (err instanceof ConflictError) {
           setConflict({ content: err.content, etag: err.etag })
@@ -1703,6 +1854,7 @@ function EditorPanel({
           console.error(err)
           onSavingChange(false)
         }
+        return false
       }
     },
     [api, path, onSaved, onSavingChange],
@@ -1724,11 +1876,11 @@ function EditorPanel({
 
   // apply immediately (checkbox toggle, title, status) without debounce
   const commit = useCallback(
-    (content: string) => {
+    (content: string): Promise<boolean> => {
       setDraft(content)
       onSavingChange(true)
       window.clearTimeout(saveTimer.current)
-      void save(content, etag)
+      return save(content, etag)
     },
     [save, etag, onSavingChange],
   )
@@ -1821,18 +1973,47 @@ function EditorPanel({
 
   const commitTitle = () => {
     const t = titleDraft.trim() || 'Untitled'
-    if (t === note.title) return
-    commit(setTitle(draft, t))
+    // Compare against the title the draft itself carries, not note.title: the
+    // loaded note keeps the title it had when it was opened, so renaming A → B
+    // and back to A would look like a no-op and never reach the file. A note
+    // with no title of its own falls back to note.title (the filename stem),
+    // so merely focusing and leaving the input writes no heading.
+    if (t === (draftTitle(draft) ?? note.title)) return
+    const titled = setTitle(draft, t)
+    void commit(titled).then((saved) => {
+      // A note that never got a name of its own follows its title into the
+      // matching filename. Wait for the title to be on disk with nothing newer
+      // in flight: moving the file out from under a pending autosave would
+      // flush those keystrokes back to the old path.
+      if (saved && isUnnamed(path) && liveRef.current.draft === titled) onNameFromTitle(path, t)
+    })
+  }
+
+  // Typing `# Heading` straight into the body is as common as using the title
+  // field, and it must name the file just the same — on leaving the pane, so a
+  // half-typed heading never becomes the filename.
+  const nameFromBody = () => {
+    if (!isUnnamed(path)) return
+    const t = draftTitle(draft)
+    if (!t || t === 'Untitled') return
+    if (draft === note.content) {
+      onNameFromTitle(path, t)
+      return
+    }
+    window.clearTimeout(saveTimer.current)
+    void save(draft, etag).then((saved) => {
+      if (saved && liveRef.current.draft === draft) onNameFromTitle(path, t)
+    })
   }
   const setStatus = (next: string) => {
     setStatusMenu(false)
     if (next === status) return
-    commit(setFrontmatterStatus(draft, next))
+    void commit(setFrontmatterStatus(draft, next))
     showToast(`Marked ${STATUS[next].label.toLowerCase()}`)
   }
   const toggleCheckbox = (index: number) => {
     const next = toggleTaskLine(draft, index)
-    if (next !== draft) commit(next)
+    if (next !== draft) void commit(next)
   }
 
   return (
@@ -1841,6 +2022,7 @@ function EditorPanel({
       <div className="ws-editor__header">
         <div className="ws-editor__title-row">
           <input
+            ref={titleRef}
             className="ws-editor__title-input"
             value={titleDraft}
             onChange={(e) => setTitleDraft(e.target.value)}
@@ -1973,6 +2155,7 @@ function EditorPanel({
             className={`ws-editor__raw vscroll${showPreview ? '' : ' ws-editor__raw--full'}`}
             value={draft}
             onChange={(e) => onEdit(e.target.value)}
+            onBlur={nameFromBody}
             spellCheck={false}
           />
         )}
@@ -2125,6 +2308,26 @@ function frontmatterValue(content: string, key: string): string {
     .split('\n')
     .find((l) => new RegExp(`^${key}:`, 'i').test(l))
   return line ? line.slice(line.indexOf(':') + 1).trim() : ''
+}
+
+/**
+ * The title the content itself declares — frontmatter `title:`, else the
+ * first heading outside a fenced block, else null (the server then falls back
+ * to the filename). Mirrors deriveTitle in internal/vault/parse.go, down to
+ * accepting any heading level.
+ */
+function draftTitle(content: string): string | null {
+  const fm = frontmatterValue(content, 'title')
+  if (fm) return fm
+  let fenced = false
+  for (const line of stripFrontmatter(content).split('\n')) {
+    if (/^\s{0,3}(```|~~~)/.test(line)) fenced = !fenced
+    else if (!fenced) {
+      const heading = line.match(/^#{1,6}\s+(.+?)\s*$/)
+      if (heading) return heading[1]
+    }
+  }
+  return null
 }
 
 function MarkdownView({
