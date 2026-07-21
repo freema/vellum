@@ -143,7 +143,16 @@ func (a *API) handlePutNote(w http.ResponseWriter, r *http.Request) {
 
 	opts := vault.WriteOptions{Overwrite: true}
 	createOnly := false
-	if match := r.Header.Get("If-Match"); match != "" && match != "*" {
+	match := r.Header.Get("If-Match")
+	if match != "" && r.Header.Get("If-None-Match") != "" {
+		// "replace exactly this version" and "only if absent" cannot both
+		// hold; guessing which one the client meant is how writes get lost.
+		writeJSON(w, http.StatusBadRequest, map[string]string{
+			"error": "If-Match and If-None-Match cannot be combined",
+		})
+		return
+	}
+	if match != "" && match != "*" {
 		opts.ExpectedHash = strings.Trim(match, `"`)
 		opts.Overwrite = false
 	} else if r.Header.Get("If-None-Match") == "*" {

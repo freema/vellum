@@ -41,6 +41,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - **A very long title yields a filename the filesystem accepts.** Slugs are
   capped at 200 bytes on a character boundary, instead of failing the write
   with `ENAMETOOLONG`.
+- **The editor no longer conflicts with its own save.** A second write
+  started while one was in flight — blur landing on the heels of the
+  autosave, ⌘S over a queued save — carried the pre-flight hash and raised a
+  spurious "Note changed on disk" dialog. Saves are queued and always write
+  against the newest known hash.
+- **A rename that finishes after you have moved on stays where you are.** The
+  navigation used the note that was open when the rename started, so a slow
+  rename could yank the workspace back from the note you had just opened.
 
 ## [1.11.0] — 2026-07-11
 

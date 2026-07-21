@@ -24,6 +24,9 @@ import { LogoMark } from '../components/Logo'
 import { Icon, GithubMark, type IconName } from '../components/Icon'
 import { usePersistedState } from '../lib/usePersistedState'
 
+/** The open editor's unsaved state, shared with the workspace (see carryDraft). */
+type LiveDraft = { path: string; content: string; saved: string; etag: string } | null
+
 type TypeFilter = 'all' | 'task' | 'knowledge'
 type ViewMode = 'edit' | 'split' | 'preview'
 type Toast = { text: string; tone: 'ok' | 'danger' }
@@ -170,6 +173,13 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const navigate = useNavigate()
   const params = useParams()
   const selectedPath = params['*'] || ''
+  // Which note is open *now*: a move or delete finishes several round trips
+  // after it was started, by which time the user may have opened another note
+  // — navigating from a captured value would yank them back.
+  const selectedPathRef = useRef(selectedPath)
+  useEffect(() => {
+    selectedPathRef.current = selectedPath
+  }, [selectedPath])
 
   const [entries, setEntries] = useState<NoteEntry[]>([])
   const [tags, setTags] = useState<TagCount[]>([])
@@ -612,15 +622,21 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   // (key={selectedPath}), so keystrokes typed while the file was in flight
   // would be left behind in the old panel — its autosave would land on a path
   // that no longer exists. Path-level actions carry them over instead.
-  const liveDraft = useRef<{ path: string; content: string; saved: string } | null>(null)
+  const liveDraft = useRef<LiveDraft>(null)
   const carryDraft = useCallback(
     async (from: string, to: string) => {
       const live = liveDraft.current
       if (!live || live.path !== from || live.content === live.saved) return
       try {
-        await api.putNote(to, live.content)
+        // Conditional on the version we moved, so the carry can't overwrite a
+        // change someone else made to the note in the meantime.
+        await api.putNote(to, live.content, live.etag)
       } catch (err) {
-        if (!(err instanceof AuthError)) showToast('The last edits could not be saved', 'danger')
+        if (err instanceof ConflictError) {
+          showToast('The note changed elsewhere — the last edits were not applied', 'danger')
+        } else if (!(err instanceof AuthError)) {
+          showToast('The last edits could not be saved', 'danger')
+        }
       }
     },
     [api, showToast],
@@ -651,7 +667,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           }
           await refresh()
           await carryDraft(from, to)
-          if (from === selectedPath) goto(`/n/${to}`, true)
+          if (from === selectedPathRef.current) goto(`/n/${to}`, true)
           showToast(`Saved as ${name}`)
           return
         }
@@ -660,7 +676,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         if (!(err instanceof AuthError)) showToast('Could not name the file', 'danger')
       }
     },
-    [api, entries, refresh, carryDraft, selectedPath, goto, showToast],
+    [api, entries, refresh, carryDraft, goto, showToast],
   )
 
   // ---- path-level actions ----
@@ -672,7 +688,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         await api.moveNote(from, to)
         await refresh()
         await carryDraft(from, to)
-        if (from === selectedPath) goto(`/n/${to}`, true)
+        if (from === selectedPathRef.current) goto(`/n/${to}`, true)
         showToast(`Moved to ${dir.split('/').pop()}`)
       } catch (err) {
         if (err instanceof ExistsError) showToast('A note of that name is already there', 'danger')
@@ -682,7 +698,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         setDropDir(null)
       }
     },
-    [api, refresh, carryDraft, selectedPath, goto, showToast],
+    [api, refresh, carryDraft, goto, showToast],
   )
 
   const renameNote = useCallback(
@@ -702,14 +718,14 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         await api.moveNote(from, to)
         await refresh()
         await carryDraft(from, to)
-        if (from === selectedPath) goto(`/n/${to}`, true)
+        if (from === selectedPathRef.current) goto(`/n/${to}`, true)
         showToast('Renamed')
       } catch (err) {
         if (err instanceof ExistsError) showToast('That name is already taken', 'danger')
         else if (!(err instanceof AuthError)) showToast('Rename failed', 'danger')
       }
     },
-    [api, refresh, carryDraft, selectedPath, goto, showToast],
+    [api, refresh, carryDraft, goto, showToast],
   )
 
   const deleteNote = useCallback(
@@ -717,13 +733,13 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.deleteNote(path)
         await refresh()
-        if (path === selectedPath) goto('/', true)
+        if (path === selectedPathRef.current) goto('/', true)
         showToast('Note deleted', 'danger')
       } catch (err) {
         if (!(err instanceof AuthError)) showToast('Delete failed', 'danger')
       }
     },
-    [api, refresh, selectedPath, goto, showToast],
+    [api, refresh, goto, showToast],
   )
 
   const deleteFolder = useCallback(
@@ -1685,7 +1701,7 @@ function EditorPanel({
   onMove: (from: string, dir: string) => void
   onRename: (from: string, name: string) => void
   onNameFromTitle: (from: string, title: string) => void
-  liveDraft: React.RefObject<{ path: string; content: string; saved: string } | null>
+  liveDraft: React.RefObject<LiveDraft>
   focusTitle: boolean
   onTitleFocused: () => void
   onDelete: (path: string) => void
@@ -1711,14 +1727,23 @@ function EditorPanel({
   const saveTimer = useRef<number | undefined>(undefined)
   const rawRef = useRef<HTMLTextAreaElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
+  // Hash and content of the last version known to be on disk, plus the queue
+  // that keeps saves from overlapping. Refs, not state: a save that starts
+  // before React has re-rendered still has to see the newest hash.
+  const etagRef = useRef('')
+  const savedRef = useRef('')
+  const saveChain = useRef<Promise<void>>(Promise.resolve())
   // Latest note/draft/etag for the revalidation poll — reading state through a
   // ref keeps the poll callback stable and out of the effect deps.
   const liveRef = useRef({ note, draft, etag })
   useEffect(() => {
     liveRef.current = { note, draft, etag }
     // Published to the workspace so a move can carry unsaved keystrokes to
-    // the new path instead of stranding them on the old one.
-    liveDraft.current = note ? { path, content: draft, saved: note.content } : null
+    // the new path instead of stranding them on the old one. The hash comes
+    // from the ref so the carry writes against the version actually on disk.
+    liveDraft.current = note
+      ? { path, content: draft, saved: savedRef.current, etag: etagRef.current }
+      : null
   })
   useEffect(() => {
     const ref = liveDraft
@@ -1740,6 +1765,8 @@ function EditorPanel({
         setDraft(n.content)
         setTitleDraft(n.title)
         setEtag(n.hash)
+        etagRef.current = n.hash
+        savedRef.current = n.content
         onSavingChange(false)
       })
       .catch((err) => {
@@ -1783,6 +1810,8 @@ function EditorPanel({
         setDraft(n.content)
         setTitleDraft(n.title)
         setEtag(n.hash)
+        etagRef.current = n.hash
+        savedRef.current = n.content
       } catch (err) {
         if (alive && err instanceof NotFoundError) setLoadError('gone')
       }
@@ -1806,13 +1835,15 @@ function EditorPanel({
   useEffect(() => {
     if (!path) return
     const flush = () => {
-      const { note: cur, draft: d, etag: tag } = liveRef.current
+      const { note: cur, draft: d } = liveRef.current
       if (!cur || d === cur.content || flushedRef.current === d) return
       flushedRef.current = d
       window.clearTimeout(saveTimer.current)
       api
-        .putNote(path, d, tag, { keepalive: true })
+        .putNote(path, d, etagRef.current, { keepalive: true })
         .then((newTag) => {
+          etagRef.current = newTag
+          savedRef.current = d
           setEtag(newTag)
           setNote((c) => (c ? { ...c, content: d, hash: newTag } : c))
           onSavingChange(false)
@@ -1836,26 +1867,44 @@ function EditorPanel({
 
   // Reports whether the content reached the vault — callers that follow a save
   // with another write (the title rename) must not act on a failed one.
+  //
+  // Saves are serialized and read the hash from a ref rather than state: a
+  // second PUT started while one is in flight (blur landing on the heels of
+  // the debounce, ⌘S over an autosave) would carry the pre-flight hash and
+  // 409 against our own write, popping a conflict dialog over nothing.
   const save = useCallback(
-    async (content: string, ifMatch: string): Promise<boolean> => {
-      try {
-        const newTag = await api.putNote(path, content, ifMatch)
-        setEtag(newTag)
-        // Mirror the saved state into the note object — the revalidation poll
-        // compares against it to tell "clean draft" from "unsaved edits".
-        setNote((cur) => (cur ? { ...cur, content, hash: newTag } : cur))
-        onSavingChange(false)
-        onSaved()
-        return true
-      } catch (err) {
-        if (err instanceof ConflictError) {
-          setConflict({ content: err.content, etag: err.etag })
-        } else if (!(err instanceof AuthError)) {
-          console.error(err)
-          onSavingChange(false)
+    (content: string, ifMatch?: string): Promise<boolean> => {
+      const run = saveChain.current.then(async (): Promise<boolean> => {
+        if (ifMatch === undefined && savedRef.current === content) {
+          onSavingChange(false) // the queued write already landed
+          return true
         }
-        return false
-      }
+        try {
+          const newTag = await api.putNote(path, content, ifMatch ?? etagRef.current)
+          etagRef.current = newTag
+          savedRef.current = content
+          setEtag(newTag)
+          // Mirror the saved state into the note object — the revalidation poll
+          // compares against it to tell "clean draft" from "unsaved edits".
+          setNote((cur) => (cur ? { ...cur, content, hash: newTag } : cur))
+          onSavingChange(false)
+          onSaved()
+          return true
+        } catch (err) {
+          if (err instanceof ConflictError) {
+            setConflict({ content: err.content, etag: err.etag })
+          } else if (!(err instanceof AuthError)) {
+            console.error(err)
+            onSavingChange(false)
+          }
+          return false
+        }
+      })
+      saveChain.current = run.then(
+        () => undefined,
+        () => undefined,
+      )
+      return run
     },
     [api, path, onSaved, onSavingChange],
   )
@@ -1864,9 +1913,9 @@ function EditorPanel({
     (content: string) => {
       onSavingChange(true)
       window.clearTimeout(saveTimer.current)
-      saveTimer.current = window.setTimeout(() => void save(content, etag), 1000)
+      saveTimer.current = window.setTimeout(() => void save(content), 1000)
     },
-    [save, etag, onSavingChange],
+    [save, onSavingChange],
   )
 
   const onEdit = (value: string) => {
@@ -1880,9 +1929,9 @@ function EditorPanel({
       setDraft(content)
       onSavingChange(true)
       window.clearTimeout(saveTimer.current)
-      return save(content, etag)
+      return save(content)
     },
-    [save, etag, onSavingChange],
+    [save, onSavingChange],
   )
 
   const applyFormat = (kind: FormatKind) => {
@@ -1909,7 +1958,7 @@ function EditorPanel({
       if ((e.metaKey || e.ctrlKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault()
         window.clearTimeout(saveTimer.current)
-        void save(draft, etag)
+        void save(draft)
       }
       if (inRaw && (e.metaKey || e.ctrlKey) && (e.key === 'b' || e.key === 'B')) {
         e.preventDefault()
@@ -1923,7 +1972,7 @@ function EditorPanel({
     window.addEventListener('keydown', handler)
     return () => window.removeEventListener('keydown', handler)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [draft, etag, save])
+  }, [draft, save])
 
   if (path && loadError) {
     return (
@@ -2001,7 +2050,7 @@ function EditorPanel({
       return
     }
     window.clearTimeout(saveTimer.current)
-    void save(draft, etag).then((saved) => {
+    void save(draft).then((saved) => {
       if (saved && liveRef.current.draft === draft) onNameFromTitle(path, t)
     })
   }
@@ -2206,6 +2255,11 @@ function EditorPanel({
                 onClick={() => {
                   setDraft(conflict.content)
                   setEtag(conflict.etag)
+                  etagRef.current = conflict.etag
+                  savedRef.current = conflict.content
+                  setNote((cur) =>
+                    cur ? { ...cur, content: conflict.content, hash: conflict.etag } : cur,
+                  )
                   onSavingChange(false)
                   setConflict(null)
                 }}

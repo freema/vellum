@@ -356,6 +356,22 @@ func TestMove(t *testing.T) {
 	if err := v.Write(".hidden/n.md", "x", WriteOptions{Overwrite: true}); !errors.Is(err, ErrInvalidPath) {
 		t.Errorf("Write into a hidden dir = %v, want ErrInvalidPath", err)
 	}
+	if err := v.CreateDir(".private"); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("CreateDir(.private) = %v, want ErrInvalidPath", err)
+	}
+}
+
+// A hard link is a second note under a different name — renaming onto it
+// would drop that note from the vault, so it must stay an ErrExists.
+func TestMoveOntoHardLink(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/a.md", "content")
+	if err := os.Link(filepath.Join(v.Root(), "inbox/a.md"), filepath.Join(v.Root(), "inbox/b.md")); err != nil {
+		t.Skipf("hard links unavailable: %v", err)
+	}
+	if err := v.Move("inbox/a.md", "inbox/b.md"); !errors.Is(err, ErrExists) {
+		t.Errorf("Move onto a hard link = %v, want ErrExists", err)
+	}
 }
 
 // A case-only rename is a rename, not a collision — on a case-insensitive

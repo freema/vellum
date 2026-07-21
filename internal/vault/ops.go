@@ -75,6 +75,9 @@ func (v *Vault) CreateDir(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("%w: empty directory", ErrInvalidPath)
 	}
+	if hasHiddenSegment(dir) {
+		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, dir)
+	}
 	abs, err := v.resolveDir(dir)
 	if err != nil {
 		return err
@@ -246,11 +249,39 @@ func (v *Vault) Write(path, content string, opts WriteOptions) error {
 		if opts.ExpectedHash != "" {
 			return fmt.Errorf("%w: %s", ErrNotFound, path)
 		}
+		if !opts.Overwrite {
+			// Create-only: the read above and the write below are two steps,
+			// and the mutex only covers this process. O_EXCL lets the kernel
+			// settle a race with an editor or a second vellum on the same
+			// vault, so "create" can never turn into an overwrite.
+			return v.writeExclusive(abs, []byte(content))
+		}
 	default:
 		return err
 	}
 
 	return v.writeAtomic(abs, []byte(content))
+}
+
+// writeExclusive creates a note that must not exist yet, letting the kernel
+// arbitrate: an existing path fails with ErrExists rather than being replaced.
+func (v *Vault) writeExclusive(abs string, data []byte) error {
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		return err
+	}
+	f, err := os.OpenFile(abs, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		if os.IsExist(err) {
+			return fmt.Errorf("%w: %s", ErrExists, filepath.Base(abs))
+		}
+		return err
+	}
+	if _, err := f.Write(data); err != nil {
+		_ = f.Close()
+		_ = os.Remove(abs)
+		return err
+	}
+	return f.Close()
 }
 
 // writeAtomic writes via a temp file + rename so readers never see a torn note.
@@ -443,10 +474,13 @@ func (v *Vault) Move(from, to string) error {
 	}
 	// A case-only rename (notes.md → Notes.md) points at the same file on a
 	// case-insensitive volume (macOS, Windows) — os.Stat finding "the target"
-	// there means the source itself, not a note we would clobber.
+	// there means the source itself, not a note we would clobber. Both halves
+	// matter: same inode alone would also match a hard link under a different
+	// name, where the rename really would drop a second note from the vault.
 	if toInfo, err := os.Stat(absTo); err == nil {
 		fromInfo, statErr := os.Stat(absFrom)
-		if statErr != nil || !os.SameFile(fromInfo, toInfo) {
+		alias := strings.EqualFold(absFrom, absTo) && statErr == nil && os.SameFile(fromInfo, toInfo)
+		if !alias {
 			return fmt.Errorf("%w: %s", ErrExists, to)
 		}
 	} else if !os.IsNotExist(err) {

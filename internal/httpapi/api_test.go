@@ -190,6 +190,17 @@ func TestAPICreateOnlyPut(t *testing.T) {
 	if resp.StatusCode != http.StatusOK {
 		t.Errorf("create untitled-2 = %d", resp.StatusCode)
 	}
+
+	// Contradictory preconditions are rejected, not silently resolved one way.
+	resp, _ = doReq(t, http.MethodPut, srv.URL+"/api/notes/inbox/untitled.md", "# Nope\n",
+		map[string]string{"If-Match": `"deadbeef"`, "If-None-Match": "*"})
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Errorf("If-Match + If-None-Match = %d, want 400", resp.StatusCode)
+	}
+	_, body = doReq(t, http.MethodGet, srv.URL+"/api/notes/inbox/untitled.md", "", nil)
+	if !strings.Contains(string(body), "# Untitled") {
+		t.Errorf("note changed by a rejected write: %s", body)
+	}
 }
 
 func TestAPIGetNoteBogusPathIs404(t *testing.T) {
