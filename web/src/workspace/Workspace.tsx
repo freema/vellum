@@ -1865,6 +1865,21 @@ function EditorPanel({
     }
   }, [api, path, onSavingChange])
 
+  // Leaving the note — switching in the list, or the panel remounting on the
+  // new path after a move — must not strand the keystrokes still sitting in
+  // the debounce window. Queued behind any in-flight save so the write goes
+  // out with the current hash.
+  useEffect(() => {
+    return () => {
+      window.clearTimeout(saveTimer.current)
+      const { note: cur, draft: d } = liveRef.current
+      if (!cur || d === savedRef.current) return
+      void saveChain.current.then(() =>
+        d === savedRef.current ? undefined : api.putNote(path, d, etagRef.current).catch(() => {}),
+      )
+    }
+  }, [api, path])
+
   // Reports whether the content reached the vault — callers that follow a save
   // with another write (the title rename) must not act on a failed one.
   //
