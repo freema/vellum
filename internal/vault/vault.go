@@ -98,13 +98,37 @@ func hasHiddenSegment(rel string) bool {
 	return false
 }
 
+// checkNotHidden refuses a write whose target is hidden from the vault scan,
+// lexically or through a symlink. The lexical check catches `.private/n.md`;
+// the physical one catches `visible/n.md` where `visible` links to a hidden
+// directory — the requested path looks clean but the note lands under a dot
+// segment and disappears from the index on the next build. phys is the
+// physical target from resolvePhysical, so no extra filesystem walk is done.
+func (v *Vault) checkNotHidden(rel, phys string) error {
+	if hasHiddenSegment(rel) {
+		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, rel)
+	}
+	if inner, ok := v.relativeTo(phys); ok && hasHiddenSegment(filepath.ToSlash(inner)) {
+		return fmt.Errorf("%w: %s resolves into a hidden path", ErrInvalidPath, rel)
+	}
+	return nil
+}
+
 // resolveDir validates a vault-relative directory path ("" means the root)
 // and returns its absolute form. The directory does not have to exist.
 func (v *Vault) resolveDir(rel string) (string, error) {
+	abs, _, err := v.resolveDirPhysical(rel)
+	return abs, err
+}
+
+// resolveDirPhysical is resolveDir plus the physical landing path, so a
+// directory create can apply the same symlink-aware hidden-path guard as a
+// note write without a second ancestor walk.
+func (v *Vault) resolveDirPhysical(rel string) (abs, phys string, err error) {
 	if rel == "" || rel == "." {
-		return v.root, nil
+		return v.root, v.root, nil
 	}
-	return v.resolve(rel)
+	return v.resolvePhysical(rel)
 }
 
 // resolveNote validates a vault-relative note path: markdown extension
@@ -116,67 +140,101 @@ func (v *Vault) resolveNote(rel string) (string, error) {
 	return v.resolve(rel)
 }
 
+// resolveNotePhysical is resolveNote plus the physical landing path (symlinks
+// in the existing ancestors resolved), so a write can inspect where the note
+// really lands without walking the tree a second time.
+func (v *Vault) resolveNotePhysical(rel string) (abs, phys string, err error) {
+	if !isMarkdown(rel) {
+		return "", "", fmt.Errorf("%w: %s", ErrNotMarkdown, rel)
+	}
+	return v.resolvePhysical(rel)
+}
+
 // resolve turns a vault-relative path into an absolute one, rejecting
 // anything that would escape the root: absolute paths, ../ traversal,
 // null bytes, and symlinks pointing outside the vault.
 func (v *Vault) resolve(rel string) (string, error) {
+	abs, _, err := v.resolvePhysical(rel)
+	return abs, err
+}
+
+// resolvePhysical does the work of resolve and additionally returns the
+// physical target (see checkSymlinks) so callers that need to inspect the real
+// landing location reuse the single ancestor walk instead of repeating it.
+func (v *Vault) resolvePhysical(rel string) (abs, phys string, err error) {
 	if rel == "" {
-		return "", fmt.Errorf("%w: empty path", ErrInvalidPath)
+		return "", "", fmt.Errorf("%w: empty path", ErrInvalidPath)
 	}
 	if strings.ContainsRune(rel, 0) {
-		return "", fmt.Errorf("%w: null byte in path", ErrInvalidPath)
+		return "", "", fmt.Errorf("%w: null byte in path", ErrInvalidPath)
 	}
 	// Vault paths are forward-slash; convert before any filepath logic.
 	rel = filepath.FromSlash(rel)
 	if filepath.IsAbs(rel) {
-		return "", fmt.Errorf("%w: absolute path %s", ErrInvalidPath, rel)
+		return "", "", fmt.Errorf("%w: absolute path %s", ErrInvalidPath, rel)
 	}
 	clean := filepath.Clean(rel)
 	if clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: path escapes vault: %s", ErrInvalidPath, rel)
+		return "", "", fmt.Errorf("%w: path escapes vault: %s", ErrInvalidPath, rel)
 	}
-	abs := filepath.Join(v.root, clean)
-	if abs != v.root && !strings.HasPrefix(abs, v.root+string(filepath.Separator)) {
-		return "", fmt.Errorf("%w: path escapes vault: %s", ErrInvalidPath, rel)
+	abs = filepath.Join(v.root, clean)
+	if _, ok := v.relativeTo(abs); !ok {
+		return "", "", fmt.Errorf("%w: path escapes vault: %s", ErrInvalidPath, rel)
 	}
 	// Symlink check: resolve the deepest existing ancestor (the path itself
 	// may not exist yet for writes) and require it to stay inside the root.
-	if err := v.checkSymlinks(abs); err != nil {
-		return "", err
+	phys, err = v.checkSymlinks(abs)
+	if err != nil {
+		return "", "", err
 	}
-	return abs, nil
+	return abs, phys, nil
 }
 
 // checkSymlinks walks from abs up to the first existing path component,
 // resolves it, and verifies the result is still inside the vault. It also
-// rejects a final component that is itself a symlink, wherever it points.
-func (v *Vault) checkSymlinks(abs string) error {
+// rejects a final component that is itself a symlink, wherever it points. It
+// returns the physical target — the resolved existing ancestor with the
+// not-yet-existing tail re-appended — which is where a write to abs lands.
+func (v *Vault) checkSymlinks(abs string) (string, error) {
 	existing := abs
+	var tail []string
 	for {
 		fi, err := os.Lstat(existing)
 		if err == nil {
 			if fi.Mode()&os.ModeSymlink != 0 && existing == abs {
-				return fmt.Errorf("%w: %s is a symlink", ErrInvalidPath, existing)
+				return "", fmt.Errorf("%w: %s is a symlink", ErrInvalidPath, existing)
 			}
 			break
 		}
 		if !os.IsNotExist(err) {
-			return fmt.Errorf("resolve %s: %w", abs, err)
+			return "", fmt.Errorf("resolve %s: %w", abs, err)
 		}
 		parent := filepath.Dir(existing)
 		if parent == existing {
 			break
 		}
+		tail = append([]string{filepath.Base(existing)}, tail...)
 		existing = parent
 	}
 	resolved, err := filepath.EvalSymlinks(existing)
 	if err != nil {
-		return fmt.Errorf("resolve %s: %w", abs, err)
+		return "", fmt.Errorf("resolve %s: %w", abs, err)
 	}
-	if resolved != v.root && !strings.HasPrefix(resolved, v.root+string(filepath.Separator)) {
-		return fmt.Errorf("%w: path escapes vault via symlink: %s", ErrInvalidPath, abs)
+	if _, ok := v.relativeTo(resolved); !ok {
+		return "", fmt.Errorf("%w: path escapes vault via symlink: %s", ErrInvalidPath, abs)
 	}
-	return nil
+	return filepath.Join(append([]string{resolved}, tail...)...), nil
+}
+
+// relativeTo returns p's path relative to the vault root and whether p is
+// inside the root (or is the root itself, for which the relative path is ""). A
+// single home for the "is this inside the vault, and what is it called there"
+// question the escape and hidden-path checks both ask, so they cannot drift.
+func (v *Vault) relativeTo(p string) (string, bool) {
+	if p == v.root {
+		return "", true
+	}
+	return strings.CutPrefix(p, v.root+string(filepath.Separator))
 }
 
 // relPath converts an absolute path inside the vault back to the canonical

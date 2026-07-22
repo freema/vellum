@@ -75,11 +75,13 @@ func (v *Vault) CreateDir(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("%w: empty directory", ErrInvalidPath)
 	}
-	if hasHiddenSegment(dir) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, dir)
-	}
-	abs, err := v.resolveDir(dir)
+	abs, phys, err := v.resolveDirPhysical(dir)
 	if err != nil {
+		return err
+	}
+	// Same guard as note writes: a folder must not land under a dot segment,
+	// lexically or through a symlinked ancestor, or the vault scan skips it.
+	if err := v.checkNotHidden(dir, phys); err != nil {
 		return err
 	}
 	if fi, err := os.Stat(abs); err == nil {
@@ -221,12 +223,12 @@ type WriteOptions struct {
 
 // Write creates or replaces a note. Parent directories are created as needed.
 func (v *Vault) Write(path, content string, opts WriteOptions) error {
-	abs, err := v.resolveNote(path)
+	abs, phys, err := v.resolveNotePhysical(path)
 	if err != nil {
 		return err
 	}
-	if hasHiddenSegment(path) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, path)
+	if err := v.checkNotHidden(path, phys); err != nil {
+		return err
 	}
 	if int64(len(content)) > v.maxSize {
 		return fmt.Errorf("%w: %s (%d bytes)", ErrTooLarge, path, len(content))
@@ -455,12 +457,12 @@ func (v *Vault) Move(from, to string) error {
 	if err != nil {
 		return err
 	}
-	absTo, err := v.resolveNote(to)
+	absTo, physTo, err := v.resolveNotePhysical(to)
 	if err != nil {
 		return err
 	}
-	if hasHiddenSegment(to) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, to)
+	if err := v.checkNotHidden(to, physTo); err != nil {
+		return err
 	}
 
 	v.mu.Lock()

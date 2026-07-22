@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+- **A symlink can no longer smuggle a note into a hidden directory.** 1.12.0
+  refused a dot-prefixed path lexically, but `visible/n.md` where `visible`
+  links to `.private/` still landed the note under a dot segment the vault
+  scan skips. Note writes, renames and folder creation now resolve symlinks
+  before deciding a target is hidden.
+
 ## [1.12.0] — 2026-07-21
 
 Notes captured in the web UI get real filenames.
