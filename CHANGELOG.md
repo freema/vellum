@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.12.1] — 2026-07-22
+
 ### Fixed
 - **A symlink can no longer smuggle a note into a hidden directory.** 1.12.0
   refused a dot-prefixed path lexically, but `visible/n.md` where `visible`
@@ -439,7 +441,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.12.0...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.12.1...HEAD
+[1.12.1]: https://github.com/freema/vellum/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/freema/vellum/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/freema/vellum/compare/v1.10.0...v1.11.0
 [1.10.0]: https://github.com/freema/vellum/compare/v1.9.1...v1.10.0
