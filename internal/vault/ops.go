@@ -221,11 +221,11 @@ type WriteOptions struct {
 
 // Write creates or replaces a note. Parent directories are created as needed.
 func (v *Vault) Write(path, content string, opts WriteOptions) error {
-	abs, err := v.resolveNote(path)
+	abs, phys, err := v.resolveNotePhysical(path)
 	if err != nil {
 		return err
 	}
-	if err := v.checkNotHidden(path, abs); err != nil {
+	if err := v.checkNotHidden(path, phys); err != nil {
 		return err
 	}
 	if int64(len(content)) > v.maxSize {
@@ -455,11 +455,11 @@ func (v *Vault) Move(from, to string) error {
 	if err != nil {
 		return err
 	}
-	absTo, err := v.resolveNote(to)
+	absTo, physTo, err := v.resolveNotePhysical(to)
 	if err != nil {
 		return err
 	}
-	if err := v.checkNotHidden(to, absTo); err != nil {
+	if err := v.checkNotHidden(to, physTo); err != nil {
 		return err
 	}
 
