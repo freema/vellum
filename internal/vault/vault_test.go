@@ -361,6 +361,24 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// CreateDir gets the same symlink-aware guard as note writes: a folder must
+// not land under a dot segment reached through a symlinked ancestor.
+func TestCreateDirThroughSymlinkToHiddenDir(t *testing.T) {
+	v := newTestVault(t)
+	if err := os.MkdirAll(filepath.Join(v.Root(), ".private"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(v.Root(), ".private"), filepath.Join(v.Root(), "visible")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := v.CreateDir("visible/sub"); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("CreateDir through a symlink to a hidden dir = %v, want ErrInvalidPath", err)
+	}
+	if _, err := os.Stat(filepath.Join(v.Root(), ".private", "sub")); !os.IsNotExist(err) {
+		t.Errorf("directory was created under the hidden dir anyway: %v", err)
+	}
+}
+
 // A symlink to a hidden directory must not be a way in: the requested path
 // looks clean but the note physically lands under a dot segment the vault
 // scan skips, so it would vanish from the index on the next build.

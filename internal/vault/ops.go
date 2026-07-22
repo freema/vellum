@@ -75,11 +75,13 @@ func (v *Vault) CreateDir(dir string) error {
 	if dir == "" {
 		return fmt.Errorf("%w: empty directory", ErrInvalidPath)
 	}
-	if hasHiddenSegment(dir) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, dir)
-	}
-	abs, err := v.resolveDir(dir)
+	abs, phys, err := v.resolveDirPhysical(dir)
 	if err != nil {
+		return err
+	}
+	// Same guard as note writes: a folder must not land under a dot segment,
+	// lexically or through a symlinked ancestor, or the vault scan skips it.
+	if err := v.checkNotHidden(dir, phys); err != nil {
 		return err
 	}
 	if fi, err := os.Stat(abs); err == nil {

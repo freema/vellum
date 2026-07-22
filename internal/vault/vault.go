@@ -117,10 +117,18 @@ func (v *Vault) checkNotHidden(rel, phys string) error {
 // resolveDir validates a vault-relative directory path ("" means the root)
 // and returns its absolute form. The directory does not have to exist.
 func (v *Vault) resolveDir(rel string) (string, error) {
+	abs, _, err := v.resolveDirPhysical(rel)
+	return abs, err
+}
+
+// resolveDirPhysical is resolveDir plus the physical landing path, so a
+// directory create can apply the same symlink-aware hidden-path guard as a
+// note write without a second ancestor walk.
+func (v *Vault) resolveDirPhysical(rel string) (abs, phys string, err error) {
 	if rel == "" || rel == "." {
-		return v.root, nil
+		return v.root, v.root, nil
 	}
-	return v.resolve(rel)
+	return v.resolvePhysical(rel)
 }
 
 // resolveNote validates a vault-relative note path: markdown extension
