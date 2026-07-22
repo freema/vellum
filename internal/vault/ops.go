@@ -225,8 +225,8 @@ func (v *Vault) Write(path, content string, opts WriteOptions) error {
 	if err != nil {
 		return err
 	}
-	if hasHiddenSegment(path) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, path)
+	if err := v.checkNotHidden(path, abs); err != nil {
+		return err
 	}
 	if int64(len(content)) > v.maxSize {
 		return fmt.Errorf("%w: %s (%d bytes)", ErrTooLarge, path, len(content))
@@ -459,8 +459,8 @@ func (v *Vault) Move(from, to string) error {
 	if err != nil {
 		return err
 	}
-	if hasHiddenSegment(to) {
-		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, to)
+	if err := v.checkNotHidden(to, absTo); err != nil {
+		return err
 	}
 
 	v.mu.Lock()

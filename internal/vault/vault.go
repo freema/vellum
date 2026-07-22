@@ -98,6 +98,53 @@ func hasHiddenSegment(rel string) bool {
 	return false
 }
 
+// checkNotHidden refuses a write whose target is hidden from the vault scan,
+// lexically or through a symlink. The lexical check catches `.private/n.md`;
+// the physical one catches `visible/n.md` where `visible` links to a hidden
+// directory — the requested path looks clean but the note lands under a dot
+// segment and disappears from the index on the next build. abs is the already
+// resolved absolute path, so this adds one EvalSymlinks over existing dirs.
+func (v *Vault) checkNotHidden(rel, abs string) error {
+	if hasHiddenSegment(rel) {
+		return fmt.Errorf("%w: %s is hidden from the vault", ErrInvalidPath, rel)
+	}
+	phys, err := physicalPath(abs)
+	if err != nil {
+		return fmt.Errorf("resolve %s: %w", rel, err)
+	}
+	if inner, ok := strings.CutPrefix(phys, v.root+string(filepath.Separator)); ok &&
+		hasHiddenSegment(filepath.ToSlash(inner)) {
+		return fmt.Errorf("%w: %s resolves into a hidden path", ErrInvalidPath, rel)
+	}
+	return nil
+}
+
+// physicalPath returns the real location a write to abs would land at:
+// symlinks in the existing leading portion are resolved, and the tail that
+// does not exist yet is re-appended unchanged.
+func physicalPath(abs string) (string, error) {
+	existing := abs
+	var tail []string
+	for {
+		if _, err := os.Lstat(existing); err == nil {
+			break
+		} else if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(existing)
+		if parent == existing {
+			break
+		}
+		tail = append([]string{filepath.Base(existing)}, tail...)
+		existing = parent
+	}
+	resolved, err := filepath.EvalSymlinks(existing)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(append([]string{resolved}, tail...)...), nil
+}
+
 // resolveDir validates a vault-relative directory path ("" means the root)
 // and returns its absolute form. The directory does not have to exist.
 func (v *Vault) resolveDir(rel string) (string, error) {

@@ -361,6 +361,26 @@ func TestMove(t *testing.T) {
 	}
 }
 
+// A symlink to a hidden directory must not be a way in: the requested path
+// looks clean but the note physically lands under a dot segment the vault
+// scan skips, so it would vanish from the index on the next build.
+func TestWriteThroughSymlinkToHiddenDir(t *testing.T) {
+	v := newTestVault(t)
+	if err := os.MkdirAll(filepath.Join(v.Root(), ".private"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(v.Root(), ".private"), filepath.Join(v.Root(), "visible")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	err := v.Write("visible/n.md", "x", WriteOptions{Overwrite: true})
+	if !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("Write through a symlink to a hidden dir = %v, want ErrInvalidPath", err)
+	}
+	if _, err := os.Stat(filepath.Join(v.Root(), ".private", "n.md")); !os.IsNotExist(err) {
+		t.Errorf("note was written into the hidden dir anyway: %v", err)
+	}
+}
+
 // A hard link is a second note under a different name — renaming onto it
 // would drop that note from the vault, so it must stay an ErrExists.
 func TestMoveOntoHardLink(t *testing.T) {
