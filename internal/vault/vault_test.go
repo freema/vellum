@@ -381,6 +381,29 @@ func TestWriteThroughSymlinkToHiddenDir(t *testing.T) {
 	}
 }
 
+// Move gets the same symlink-to-hidden-dir guard as Write: renaming a note
+// onto a path that resolves through a symlink into a hidden directory must be
+// refused, or the note would vanish from the index on the next build.
+func TestMoveThroughSymlinkToHiddenDir(t *testing.T) {
+	v := newTestVault(t)
+	mustWrite(t, v, "inbox/n.md", "content")
+	if err := os.MkdirAll(filepath.Join(v.Root(), ".private"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(v.Root(), ".private"), filepath.Join(v.Root(), "visible")); err != nil {
+		t.Skipf("symlinks unavailable: %v", err)
+	}
+	if err := v.Move("inbox/n.md", "visible/n.md"); !errors.Is(err, ErrInvalidPath) {
+		t.Errorf("Move through a symlink to a hidden dir = %v, want ErrInvalidPath", err)
+	}
+	if _, err := os.Stat(filepath.Join(v.Root(), ".private", "n.md")); !os.IsNotExist(err) {
+		t.Errorf("note was moved into the hidden dir anyway: %v", err)
+	}
+	if _, err := v.Read("inbox/n.md"); err != nil {
+		t.Errorf("source note should be untouched after a refused move: %v", err)
+	}
+}
+
 // A hard link is a second note under a different name — renaming onto it
 // would drop that note from the vault, so it must stay an ErrExists.
 func TestMoveOntoHardLink(t *testing.T) {
