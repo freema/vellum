@@ -87,6 +87,22 @@ tag tools. vellum itself never calls an LLM.
 | `find_orphans` | Find orphan notes | Notes with no links either direction |
 | `find_inbox_stale` | Find stale inbox notes | Inbox notes untouched ≥ N days (default 14) |
 
+### Share tools (`VELLUM_SHARING=on`, default off)
+
+Creating a link publishes a note to anyone holding the URL, so these are
+opt-in separately from sharing itself: `VELLUM_SHARING=ui` serves links
+but keeps minting them with the human. Neither tool touches note content.
+
+| Tool | Title | Summary |
+| --- | --- | --- |
+| `share_note` | Share note | Create (or return) a note's public link. Optional `expires_in` as `24h`, `7d`, `4w`; omit for no expiry. Returns `url`, `token`, `expires_at`, `reused` |
+| `unshare_note` | Stop sharing note | Revoke the link. Revoking an unshared note is a no-op, not an error |
+
+Re-sharing a note returns the link it already has, so a URL already
+handed out stays valid. `move_note` carries a link to the note's new
+path and `delete_note` revokes it — whichever side the change came from.
+Details: [sharing.md](sharing.md).
+
 ### Structured output
 
 Every tool returns `structuredContent` validated against an

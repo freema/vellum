@@ -25,6 +25,7 @@ import (
 	"github.com/freema/vellum/internal/mcpserver"
 	"github.com/freema/vellum/internal/notify"
 	"github.com/freema/vellum/internal/obs"
+	"github.com/freema/vellum/internal/share"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -96,6 +97,24 @@ func main() {
 	// One searcher for MCP and the REST API — they share the content cache.
 	searcher := vault.NewScanSearcher(v, index)
 
+	// Public share links (VELLUM_SHARING, off by default). The store is
+	// opened even for the stdio path: a link must keep pointing at its note
+	// when that note is moved or deleted, wherever the change came from.
+	var shares *share.Store
+	if cfg.SharingEnabled() {
+		shares, err = share.Open(cfg.VaultPath)
+		if err != nil {
+			// A vault whose link list is unreadable still serves everything
+			// else; refusing to boot over it would be the worse trade.
+			logger.Error("sharing disabled: cannot open the share store", "error", err)
+			shares = nil
+		} else {
+			defer func() { _ = shares.Close() }()
+			logger.Info("public share links enabled",
+				"mode", cfg.Sharing, "links", shares.Len(), "tools", cfg.ShareTools())
+		}
+	}
+
 	mcpSrv := mcpserver.New(mcpserver.Deps{
 		Vault:    v,
 		Index:    index,
@@ -108,6 +127,8 @@ func main() {
 		Version:    version,
 		Curator:    cfg.Curator,
 		WebsiteURL: cfg.IssuerURL,
+		Shares:     shares,
+		ShareTools: cfg.ShareTools(),
 	})
 
 	if *mcpStdio {
@@ -157,12 +178,18 @@ func main() {
 				Activity:  recorder,
 				Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",
 				Curator:   cfg.Curator,
+				Shares:    shares,
+				Sharing:   cfg.Sharing,
+				PublicURL: cfg.IssuerURL,
 			},
 			SPA:            vellum.DistFS(),
 			AllowedOrigins: cfg.AllowedOrigins,
 			Auth:           authProvider,
 			CORSOrigins:    cfg.CORSOrigins,
 			Activity:       recorder,
+			Shares:         shares,
+			Vault:          v,
+			TrustProxy:     cfg.TrustProxy,
 		}),
 		ReadHeaderTimeout: 10 * time.Second,
 	}

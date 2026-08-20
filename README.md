@@ -26,6 +26,9 @@ or a small team:
   pile of files. Unfiled notes land in the inbox.
 - **Small MCP tool surface** (15 tools) — less agent context burned on
   tool definitions.
+- **Sharing is a link, not an export.** Any note can become a read-only
+  URL for someone who has no account; it always shows the current
+  version and dies the moment you revoke it. Off by default.
 
 Every note is also a first-class **MCP resource** — `vellum://note/{path}` —
 so your agent can attach a note as context straight from its resource picker,
@@ -145,7 +148,8 @@ Local, no Docker: `vellum -mcp-stdio` serves MCP over stdio.
 `prepend_to_note`, `delete_note`, `move_note`, `search_notes`, `list_tags`,
 `add_tags`, `remove_tags`, `get_backlinks`, `set_status`, `list_tasks` —
 plus, with `VELLUM_CURATOR=on`: `suggest_location`, `suggest_tags`,
-`suggest_links`, `find_untagged`, `find_orphans`, `find_inbox_stale`.
+`suggest_links`, `find_untagged`, `find_orphans`, `find_inbox_stale`, and
+with `VELLUM_SHARING=on`: `share_note`, `unshare_note`.
 
 Writes are conflict-safe: `read_note` returns a content hash, write tools
 accept `expected_hash` and fail on mismatch instead of clobbering.
@@ -173,6 +177,31 @@ a reconnect overlay instead of a dead page. Filters (folder, tags,
 type/status) live in the URL so views are shareable and refresh-safe;
 theme and editor mode persist locally. Details — URL scheme, storage
 keys, autosave/conflict/flush semantics: [docs/workspace.md](docs/workspace.md).
+
+## Sharing a note
+
+Any note can become a link somebody else can open without an account —
+for handing over a document your agent just wrote, without exporting it
+or giving anyone access to the vault:
+
+```sh
+VELLUM_SHARING=on     # links + the share_note/unshare_note MCP tools
+VELLUM_SHARING=ui     # links, but only you can create them
+VELLUM_SHARING=off    # default
+```
+
+Then **Share** in the note header hands you
+`https://your-host/s/<token>`. The link is a pointer, not a copy: the
+reader always sees the current note, an edit shows up immediately, and
+revoking takes effect on the next request. It follows the note when you
+rename or move it, and dies with it when you delete it. Frontmatter is
+never served, and the page is one document — no tree, no search, no way
+into the rest of the vault.
+
+Links live in `<vault>/.vellum/shares.json`, so they survive a restart
+(unlike the in-memory OAuth tokens) and travel with your vault backup.
+Full reference — lifetimes, headers, rate limits, what a leaked link
+costs: [docs/sharing.md](docs/sharing.md).
 
 ## Vault structure, tasks, curator
 
@@ -206,6 +235,7 @@ keys, autosave/conflict/flush semantics: [docs/workspace.md](docs/workspace.md).
 | `VELLUM_INIT_STRUCTURE` | `true` | Create inbox/projects/archive in an empty vault |
 | `VELLUM_INBOX_DIR` / `VELLUM_PROJECTS_DIR` / `VELLUM_ARCHIVE_DIR` | `inbox`/`projects`/`archive` | Conventional directory names |
 | `VELLUM_CURATOR` | `off` | Enable the suggest_*/find_* context tools |
+| `VELLUM_SHARING` | `off` | Public read-only note links: `off` / `ui` (you mint them) / `on` (agents may too) |
 
 ## Deployment
 

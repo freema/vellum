@@ -95,6 +95,79 @@ export interface ActivityData {
   errorCount: number
 }
 
+export type SharingMode = 'off' | 'ui' | 'on'
+
+/** What the server was started with, so the UI never offers a button that
+ * answers 404. */
+export interface Capabilities {
+  version: string
+  curator: boolean
+  sharing: SharingMode
+}
+
+/** A public, read-only link to one note. */
+export interface ShareLink {
+  token: string
+  path: string
+  title: string
+  url: string
+  created: string
+  expiresAt?: string
+  expiresIn?: string
+  views: number
+  lastView?: string
+}
+
+export interface SharesData {
+  sharing: SharingMode
+  baseUrl: string
+  shares: ShareLink[]
+}
+
+/** A shared note as a reader sees it — no path, no frontmatter, no vault. */
+export interface PublicNote {
+  title: string
+  name: string
+  body: string
+  tags?: string[]
+  updated: string
+  updatedAt: string
+  words: number
+  expires?: string
+}
+
+/** A share link that resolves to nothing: 404 (revoked, expired or never
+ * existed) or 410 (the note behind it was deleted). */
+export class ShareGoneError extends Error {
+  status: number
+
+  constructor(status: number) {
+    super(status === 410 ? 'note deleted' : 'link not found')
+    this.status = status
+  }
+}
+
+/**
+ * Read a shared note. Deliberately not a method on ApiClient: the reader has
+ * no session, and must never send one — an Authorization header from a
+ * signed-in owner would make the page behave differently for them than for
+ * the person they sent it to.
+ */
+export async function fetchPublicNote(token: string): Promise<PublicNote> {
+  const res = await fetch(`/s/${encodeURIComponent(token)}/note`, {
+    headers: { Accept: 'application/json' },
+  })
+  if (res.status === 404 || res.status === 410) throw new ShareGoneError(res.status)
+  if (!res.ok) throw new Error(`share ${token}: ${res.status}`)
+  // A server with sharing switched off has no /s/ route at all, so this
+  // path falls through to the SPA shell and answers 200 with HTML. That is
+  // a dead link, not a server error — say so.
+  if (!res.headers.get('Content-Type')?.includes('application/json')) {
+    throw new ShareGoneError(404)
+  }
+  return (await res.json()) as PublicNote
+}
+
 export interface Notification {
   id: string
   kind: 'curator' | 'task' | 'mcp' | 'digest'
@@ -258,9 +331,14 @@ export class ApiClient {
     return (await res.json()) as { auth: boolean; version: string }
   }
 
-  async version(): Promise<string> {
-    const body = (await this.request('GET', '/api/version')) as { version: string }
-    return body.version
+  /** Version plus the optional features this server was started with. */
+  async capabilities(): Promise<Capabilities> {
+    const body = (await this.request('GET', '/api/version')) as Partial<Capabilities>
+    return {
+      version: body.version ?? 'dev',
+      curator: body.curator ?? false,
+      sharing: body.sharing ?? 'off',
+    }
   }
 
   async listNotes(): Promise<NoteEntry[]> {
@@ -413,6 +491,25 @@ export class ApiClient {
       notifications: Notification[]
       unread: number
     }
+  }
+
+  async shares(): Promise<SharesData> {
+    return (await this.request('GET', '/api/shares')) as SharesData
+  }
+
+  /** Mint (or refresh) the link for a note. expiresIn is in seconds; 0 means
+   * the link lives until it is revoked. Re-sharing keeps the same URL. */
+  async createShare(path: string, expiresIn = 0): Promise<ShareLink> {
+    return (await this.request(
+      'POST',
+      '/api/shares',
+      JSON.stringify({ path, expiresIn }),
+      { 'Content-Type': 'application/json' },
+    )) as ShareLink
+  }
+
+  async revokeShare(token: string): Promise<void> {
+    await this.request('DELETE', `/api/shares/${encodeURIComponent(token)}`)
   }
 
   async runCurator(): Promise<{ enabled: boolean; changes: number }> {

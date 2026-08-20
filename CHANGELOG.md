@@ -6,6 +6,49 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.0] — 2026-08-20
+
+Notes you can hand to somebody.
+
+### Added
+- **Public share links.** Any note can become a read-only URL that opens
+  without an account — for handing over a document your agent just wrote,
+  without exporting it or giving anyone access to the vault. Turn it on
+  with `VELLUM_SHARING=ui` (only you can publish) or `=on` (agents get
+  `share_note`/`unshare_note` over MCP too); the default stays `off`,
+  since this is the only part of vellum that answers an unauthenticated
+  request.
+
+  A link is a pointer, not a copy: the reader always sees the current
+  note, an edit shows up immediately, and revoking takes effect on the
+  next request. Re-sharing a note returns the link it already has, so a
+  URL handed out yesterday keeps working. The link follows the note when
+  it is renamed or moved — the same promise `move_note` makes for
+  backlinks — and dies with it when the note or its folder is deleted,
+  whether the change came through the web UI or MCP.
+
+  The reader page is one document and nothing else: no tree, no search,
+  no editor, and `[[wikilinks]]` render without navigating, because they
+  point into a vault the reader cannot see. Only the note's body is
+  served, so frontmatter never leaves the vault. `/s/{token}/raw` hands
+  over the markdown file itself.
+
+  Links live in `<vault>/.vellum/shares.json`, the first vellum state
+  that is deliberately persistent: a URL given to another person must not
+  depend on the server's uptime, the way the in-memory OAuth tokens do.
+  It travels with a vault backup, and note writes cannot reach it — the
+  vault refuses dot-segment paths, so an agent cannot publish a note by
+  writing a file. Optional expiry from 1 hour to 365 days.
+
+  In the workspace: **Share** in the note header (create, copy, set an
+  expiry, watch the view count, stop sharing), a mark on shared notes in
+  the list, and a **Public links** drawer listing every live link with a
+  Revoke button. Creating and revoking land in the activity feed.
+
+  Reference: [docs/sharing.md](docs/sharing.md); the security posture is
+  in [SECURITY.md](SECURITY.md) and
+  [docs/threat-model.md](docs/threat-model.md).
+
 ## [1.12.1] — 2026-07-22
 
 ### Fixed

@@ -23,7 +23,22 @@ func notFound(w http.ResponseWriter, r *http.Request) {
 		Title:  "No note lives here",
 		Body:   "The path didn't resolve to anything in the vault. It may have been renamed or moved to another folder.",
 		Detail: strings.TrimPrefix(r.URL.Path, "/"),
+		Action: true,
 	})
+}
+
+// writeErrorPage renders a designed error for a browser and plain JSON for
+// anything else. Used where the visitor may be a stranger following a link
+// rather than the vault's owner, so nothing about the vault is disclosed
+// beyond the message itself.
+func writeErrorPage(w http.ResponseWriter, r *http.Request, status int, p errorPage) {
+	if !strings.Contains(r.Header.Get("Accept"), "text/html") {
+		writeJSON(w, status, map[string]string{"error": p.Title})
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_ = errorPageTmpl.Execute(w, p)
 }
 
 type errorPage struct {
@@ -32,6 +47,9 @@ type errorPage struct {
 	Title  string
 	Body   string
 	Detail string
+	// Action shows the "Open vellum" button. Off for pages a stranger may
+	// land on: an invitation to the sign-in screen is noise to them.
+	Action bool
 }
 
 // errorPageTmpl renders the shared error-page shell (design:
@@ -105,7 +123,7 @@ var errorPageTmpl = template.Must(template.New("error").Parse(`<!doctype html>
     <h1>{{.Title}}</h1>
     <p>{{.Body}}</p>
     {{if .Detail}}<div class="detail"><b>{{.Detail}}</b></div>{{end}}
-    <a class="btn" href="/">Open vellum</a>
+    {{if .Action}}<a class="btn" href="/">Open vellum</a>{{end}}
   </main>
 </body>
 </html>

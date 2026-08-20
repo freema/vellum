@@ -132,6 +132,7 @@ var toolKinds = map[string]string{
 	"write_note":   "write", "patch_note": "write", "append_to_note": "write", "prepend_to_note": "write",
 	"move_note": "move", "delete_note": "delete",
 	"add_tags": "tag", "remove_tags": "tag", "set_status": "organize",
+	"share_note": "share", "unshare_note": "unshare",
 }
 
 func toolKind(tool string) string {
@@ -145,6 +146,7 @@ var kindVerb = map[string]string{
 	"read": "read", "write": "wrote", "search": "searched", "move": "moved",
 	"delete": "deleted", "tag": "tagged", "link": "linked",
 	"organize": "organized", "archive": "archived", "summary": "summarized",
+	"share": "shared", "unshare": "stopped sharing",
 	"error": "hit an error in",
 }
 
@@ -411,6 +413,7 @@ func (a *API) handleDeleteFolder(w http.ResponseWriter, r *http.Request) {
 	for _, p := range affected {
 		a.Index.Remove(p)
 	}
+	a.shareDropUnder(path)
 	a.recordUser("delete", path, "deleted folder ("+itoa(len(affected))+" notes)")
 	writeJSON(w, http.StatusOK, map[string]any{"deleted": path, "notes": len(affected)})
 }

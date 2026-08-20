@@ -9,10 +9,13 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/auth"
 	"github.com/freema/vellum/internal/obs"
+	"github.com/freema/vellum/internal/share"
+	"github.com/freema/vellum/internal/vault"
 )
 
 // Options configure the router.
@@ -36,7 +39,23 @@ type Options struct {
 	CORSOrigins []string
 	// Activity, when set, records MCP sessions and tool calls hitting /mcp.
 	Activity *activity.Recorder
+	// Shares, when set, mounts the public /s/{token} routes. This is the one
+	// part of vellum that answers without a bearer token, so it exists only
+	// when the operator asked for it (VELLUM_SHARING).
+	Shares *share.Store
+	// Vault backs the public share routes; required alongside Shares.
+	Vault *vault.Vault
+	// TrustProxy makes the share rate limiter read X-Forwarded-For.
+	TrustProxy bool
 }
+
+// shareRateLimit bounds anonymous traffic per IP. A reader loads one page and
+// one JSON document, so this leaves room for a busy link without leaving the
+// endpoint open to being hammered.
+const (
+	shareRateLimit  = 120
+	shareRateWindow = time.Minute
+)
 
 // NewRouter returns the root HTTP handler.
 func NewRouter(version string, opts Options) http.Handler {
@@ -57,6 +76,18 @@ func NewRouter(version string, opts Options) http.Handler {
 		apiMux := http.NewServeMux()
 		opts.API.routes(apiMux)
 		mux.Handle("/api/", guard(compress(apiMux)))
+	}
+	if opts.Shares != nil && opts.Vault != nil {
+		// Deliberately outside guard(): a share link has to work for someone
+		// who has no token and never will. The token in the URL is the
+		// authorization, and publicShares serves nothing else.
+		pub := &publicShares{
+			store:   opts.Shares,
+			vault:   opts.Vault,
+			spa:     opts.SPA,
+			limiter: newIPLimiter(shareRateLimit, shareRateWindow),
+		}
+		mux.Handle(PublicMount, compress(pub.handler(opts.TrustProxy)))
 	}
 	if opts.Auth != nil {
 		opts.Auth.Routes(mux)
