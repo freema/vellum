@@ -55,7 +55,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Extract changelog section
         run: |
-          awk -v ver="${GITHUB_REF_NAME#v}" '
+          # A pre-release (1.13.0-beta.1) has no section of its own; it
+          # carries the notes of the version it is a candidate for.
+          ver="${GITHUB_REF_NAME#v}"
+          ver="${ver%%-*}"
+          awk -v ver="$ver" '
             $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
             grab && /^## \[/ { exit }
             grab { print }
