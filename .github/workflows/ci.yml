@@ -30,4 +30,9 @@ jobs:
           go-version: stable
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          # Pinned, not "latest": a linter release turns every open PR red
+          # without a line of our code changing. v2.13.0 (2026-08-19) does
+          # exactly that — its nilness analyzer panics ("unhandled builtin
+          # recover") while analyzing a dependency, which reproduces on an
+          # untouched main. Bump this deliberately.
+          version: v2.12.2
