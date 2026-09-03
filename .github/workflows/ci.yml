@@ -27,7 +27,17 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
         with:
-          go-version: stable
+          # Pinned to the toolchain the release image builds with
+          # (Dockerfile: golang:1.26). golangci-lint can only typecheck a
+          # stdlib no newer than the Go it was built with, so "stable"
+          # moving to 1.27 breaks linting on its own.
+          go-version: "1.26"
       - uses: golangci/golangci-lint-action@v8
         with:
-          version: latest
+          # Pinned, not "latest": a linter release turns every open PR red
+          # without a line of our code changing. v2.13.0 (2026-08-19) does
+          # exactly that — its nilness analyzer panics ("unhandled builtin
+          # recover") while analyzing a dependency, which reproduces on an
+          # untouched main. Bump this deliberately, together with the Go
+          # version above.
+          version: v2.12.2

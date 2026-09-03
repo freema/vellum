@@ -78,6 +78,12 @@
   font-style: italic;
   font-size: 15.5px;
 }
+/* On the public share page a wikilink has nowhere to go — the reader has no
+   vault — so it keeps its look but drops the affordance. */
+.v-markdown .v-wikilink--flat {
+  cursor: default;
+  border-bottom-style: dotted;
+}
 .v-markdown .v-wikilink {
   color: var(--accent);
   text-decoration: none;

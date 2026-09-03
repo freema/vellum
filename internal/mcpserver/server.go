@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/freema/vellum/internal/share"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -22,6 +23,12 @@ type Deps struct {
 	Version   string
 	// Curator registers the suggest_*/find_* context tools (VELLUM_CURATOR).
 	Curator bool
+	// Shares, when set, keeps public links in step with the vault: a moved
+	// note takes its link along, a deleted one loses it. Set whenever
+	// sharing is enabled at all, independently of ShareTools.
+	Shares *share.Store
+	// ShareTools registers share_note/unshare_note (VELLUM_SHARING=on).
+	ShareTools bool
 	// WebsiteURL is the server's public URL, advertised in the MCP server info.
 	WebsiteURL string
 }
@@ -49,6 +56,9 @@ func New(d Deps) *mcp.Server {
 	if d.Curator {
 		registerCuratorTools(server, d)
 	}
+	if d.ShareTools && d.Shares != nil {
+		registerShareTools(server, d)
+	}
 	registerResources(server, d)
 	return server
 }
@@ -66,6 +76,9 @@ func instructions(d Deps) string {
 - Notes are also exposed as MCP resources (vellum://note/{path}); subscribe to one to receive resources/updated notifications when it changes.`
 	if d.Curator {
 		s += "\n- Curator tools (suggest_*, find_*) return ranked context only — nothing moves automatically. Read the suggestions, decide, then act via the write/move/tag tools."
+	}
+	if d.ShareTools && d.Shares != nil {
+		s += shareInstructions
 	}
 	return s
 }
@@ -309,6 +322,7 @@ func registerTools(s *mcp.Server, d Deps) {
 			return nil, deleteNoteOut{}, err
 		}
 		d.Index.Remove(in.Path)
+		d.shareDrop(in.Path)
 		return nil, deleteNoteOut{Deleted: in.Path}, nil
 	})
 
@@ -320,6 +334,7 @@ func registerTools(s *mcp.Server, d Deps) {
 			return nil, moveNoteOut{}, err
 		}
 		_ = d.Index.Rename(in.From, in.To)
+		d.shareFollow(in.From, in.To)
 		return nil, moveNoteOut(in), nil
 	})
 

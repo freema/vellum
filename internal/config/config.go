@@ -7,6 +7,18 @@ import (
 	"strings"
 )
 
+// Sharing modes for VELLUM_SHARING. Sharing is the only feature that answers
+// an unauthenticated request, so it is off unless asked for, and the middle
+// setting exists to keep the decision to publish with the human.
+const (
+	// SharingOff registers no public route and no share tool.
+	SharingOff = "off"
+	// SharingUI serves public links, but only the workspace can mint them.
+	SharingUI = "ui"
+	// SharingOn additionally gives agents the share_note/unshare_note tools.
+	SharingOn = "on"
+)
+
 // Config holds the runtime configuration.
 type Config struct {
 	// Port is the HTTP listen port (env PORT).
@@ -26,6 +38,10 @@ type Config struct {
 	// Curator enables the suggest_*/find_* MCP tools
 	// (env VELLUM_CURATOR=on|off, default off).
 	Curator bool
+
+	// Sharing controls public, read-only links to single notes
+	// (env VELLUM_SHARING, default off). See the Sharing* constants.
+	Sharing string
 
 	// Notify enables the periodic SMTP task digest (env VELLUM_NOTIFY=on|off,
 	// default off). SMTP_* settings are read by the notify package.
@@ -63,6 +79,7 @@ func Load() Config {
 		ProjectsDir:       getenv("VELLUM_PROJECTS_DIR", "projects"),
 		ArchiveDir:        getenv("VELLUM_ARCHIVE_DIR", "archive"),
 		Curator:           getenv("VELLUM_CURATOR", "off") == "on",
+		Sharing:           sharingMode(os.Getenv("VELLUM_SHARING")),
 		Notify:            getbool("VELLUM_NOTIFY", false),
 		SentryDSN:         os.Getenv("SENTRY_DSN"),
 		SentryEnvironment: getenv("SENTRY_ENVIRONMENT", "production"),
@@ -82,6 +99,25 @@ func Load() Config {
 		cfg.IssuerURL = "http://localhost:" + cfg.Port
 	}
 	return cfg
+}
+
+// SharingEnabled reports whether public share links are served at all.
+func (c Config) SharingEnabled() bool { return c.Sharing != SharingOff }
+
+// ShareTools reports whether agents may mint links over MCP.
+func (c Config) ShareTools() bool { return c.Sharing == SharingOn }
+
+// sharingMode normalizes VELLUM_SHARING. Anything unrecognized reads as off:
+// a typo must not be the reason a vault starts answering anonymous requests.
+func sharingMode(raw string) string {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "on", "true", "1", "yes":
+		return SharingOn
+	case "ui", "web":
+		return SharingUI
+	default:
+		return SharingOff
+	}
 }
 
 func getlist(key string, fallback []string) []string {

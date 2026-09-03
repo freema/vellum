@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
 import {
   ApiClient,
   ConflictError,
@@ -18,8 +16,11 @@ import {
   type ActivityData,
   type ActivityEvent,
   type Notification,
+  type ShareLink,
+  type SharingMode,
 } from '../lib/api'
 import { CommandPalette, PaletteItem, Highlight } from '../components/palette'
+import { MarkdownView } from '../components/markdown'
 import { LogoMark } from '../components/Logo'
 import { Icon, GithubMark, type IconName } from '../components/Icon'
 import { usePersistedState } from '../lib/usePersistedState'
@@ -256,6 +257,19 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
   const [errorCount, setErrorCount] = useState(0)
   const [starCount, setStarCount] = useState<number | null>(null)
 
+  // Public links. `sharing` is what the server was started with — off hides
+  // the feature completely rather than offering a button that 404s.
+  const [sharing, setSharing] = useState<SharingMode>('off')
+  const [shares, setShares] = useState<ShareLink[]>([])
+  const [sharesOpen, setSharesOpen] = useState(false)
+  const shareByPath = useMemo(() => new Map(shares.map((sh) => [sh.path, sh])), [shares])
+  // Read inside the vault poll, which must not be rebuilt when the mode
+  // arrives — that would restart the 30 s interval.
+  const sharingRef = useRef<SharingMode>('off')
+  useEffect(() => {
+    sharingRef.current = sharing
+  }, [sharing])
+
   const rootRef = useRef<HTMLDivElement>(null)
   const toastTimer = useRef<number | undefined>(undefined)
 
@@ -269,10 +283,48 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       setEntries(notes)
       setTags(tagList)
       setFolders(dirs)
+      // Links ride along with the vault poll: an agent can share a note over
+      // MCP, and another tab can revoke one, so the marks in the list have to
+      // re-sync the same way note content does.
+      if (sharingRef.current !== 'off') {
+        const data = await api.shares().catch(() => null)
+        if (data) setShares(data.shares)
+      }
     } catch (err) {
       if (!(err instanceof AuthError)) console.error(err)
     }
   }, [api])
+
+  // What this server can do. Fetched once; it only changes on a restart, and
+  // a restart drops the session anyway.
+  useEffect(() => {
+    void api
+      .capabilities()
+      .then((caps) => {
+        setSharing(caps.sharing)
+        if (caps.sharing !== 'off') void refresh()
+      })
+      .catch(() => {
+        /* offline or unauthorized — the reconnect overlay handles it */
+      })
+  }, [api, refresh])
+
+  const shareNote = useCallback(
+    async (path: string, expiresIn: number): Promise<ShareLink> => {
+      const link = await api.createShare(path, expiresIn)
+      setShares((prev) => [link, ...prev.filter((sh) => sh.token !== link.token)])
+      return link
+    },
+    [api],
+  )
+
+  const unshareNote = useCallback(
+    async (token: string) => {
+      await api.revokeShare(token)
+      setShares((prev) => prev.filter((sh) => sh.token !== token))
+    },
+    [api],
+  )
 
   useEffect(() => {
     void refresh()
@@ -801,6 +853,8 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
         onOpenNotifications={openNotifications}
         onOpenActivity={openActivity}
         errorCount={errorCount}
+        shareCount={sharing === 'off' ? null : shares.length}
+        onOpenShares={() => setSharesOpen(true)}
       />
       <div className="ws-body">
         <TreePanel
@@ -852,6 +906,7 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
             setDragPath(null)
             setDropDir(null)
           }}
+          sharedPaths={shareByPath}
         />
         <EditorPanel
           key={selectedPath}
@@ -870,6 +925,11 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
           onOpenPalette={() => setPaletteOpen(true)}
           onBack={() => goto('/')}
           showToast={showToast}
+          sharing={sharing}
+          share={shareByPath.get(selectedPath)}
+          onShare={shareNote}
+          onUnshare={unshareNote}
+          onManageShares={() => setSharesOpen(true)}
         />
       </div>
       <footer className="ws-statusbar">
@@ -934,6 +994,24 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       )}
       {connOpen && (
         <ConnectionsDrawer data={connData} onClose={() => setConnOpen(false)} onRevoke={revokeConn} />
+      )}
+      {sharesOpen && (
+        <SharesDrawer
+          shares={shares}
+          sharing={sharing}
+          onClose={() => setSharesOpen(false)}
+          onOpenNote={(path) => {
+            setSharesOpen(false)
+            openNote(path)
+          }}
+          onRevoke={(token) => {
+            void unshareNote(token).then(
+              () => showToast('Link revoked'),
+              () => showToast('Could not revoke the link', 'danger'),
+            )
+          }}
+          showToast={showToast}
+        />
       )}
       {notifOpen && (
         <NotificationsPopover
@@ -1019,6 +1097,8 @@ function TopBar({
   onOpenNotifications,
   onOpenActivity,
   errorCount,
+  shareCount,
+  onOpenShares,
 }: {
   version: string
   activeTags: string[]
@@ -1033,6 +1113,9 @@ function TopBar({
   onOpenNotifications: () => void
   onOpenActivity: () => void
   errorCount: number
+  /** null when the server has sharing off — then the control is absent. */
+  shareCount: number | null
+  onOpenShares: () => void
 }) {
   return (
     <header className="ws-topbar">
@@ -1090,6 +1173,17 @@ function TopBar({
         <Icon name="bell" size={16} />
         {unreadCount > 0 && <span className="ws-notif-btn__dot" />}
       </button>
+      {shareCount !== null && (
+        <button
+          id="sharesBtn"
+          className="ws-icon-btn ws-shares-btn"
+          onClick={onOpenShares}
+          title="Public links"
+        >
+          <Icon name="share" size={16} />
+          {shareCount > 0 && <span className="ws-shares-btn__badge">{shareCount}</span>}
+        </button>
+      )}
       <button
         id="activityBtn"
         className="ws-icon-btn ws-activity-btn"
@@ -1456,6 +1550,7 @@ function ListPanel({
   onCreate,
   onDragStart,
   onDragEnd,
+  sharedPaths,
 }: {
   entries: NoteEntry[]
   selectedDir: string
@@ -1469,6 +1564,8 @@ function ListPanel({
   onCreate: () => void
   onDragStart: (path: string) => void
   onDragEnd: () => void
+  /** Notes that currently have a public link, keyed by path. */
+  sharedPaths: Map<string, ShareLink>
 }) {
   const crumb = selectedDir === '' ? 'vault' : selectedDir.split('/').join(' / ')
   return (
@@ -1546,6 +1643,14 @@ function ListPanel({
                 <span className="ws-note-row__square" />
               )}
               <span className="ws-note-row__title">{e.title}</span>
+              {sharedPaths.has(e.path) && (
+                <Icon
+                  name="share"
+                  size={12}
+                  className="ws-note-row__shared"
+                  aria-label="Has a public link"
+                />
+              )}
             </div>
             {e.excerpt && <div className="ws-note-row__snippet">{e.excerpt}</div>}
             <div className="ws-note-row__meta">
@@ -1692,6 +1797,11 @@ function EditorPanel({
   onOpenPalette,
   onBack,
   showToast,
+  sharing,
+  share,
+  onShare,
+  onUnshare,
+  onManageShares,
 }: {
   api: ApiClient
   path: string
@@ -1708,7 +1818,14 @@ function EditorPanel({
   onOpenPalette: () => void
   onBack: () => void
   showToast: (text: string, tone?: 'ok' | 'danger') => void
+  sharing: SharingMode
+  /** The note's live public link, if it has one. */
+  share?: ShareLink
+  onShare: (path: string, expiresIn: number) => Promise<ShareLink>
+  onUnshare: (token: string) => Promise<void>
+  onManageShares: () => void
 }) {
+  const navigate = useNavigate()
   const [note, setNote] = useState<Note | null>(null)
   const [loading, setLoading] = useState(false)
   const [loadError, setLoadError] = useState<'notfound' | 'gone' | 'error' | null>(null)
@@ -1723,6 +1840,7 @@ function EditorPanel({
   const [conflict, setConflict] = useState<{ content: string; etag: string } | null>(null)
   const [statusMenu, setStatusMenu] = useState(false)
   const [moveMenu, setMoveMenu] = useState(false)
+  const [shareMenu, setShareMenu] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
   const saveTimer = useRef<number | undefined>(undefined)
   const rawRef = useRef<HTMLTextAreaElement>(null)
@@ -2111,6 +2229,34 @@ function EditorPanel({
                 </button>
               ))}
             </div>
+            {sharing !== 'off' && (
+              <span className="ws-share-wrap">
+                <button
+                  className={`ws-icon-btn${share ? ' ws-icon-btn--live' : ''}`}
+                  title={share ? 'Shared — public link' : 'Share this note'}
+                  onClick={() => {
+                    setShareMenu((o) => !o)
+                    setMoveMenu(false)
+                    setStatusMenu(false)
+                  }}
+                >
+                  <Icon name="share" size={15} />
+                </button>
+                {shareMenu && (
+                  <SharePopover
+                    share={share}
+                    onShare={(seconds) => onShare(path, seconds)}
+                    onUnshare={onUnshare}
+                    onManageShares={() => {
+                      setShareMenu(false)
+                      onManageShares()
+                    }}
+                    onClose={() => setShareMenu(false)}
+                    showToast={showToast}
+                  />
+                )}
+              </span>
+            )}
             <button className="ws-icon-btn ws-icon-btn--danger" title="Delete note" onClick={() => setConfirmDelete(true)}>
               <Icon name="trash" size={15} />
             </button>
@@ -2225,7 +2371,11 @@ function EditorPanel({
         )}
         {showPreview && (
           <div className="ws-editor__preview vscroll">
-            <MarkdownView body={draftBody} onToggleCheckbox={toggleCheckbox} />
+            <MarkdownView
+              body={draftBody}
+              onWikilink={(target) => navigate(`/wl/${encodeURIComponent(target)}`)}
+              onToggleCheckbox={toggleCheckbox}
+            />
           </div>
         )}
       </div>
@@ -2296,6 +2446,274 @@ function EditorPanel({
         </div>
       )}
     </main>
+  )
+}
+
+// ---------------------------------------------------------------- sharing
+
+/** Lifetimes offered in the UI, in seconds. 0 = until revoked. */
+const SHARE_TTLS: { label: string; seconds: number }[] = [
+  { label: '7 days', seconds: 7 * 86400 },
+  { label: '30 days', seconds: 30 * 86400 },
+  { label: 'No expiry', seconds: 0 },
+]
+
+/**
+ * Turning one note into a link. Two states in one popover: the offer, and the
+ * link itself. The offer says plainly what "public" means here, because this
+ * is the one control in vellum that hands data to someone who has no account.
+ */
+function SharePopover({
+  share,
+  onShare,
+  onUnshare,
+  onManageShares,
+  onClose,
+  showToast,
+}: {
+  share?: ShareLink
+  onShare: (seconds: number) => Promise<ShareLink>
+  onUnshare: (token: string) => Promise<void>
+  onManageShares: () => void
+  onClose: () => void
+  showToast: (text: string, tone?: 'ok' | 'danger') => void
+}) {
+  const [ttl, setTtl] = useState(0)
+  const [busy, setBusy] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose])
+
+  // A link is only useful once it is somewhere else, so it is selected the
+  // moment it exists — copying is then one keystroke even if the clipboard
+  // API is unavailable (it needs a secure context).
+  useEffect(() => {
+    if (share) inputRef.current?.select()
+  }, [share])
+
+  const copy = () => {
+    const url = share?.url ?? ''
+    void navigator.clipboard?.writeText(url).then(
+      () => {
+        setCopied(true)
+        window.setTimeout(() => setCopied(false), 1600)
+      },
+      () => {
+        inputRef.current?.select()
+        showToast('Copy failed — the link is selected, press ⌘C', 'danger')
+      },
+    )
+  }
+
+  const create = () => {
+    setBusy(true)
+    void onShare(ttl).then(
+      () => {
+        setBusy(false)
+        showToast('Public link created')
+      },
+      () => {
+        setBusy(false)
+        showToast('Could not create the link', 'danger')
+      },
+    )
+  }
+
+  const revoke = () => {
+    if (!share) return
+    setBusy(true)
+    void onUnshare(share.token).then(
+      () => {
+        setBusy(false)
+        showToast('Link revoked')
+      },
+      () => {
+        setBusy(false)
+        showToast('Could not revoke the link', 'danger')
+      },
+    )
+  }
+
+  return (
+    <>
+      <div className="ws-popover-scrim" onClick={onClose} />
+      <div className="ws-share-pop" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-share-pop__head">
+          <span className="ws-share-pop__title">Share this note</span>
+          <span className="ws-share-pop__esc" onClick={onClose}>
+            esc
+          </span>
+        </div>
+
+        {!share && (
+          <>
+            <div className="ws-share-pop__body">
+              Anyone with the link can read this note without signing in. They always see the
+              current version, and they can’t edit it or reach anything else in the vault.
+            </div>
+            <div className="ws-share-pop__ttl">
+              {SHARE_TTLS.map((t) => (
+                <button
+                  key={t.label}
+                  className={`ws-share-pop__ttl-item${ttl === t.seconds ? ' ws-share-pop__ttl-item--active' : ''}`}
+                  onClick={() => setTtl(t.seconds)}
+                >
+                  {t.label}
+                </button>
+              ))}
+            </div>
+            <button className="v-btn v-btn--primary ws-share-pop__cta" disabled={busy} onClick={create}>
+              <Icon name="share" size={14} />
+              {busy ? 'Creating…' : 'Create public link'}
+            </button>
+          </>
+        )}
+
+        {share && (
+          <>
+            <div className="ws-share-pop__linkrow">
+              <input ref={inputRef} className="ws-share-pop__link" readOnly value={share.url} />
+              <button className="ws-share-pop__copy" onClick={copy} title="Copy link">
+                <Icon name={copied ? 'check' : 'copy'} size={14} />
+                {copied ? 'Copied' : 'Copy'}
+              </button>
+            </div>
+            <div className="ws-share-pop__stats">
+              <span>
+                <Icon name="eye" size={12} /> {share.views} {share.views === 1 ? 'view' : 'views'}
+              </span>
+              <span className="ws-share-pop__sep">·</span>
+              <span>{share.expiresIn ? `expires in ${share.expiresIn}` : 'no expiry'}</span>
+              <span className="ws-share-pop__spacer" />
+              <a href={share.url} target="_blank" rel="noreferrer noopener">
+                Open
+              </a>
+            </div>
+            <div className="ws-share-pop__foot">
+              <span className="ws-share-pop__manage" onClick={onManageShares}>
+                All public links
+              </span>
+              <span className="ws-share-pop__spacer" />
+              <button className="ws-share-pop__revoke" disabled={busy} onClick={revoke}>
+                Stop sharing
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </>
+  )
+}
+
+/** Every live link in one place, so "what have I published?" has an answer
+ * that does not require opening notes one by one. */
+function SharesDrawer({
+  shares,
+  sharing,
+  onClose,
+  onOpenNote,
+  onRevoke,
+  showToast,
+}: {
+  shares: ShareLink[]
+  sharing: SharingMode
+  onClose: () => void
+  onOpenNote: (path: string) => void
+  onRevoke: (token: string) => void
+  showToast: (text: string, tone?: 'ok' | 'danger') => void
+}) {
+  const views = shares.reduce((sum, sh) => sum + sh.views, 0)
+  const copy = (url: string) => {
+    void navigator.clipboard?.writeText(url).then(
+      () => showToast('Link copied'),
+      () => showToast('Copy failed', 'danger'),
+    )
+  }
+  return (
+    <div className="ws-drawer-scrim" onClick={onClose}>
+      <div className="ws-drawer vscroll" onClick={(e) => e.stopPropagation()}>
+        <div className="ws-drawer__head">
+          <div className="ws-drawer__head-row">
+            <div>
+              <div className="ws-drawer__title">Public links</div>
+              <div className="ws-drawer__sub">
+                Notes readable by anyone holding the link, without signing in.
+              </div>
+            </div>
+            <button className="ws-drawer__esc" onClick={onClose}>
+              esc
+            </button>
+          </div>
+          <div className="ws-conn__stats">
+            <div className="ws-conn__stat">
+              <div className="ws-conn__stat-n">{shares.length}</div>
+              <div className="ws-conn__stat-l">live links</div>
+            </div>
+            <div className="ws-conn__stat-div" />
+            <div className="ws-conn__stat">
+              <div className="ws-conn__stat-n">{views}</div>
+              <div className="ws-conn__stat-l">views</div>
+            </div>
+          </div>
+          {sharing === 'on' && (
+            <div className="ws-share-card__note">
+              Agents connected over MCP can create links too (VELLUM_SHARING=on).
+            </div>
+          )}
+        </div>
+        <div className="ws-drawer__body">
+          {shares.map((sh) => (
+            <div key={sh.token} className="ws-share-card">
+              <div className="ws-share-card__top">
+                <span className="ws-share-card__title" onClick={() => onOpenNote(sh.path)}>
+                  {sh.title}
+                </span>
+                <span className="ws-share-card__age">{sh.created} ago</span>
+              </div>
+              <div className="ws-share-card__path">{sh.path}</div>
+              <div className="ws-share-card__url" onClick={() => copy(sh.url)} title="Copy link">
+                <Icon name="link" size={12} />
+                <span className="ws-share-card__url-text">{sh.url}</span>
+                <Icon name="copy" size={12} className="ws-share-card__url-copy" />
+              </div>
+              <div className="ws-share-card__foot">
+                <span>
+                  {sh.views} {sh.views === 1 ? 'view' : 'views'}
+                </span>
+                {sh.lastView && (
+                  <>
+                    <span className="ws-share-card__sep">·</span>
+                    <span>last {sh.lastView} ago</span>
+                  </>
+                )}
+                <span className="ws-share-card__sep">·</span>
+                <span>{sh.expiresIn ? `expires in ${sh.expiresIn}` : 'no expiry'}</span>
+                <span className="ws-share-card__spacer" />
+                <span className="ws-conn-card__revoke" onClick={() => onRevoke(sh.token)}>
+                  Revoke
+                </span>
+              </div>
+            </div>
+          ))}
+          {shares.length === 0 && (
+            <div className="ws-drawer__empty">
+              <div className="ws-drawer__empty-glyph">∅</div>
+              <div className="ws-drawer__empty-title">Nothing is shared</div>
+              <div className="ws-drawer__empty-sub">
+                Open a note and use Share to hand someone a read-only link.
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -2397,65 +2815,6 @@ function draftTitle(content: string): string | null {
     }
   }
   return null
-}
-
-function MarkdownView({
-  body,
-  onToggleCheckbox,
-}: {
-  body: string
-  onToggleCheckbox?: (index: number) => void
-}) {
-  const navigate = useNavigate()
-  const processed = body.replace(
-    /\[\[([^\][|]+)(?:\|([^\][]+))?\]\]/g,
-    (_, target: string, alias?: string) =>
-      `[${alias ?? target}](#wikilink=${encodeURIComponent(target.trim())})`,
-  )
-  const cb = { i: 0 }
-  return (
-    <div className="v-markdown">
-      <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        components={{
-          a({ href, children }) {
-            if (href?.startsWith('#wikilink=')) {
-              const target = decodeURIComponent(href.slice('#wikilink='.length))
-              return (
-                <a
-                  className="v-wikilink"
-                  onClick={(e) => {
-                    e.preventDefault()
-                    navigate(`/wl/${encodeURIComponent(target)}`)
-                  }}
-                >
-                  [[{children}]]
-                </a>
-              )
-            }
-            return (
-              <a href={href} target="_blank" rel="noreferrer">
-                {children}
-              </a>
-            )
-          },
-          input({ checked }) {
-            const idx = cb.i++
-            return (
-              <span
-                className={`v-checkbox${checked ? ' v-checkbox--checked' : ''}${onToggleCheckbox ? ' v-checkbox--live' : ''}`}
-                onClick={onToggleCheckbox ? () => onToggleCheckbox(idx) : undefined}
-              >
-                {checked ? '✓' : ''}
-              </span>
-            )
-          },
-        }}
-      >
-        {processed}
-      </ReactMarkdown>
-    </div>
-  )
 }
 
 // ---------------------------------------------------------------- content edits

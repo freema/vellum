@@ -10,6 +10,7 @@ import (
 
 	"github.com/freema/vellum/internal/activity"
 	"github.com/freema/vellum/internal/obs"
+	"github.com/freema/vellum/internal/share"
 	"github.com/freema/vellum/internal/vault"
 )
 
@@ -26,6 +27,13 @@ type API struct {
 	Activity *activity.Recorder
 	Endpoint string
 	Curator  bool
+
+	// Shares, when set, enables the /api/shares endpoints. Sharing is the
+	// configured mode ("ui" or "on") reported to the workspace, and
+	// PublicURL is the origin share links are built on.
+	Shares    *share.Store
+	Sharing   string
+	PublicURL string
 }
 
 // routes registers /api/* handlers on mux.
@@ -43,6 +51,11 @@ func (a *API) routes(mux *http.ServeMux) {
 	mux.HandleFunc("GET /api/folders", a.handleListFolders)
 	mux.HandleFunc("POST /api/folders", a.handleCreateFolder)
 	mux.HandleFunc("DELETE /api/folders/{path...}", a.handleDeleteFolder)
+	if a.Shares != nil {
+		mux.HandleFunc("GET /api/shares", a.handleListShares)
+		mux.HandleFunc("POST /api/shares", a.handleCreateShare)
+		mux.HandleFunc("DELETE /api/shares/{token}", a.handleRevokeShare)
+	}
 	if a.Activity != nil {
 		mux.HandleFunc("GET /api/connections", a.handleConnections)
 		mux.HandleFunc("DELETE /api/connections/{id}", a.handleRevoke)
@@ -54,8 +67,19 @@ func (a *API) routes(mux *http.ServeMux) {
 
 var apiVersion = "dev" // set by NewRouter
 
+// handleVersion doubles as the workspace's capability probe: the UI hides
+// what the server was not started with, rather than offering a button that
+// answers 404.
 func (a *API) handleVersion(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{"version": apiVersion})
+	sharing := a.Sharing
+	if a.Shares == nil {
+		sharing = "off"
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"version": apiVersion,
+		"curator": a.Curator,
+		"sharing": sharing,
+	})
 }
 
 // apiError maps vault errors to HTTP status codes.
@@ -208,6 +232,7 @@ func (a *API) handleDeleteNote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.Index.Remove(path)
+	a.shareDrop(path)
 	a.recordUser("delete", path, "deleted from the workspace")
 	writeJSON(w, http.StatusOK, map[string]string{"deleted": path})
 }
@@ -226,6 +251,7 @@ func (a *API) handleMove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_ = a.Index.Rename(req.From, req.To)
+	a.shareFollow(req.From, req.To)
 	a.recordUser("move", req.To, "moved from "+req.From)
 	writeJSON(w, http.StatusOK, map[string]string{"from": req.From, "to": req.To})
 }

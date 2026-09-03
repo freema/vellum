@@ -4,6 +4,11 @@
 
 vellum is a deliberately small attack surface:
 
+- Every request needs a bearer token, with exactly one exception: a
+  **public share link** (`/s/{token}`), which serves the body of the single
+  note that token names, and only when `VELLUM_SHARING` is enabled — it is
+  off by default. See [docs/sharing.md](docs/sharing.md) and the threat
+  model.
 - It operates on **one directory of markdown files** (`VELLUM_VAULT_PATH`) and
   nothing else. Every path is validated against traversal, symlink escapes
   and null bytes; only `.md`/`.markdown` files are touched.
@@ -22,7 +27,8 @@ vellum is a deliberately small attack surface:
 | Path traversal / escape | High | Path validation, symlink rejection, vault-root confinement (tested) |
 | Token theft | Medium | 1h access tokens, refresh rotation, HTTPS-only deployment |
 | Cross-origin abuse | Medium | Origin allowlist (403) + CORS allowlist |
-| Denial of service | Low | Rate limiting on OAuth endpoints, 10 MB note size cap |
+| Denial of service | Low | Rate limiting on OAuth and share endpoints, 10 MB note size cap |
+| Over-sharing via public links | Medium | `VELLUM_SHARING` off by default; one note per token; revocable; `ui` mode keeps publishing away from agents |
 | Secret leakage in logs | Medium | Tokens/secrets are never logged (docs/logging.md) |
 
 ## Production checklist
@@ -34,7 +40,10 @@ vellum is a deliberately small attack surface:
 - [ ] Container runs read-only, non-root, `no-new-privileges`
       (the shipped docker-compose.yml does this)
 - [ ] Pin the image version (`ghcr.io/freema/vellum:X.Y.Z`, not `:latest`)
-- [ ] Back up the vault directory (it is plain files — rsync/git both work)
+- [ ] Back up the vault directory (it is plain files — rsync/git both work).
+      This now includes `.vellum/shares.json` — the list of public links
+- [ ] Decide on `VELLUM_SHARING` deliberately: `off` (default), `ui` (only
+      you can publish) or `on` (agents may publish too)
 
 ## Supported versions
 

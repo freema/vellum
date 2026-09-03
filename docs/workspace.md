@@ -11,6 +11,7 @@ locally, how saving and vault synchronization work. Source:
 | `/` | Workspace with no note open |
 | `/n/<vault path>` | Note open in the editor — deep-linkable and refresh-safe |
 | `/wl/<target>` | Wikilink resolver: finds the target note, redirects to `/n/…` |
+| `/s/<token>` | Public share reader — resolved **before** the auth gate and outside the workspace router, since the visitor has no session ([sharing.md](sharing.md)) |
 | `/dev/components` | Design-system gallery (development reference) |
 
 ## URL query parameters (shareable view state)
@@ -106,6 +107,27 @@ tokens.
 - When the server goes away (deploy restart: network error or 502–504),
   a reconnect overlay polls `/healthz` with a countdown and restores the
   session when it returns.
+
+## Sharing
+
+Present only when the server runs with `VELLUM_SHARING` set to `ui` or
+`on`; the workspace asks `GET /api/version` once at startup and hides the
+controls entirely otherwise, rather than offering a button that 404s.
+
+- **Share** in the note header opens the popover: create a link, choose 7
+  days / 30 days / no expiry, copy it, see the view count, stop sharing.
+  The link is selected as soon as it exists, so copying works even where
+  the clipboard API is unavailable (it needs a secure context).
+- Notes with a live link carry a mark in the list.
+- The top bar's **Public links** drawer lists every live link with view
+  counts and a Revoke button.
+- The link list rides along with the 30 s vault poll, so a link created
+  by an agent over MCP — or revoked in another tab — shows up the same
+  way a remote note edit does.
+
+Semantics (a link follows a moved note, dies with a deleted one, always
+serves the current version) are the server's, and are described in
+[sharing.md](sharing.md).
 
 ## Keyboard
 
