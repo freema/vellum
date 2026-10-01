@@ -16,8 +16,9 @@ vellum is a deliberately small attack surface:
   LLM or any external service**. The only outbound activity is answering
   HTTP requests.
 - There is **no database and no stored credentials** beyond the single
-  client secret in the environment. Tokens are opaque, in-memory, and die
-  with the process.
+  client secret in the environment. OAuth clients and tokens are opaque,
+  in-memory, and die with the process. The one persistent piece of state is
+  the list of public links in `<vault>/.vellum/shares.json`.
 
 ## Threat model (summary — details in docs/threat-model.md)
 
@@ -47,13 +48,19 @@ vellum is a deliberately small attack surface:
 
 ## Supported versions
 
-Only the latest minor release receives security fixes. Pin a released tag and
+Only the latest stable minor release receives security fixes. Pre-releases
+(`-beta.N`) get fixes too, as the next pre-release. Pin a released tag and
 upgrade when a patch is published.
 
 | Version | Supported |
 |---------|-----------|
-| 1.2.x   | ✅ |
-| < 1.2   | ❌ (upgrade) |
+| 1.13.0-beta.x | ✅ (pre-release, fixes ship as the next beta) |
+| 1.12.x  | ✅ |
+| < 1.12  | ❌ (upgrade) |
+
+Published advisories:
+[github.com/freema/vellum/security/advisories](https://github.com/freema/vellum/security/advisories).
+Watch the repository's releases to hear about patches.
 
 ## Reporting a vulnerability
 

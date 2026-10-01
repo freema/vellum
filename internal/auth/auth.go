@@ -1,11 +1,15 @@
-// Package auth implements OAuth 2.1 issuer + resource server with a single
-// pre-configured client secret, ported from openclaw-mcp (PHY-112).
+// Package auth implements vellum's OAuth 2.1 authorization server and the
+// bearer check that guards /mcp and /api.
 //
 // The model: vellum is both the authorization server and the resource
-// server. One confidential client (VELLUM_CLIENT_ID/VELLUM_CLIENT_SECRET),
-// authorization-code flow with mandatory PKCE (S256), opaque in-memory
-// tokens. No user database, no external identity provider, no persistence —
-// tokens die with the process, clients silently re-authorize.
+// server. The owner holds one pre-configured confidential client
+// (VELLUM_CLIENT_ID/VELLUM_CLIENT_SECRET); clients such as Claude may also
+// register themselves (RFC 7591) as public clients without a secret. A
+// public client proves nothing at /token, so approving it on the consent
+// screen requires the owner's VELLUM_CLIENT_SECRET. Authorization-code flow
+// with mandatory PKCE (S256), opaque in-memory tokens. No user database, no
+// external identity provider, no persistence: tokens die with the process,
+// clients silently re-authorize.
 package auth
 
 import (
