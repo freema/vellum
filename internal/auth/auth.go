@@ -84,8 +84,8 @@ type refreshData struct {
 // used by the embedded web SPA) and any number of PUBLIC clients that
 // self-register via Dynamic Client Registration (RFC 7591) — the MCP clients
 // (Inspector, claude.ai, Cursor, …), which authenticate with PKCE and no
-// secret. Consent at /authorize is the human gate, so open registration only
-// hands out a client_id.
+// secret. Open registration only hands out a client_id: a public client gets
+// a code only after the owner enters the client secret at /authorize.
 type clientReg struct {
 	id           string
 	redirectURIs []string

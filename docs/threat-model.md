@@ -88,6 +88,26 @@ existed. Responses are `no-store`, `nosniff` and `DENY` framing.
 a share is served, never pushed. There is still no identity: a link is
 "anyone who has it", not "shared with a person".
 
+## Who can authorize a client
+
+vellum knows two kinds of OAuth client, and the secret gates both:
+
+- **The configured client** (`VELLUM_CLIENT_ID`, default `vellum`) is
+  confidential. Its consent screen is one click, because the code it gets
+  is useless without the secret at `/token`.
+- **Self-registered clients** (Dynamic Client Registration — Claude Code,
+  claude.ai, Cursor, the MCP Inspector) are public: anyone can register
+  one, and they present no secret at `/token`. For them the consent screen
+  is the gate, so approving requires typing the client secret; without it
+  no code is issued. Before 1.12.2 it did not, and anyone who could reach
+  the server could approve their own client
+  ([GHSA-75v9-hg2f-5g9v](https://github.com/freema/vellum/security/advisories/GHSA-75v9-hg2f-5g9v)).
+
+The consent page cannot be framed (`X-Frame-Options: DENY`,
+`frame-ancestors 'none'`), so no other site can overlay it to collect the
+secret. There is no cookie session to ride a CSRF on, and a cross-site form
+cannot supply a secret it does not know.
+
 ## What theft of the client secret means
 
 The secret is the single access key. Whoever holds it can complete the

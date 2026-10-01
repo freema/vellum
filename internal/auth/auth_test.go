@@ -161,6 +161,7 @@ func authorizeAndGetCodeFor(t *testing.T, srv *httptest.Server, clientID, redire
 		"redirect_uri":   {redirectURI},
 		"state":          {"xyz"},
 		"code_challenge": {challenge}, "code_challenge_method": {"S256"},
+		"secret": {testSecret}, // the owner approving; ignored for the confidential client
 	}
 	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
 		return http.ErrUseLastResponse
@@ -260,6 +261,142 @@ func TestDynamicClientRegistration(t *testing.T) {
 	r2.Body.Close()
 	if r2.StatusCode != http.StatusOK {
 		t.Errorf("authed /mcp = %d, want 200", r2.StatusCode)
+	}
+}
+
+// registerPublicClient registers a client over DCR, the way anyone on the
+// network can, and returns its client_id.
+func registerPublicClient(t *testing.T, srv *httptest.Server, redirect string) string {
+	t.Helper()
+	regBody, _ := json.Marshal(map[string]any{
+		"redirect_uris":              []string{redirect},
+		"token_endpoint_auth_method": "none",
+	})
+	resp, err := http.Post(srv.URL+"/register", "application/json", bytes.NewReader(regBody))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var reg map[string]any
+	_ = json.NewDecoder(resp.Body).Decode(&reg)
+	clientID, _ := reg["client_id"].(string)
+	if clientID == "" {
+		t.Fatalf("POST /register = %d, no client_id", resp.StatusCode)
+	}
+	return clientID
+}
+
+// TestConsentRequiresSecretForPublicClient is the regression test for an
+// anonymous takeover: register a client, approve your own consent request,
+// exchange the code with no secret. Approving for a public client must
+// require the vault's client secret.
+func TestConsentRequiresSecretForPublicClient(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+	redirect := "https://attacker.example/callback"
+	clientID := registerPublicClient(t, srv, redirect)
+	verifier, challenge := pkce()
+
+	// The consent page for a public client asks for the secret and cannot be
+	// framed.
+	resp, err := http.Get(srv.URL + "/authorize?response_type=code&client_id=" + clientID +
+		"&redirect_uri=" + url.QueryEscape(redirect) + "&code_challenge=" + challenge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if !strings.Contains(string(page), `name="secret"`) {
+		t.Error("consent page for a public client has no secret field")
+	}
+	if got := resp.Header.Get("X-Frame-Options"); got != "DENY" {
+		t.Errorf("X-Frame-Options = %q, want DENY", got)
+	}
+	if csp := resp.Header.Get("Content-Security-Policy"); !strings.Contains(csp, "frame-ancestors 'none'") {
+		t.Errorf("Content-Security-Policy = %q, want frame-ancestors 'none'", csp)
+	}
+
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error {
+		return http.ErrUseLastResponse
+	}}
+	approve := func(secret string, withSecret bool) *http.Response {
+		form := url.Values{
+			"decision": {"approve"}, "client_id": {clientID},
+			"redirect_uri":   {redirect},
+			"code_challenge": {challenge}, "code_challenge_method": {"S256"},
+		}
+		if withSecret {
+			form.Set("secret", secret)
+		}
+		resp, err := client.PostForm(srv.URL+"/authorize", form)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp
+	}
+
+	for name, tc := range map[string]struct {
+		secret     string
+		withSecret bool
+	}{
+		"no secret":    {"", false},
+		"empty secret": {"", true},
+		"wrong secret": {strings.Repeat("x", len(testSecret)), true},
+	} {
+		resp := approve(tc.secret, tc.withSecret)
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("%s: approve = %d, want 401", name, resp.StatusCode)
+		}
+		if loc := resp.Header.Get("Location"); loc != "" {
+			t.Errorf("%s: approve redirected to %s, want no code issued", name, loc)
+		}
+		if !strings.Contains(string(body), "That is not the client secret of this vault.") {
+			t.Errorf("%s: consent page re-rendered without the error", name)
+		}
+	}
+
+	// Denying needs no secret.
+	resp, err = client.PostForm(srv.URL+"/authorize", url.Values{
+		"decision": {"deny"}, "client_id": {clientID},
+		"redirect_uri": {redirect}, "code_challenge": {challenge},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp.Body.Close()
+	if loc, _ := url.Parse(resp.Header.Get("Location")); resp.StatusCode != http.StatusFound || loc.Query().Get("error") != "access_denied" {
+		t.Errorf("deny = %d %s, want 302 with error=access_denied", resp.StatusCode, resp.Header.Get("Location"))
+	}
+
+	// With the secret the flow completes, still without a secret at /token.
+	code := authorizeAndGetCodeFor(t, srv, clientID, redirect, challenge)
+	body, status := tokenRequest(t, srv, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"code_verifier": {verifier},
+		"client_id":     {clientID},
+		"redirect_uri":  {redirect},
+	})
+	if status != http.StatusOK {
+		t.Fatalf("token exchange after owner approval = %d: %v", status, body)
+	}
+}
+
+// TestConsentForConfidentialClientAsksNoSecret: the confidential client proves
+// itself with the secret at /token, so its consent screen stays one click.
+func TestConsentForConfidentialClientAsksNoSecret(t *testing.T) {
+	srv := newAuthServer(t, newTestProvider(t))
+	_, challenge := pkce()
+	resp, err := http.Get(srv.URL + "/authorize?response_type=code&client_id=vellum&redirect_uri=" +
+		url.QueryEscape("https://claude.ai/api/mcp/auth_callback") + "&code_challenge=" + challenge)
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, _ := io.ReadAll(resp.Body)
+	resp.Body.Close()
+	if strings.Contains(string(page), `name="secret"`) {
+		t.Error("consent page for the confidential client asks for the secret")
 	}
 }
 
