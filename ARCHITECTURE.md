@@ -34,7 +34,7 @@ except share links lives in memory and is rebuilt from the folder on start.
 | `internal/auth` | vellum's own OAuth 2.1 authorization server and the bearer check (`RequireBearer`). Clients, codes and tokens are in memory. |
 | `internal/share` | Public read-only links: token → path, persisted in `<vault>/.vellum/shares.json`, kept in step with renames and deletes. |
 | `internal/activity` | A bounded in-memory ring of recent tool calls and connected clients, for the workspace's Connections and Activity panels. |
-| `internal/notify` | Optional e-mail digest of open tasks over SMTP. |
+| `internal/notify` | Optional e-mail digest of open tasks over SMTP: plain text plus the HTML template `digest.html`. |
 | `internal/obs` | Optional Sentry reporting (`SENTRY_DSN`). |
 | `web/` | React SPA built with Vite. Plain CSS custom properties mapped 1:1 to the design tokens. Embedded into the binary with `-tags embedspa`. |
 
@@ -95,3 +95,4 @@ gets its token with the `client_credentials` grant from the connect screen.
 | add a REST endpoint for the SPA | `internal/httpapi/api.go`, then `web/src/lib/api.ts` |
 | add a configuration option | `internal/config/config.go`, `.env.example`, and the README table |
 | change the UI | `web/src/`, following [DESIGN.md](DESIGN.md) |
+| change the digest e-mail | `internal/notify/digest.go` and `digest.html`; preview it with `VELLUM_DIGEST_PREVIEW=/tmp/digest.html go test ./internal/notify -run Preview` and open the file |

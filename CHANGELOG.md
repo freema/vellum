@@ -59,6 +59,17 @@ Notes you can hand to somebody.
   in [SECURITY.md](SECURITY.md) and
   [docs/threat-model.md](docs/threat-model.md).
 
+### Changed
+- **The task digest e-mail is redesigned.** It now comes as HTML in
+  vellum's paper look, with a plain-text part for clients that prefer it.
+  Every task links straight to the note in the workspace and shows its
+  folder and when it was last updated, most recent first. A long section
+  lists ten tasks and links to the rest, and done tasks updated since the
+  last digest get a short *Done* section. The subject says what is open
+  (`Vellum digest · 2 in progress, 18 in backlog`) and is now properly
+  encoded, and the message carries `Date` and `Message-ID` headers, which
+  spam filters expect.
+
 ## [1.12.2] — 2026-10-01
 
 ### Security

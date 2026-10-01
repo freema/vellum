@@ -1,15 +1,23 @@
 // Package notify sends a periodic e-mail digest of open tasks over SMTP.
 // It is deliberately small: STARTTLS submission (port 587) via the standard
-// library, a plain-text body built from the metadata index, and a background
-// ticker. Disabled unless VELLUM_NOTIFY=on and SMTP settings are present.
+// library, a plain-text and an HTML body built from the metadata index, and a
+// background ticker. Disabled unless VELLUM_NOTIFY=on and SMTP settings are
+// present.
 package notify
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
+	"mime"
+	"mime/multipart"
+	"mime/quotedprintable"
 	"net"
 	"net/smtp"
+	"net/textproto"
 	"os"
 	"strconv"
 	"strings"
@@ -65,68 +73,89 @@ func (c Config) Valid() bool {
 
 // Mailer sends one message. Abstracted so the digest logic is testable.
 type Mailer interface {
-	Send(subject, body string) error
+	Send(m Message) error
 }
 
 // smtpMailer submits over STARTTLS (or plain if no auth is configured).
 type smtpMailer struct{ cfg Config }
 
-func (m smtpMailer) Send(subject, body string) error {
+func (m smtpMailer) Send(msg Message) error {
 	addr := net.JoinHostPort(m.cfg.Host, m.cfg.Port)
 	var auth smtp.Auth
 	if m.cfg.User != "" {
 		auth = smtp.PlainAuth("", m.cfg.User, m.cfg.Pass, m.cfg.Host)
 	}
-	msg := buildMessage(m.cfg.From, m.cfg.To, subject, body)
-	return smtp.SendMail(addr, auth, m.cfg.From, m.cfg.To, msg)
+	raw, err := buildMessage(m.cfg.From, m.cfg.To, msg, time.Now())
+	if err != nil {
+		return err
+	}
+	return smtp.SendMail(addr, auth, m.cfg.From, m.cfg.To, raw)
 }
 
-func buildMessage(from string, to []string, subject, body string) []byte {
-	var b strings.Builder
+// buildMessage renders msg as multipart/alternative: the plain-text part
+// first, the HTML part last (the one clients prefer). Both parts are
+// quoted-printable, so long lines and UTF-8 survive any relay, and the
+// subject is RFC 2047 encoded when it is not plain ASCII.
+func buildMessage(from string, to []string, msg Message, now time.Time) ([]byte, error) {
+	var body bytes.Buffer
+	mw := multipart.NewWriter(&body)
+	parts := []struct{ ctype, content string }{
+		{"text/plain; charset=UTF-8", msg.Text},
+		{"text/html; charset=UTF-8", msg.HTML},
+	}
+	for _, p := range parts {
+		if p.content == "" {
+			continue
+		}
+		w, err := mw.CreatePart(textproto.MIMEHeader{
+			"Content-Type":              {p.ctype},
+			"Content-Transfer-Encoding": {"quoted-printable"},
+		})
+		if err != nil {
+			return nil, err
+		}
+		qp := quotedprintable.NewWriter(w)
+		if _, err := qp.Write([]byte(p.content)); err != nil {
+			return nil, err
+		}
+		if err := qp.Close(); err != nil {
+			return nil, err
+		}
+	}
+	if err := mw.Close(); err != nil {
+		return nil, err
+	}
+
+	var b bytes.Buffer
 	fmt.Fprintf(&b, "From: %s\r\n", from)
 	fmt.Fprintf(&b, "To: %s\r\n", strings.Join(to, ", "))
-	fmt.Fprintf(&b, "Subject: %s\r\n", subject)
+	fmt.Fprintf(&b, "Subject: %s\r\n", mime.QEncoding.Encode("UTF-8", msg.Subject))
+	fmt.Fprintf(&b, "Date: %s\r\n", now.Format(time.RFC1123Z))
+	fmt.Fprintf(&b, "Message-ID: %s\r\n", messageID(from))
 	b.WriteString("MIME-Version: 1.0\r\n")
-	b.WriteString("Content-Type: text/plain; charset=UTF-8\r\n")
+	fmt.Fprintf(&b, "Content-Type: multipart/alternative; boundary=%q\r\n", mw.Boundary())
 	b.WriteString("\r\n")
-	b.WriteString(strings.ReplaceAll(body, "\n", "\r\n"))
-	return []byte(b.String())
+	b.Write(body.Bytes())
+	return b.Bytes(), nil
+}
+
+// messageID returns a unique Message-ID on the sender's domain. Mail
+// without one is scored as more likely spam.
+func messageID(from string) string {
+	domain := "vellum.invalid"
+	if at := strings.LastIndex(from, "@"); at >= 0 {
+		if d := strings.Trim(from[at+1:], "> "); d != "" {
+			domain = d
+		}
+	}
+	var r [12]byte
+	_, _ = rand.Read(r[:])
+	return "<" + hex.EncodeToString(r[:]) + "@" + domain + ">"
 }
 
 // Tasks is the slice of the index the digest needs.
 type Tasks interface {
 	ListTasks(status, project string) []vault.Entry
-}
-
-// Digest builds the subject, plain-text body and open-task count.
-func Digest(ix Tasks, publicURL string) (subject, body string, count int) {
-	inprog := ix.ListTasks("in-progress", "")
-	backlog := ix.ListTasks("backlog", "")
-	count = len(inprog) + len(backlog)
-
-	var b strings.Builder
-	if count == 0 {
-		return "Vellum — all clear", "No open tasks in your vault. Nice and tidy.\n", 0
-	}
-	fmt.Fprintf(&b, "You have %s open in your vault.\n\n", plural(count, "task", "tasks"))
-	if len(inprog) > 0 {
-		fmt.Fprintf(&b, "In progress (%d):\n", len(inprog))
-		for _, e := range inprog {
-			fmt.Fprintf(&b, "  • %s\n", e.Title)
-		}
-		b.WriteString("\n")
-	}
-	if len(backlog) > 0 {
-		fmt.Fprintf(&b, "Backlog (%d):\n", len(backlog))
-		for _, e := range backlog {
-			fmt.Fprintf(&b, "  • %s\n", e.Title)
-		}
-		b.WriteString("\n")
-	}
-	if publicURL != "" {
-		fmt.Fprintf(&b, "Open your vault: %s\n", strings.TrimRight(publicURL, "/"))
-	}
-	return fmt.Sprintf("Vellum digest — %s open", plural(count, "task", "tasks")), b.String(), count
 }
 
 // Notifier runs the periodic digest.
@@ -161,17 +190,18 @@ func (n *Notifier) Loop(ctx context.Context) {
 	}
 }
 
-// SendDigest builds and sends one digest now.
+// SendDigest builds and sends one digest now. Tasks done within the last
+// interval are listed as well.
 func (n *Notifier) SendDigest() {
-	subject, body, count := Digest(n.tasks, n.cfg.PublicURL)
-	if err := n.mailer.Send(subject, body); err != nil {
+	msg := Digest(n.tasks, n.cfg.PublicURL, time.Now(), n.cfg.Interval)
+	if err := n.mailer.Send(msg); err != nil {
 		if n.log != nil {
 			n.log.Error("digest send failed", "error", err)
 		}
 		return
 	}
 	if n.log != nil {
-		n.log.Info("digest sent", "tasks", count, "to", strings.Join(n.cfg.To, ","))
+		n.log.Info("digest sent", "tasks", msg.Open, "to", strings.Join(n.cfg.To, ","))
 	}
 }
 
