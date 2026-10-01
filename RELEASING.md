@@ -71,10 +71,23 @@ git push origin release/X.Y vX.Y.Z+1
 git switch main
 git tag -a vX.Y+1.0-beta.N -m "…"
 git push origin vX.Y+1.0-beta.N
+
+# 4. record the patch release in main's history, then drop the branch
+git switch -c chore/merge-back-release-X.Y main
+git merge -s ours --no-ff release/X.Y   # main already has the fix
+# PR, merged with "Create a merge commit" (a squash would lose the link)
+git push origin --delete release/X.Y    # the tag keeps the commits
 ```
 
 The workflow file that runs is the one **in the tagged commit**, so a
 release branch cut from an older tag uses that tag's `release.yml`.
+
+Step 4 matters for how GitHub presents the release: without it the
+release branch shows as commits ahead of `main`, and the patch tag is not
+reachable from `main`, although the fix is there. Copy the patch's
+changelog section into `main`'s `CHANGELOG.md` in the same PR. A later
+patch of the same line starts again from its latest tag:
+`git switch -c release/X.Y vX.Y.Z`.
 
 ### The advisory
 
