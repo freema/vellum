@@ -13,7 +13,12 @@ Notes you can hand to somebody.
 ### Security
 - **Approving a connection requires the vault's client secret**
   ([GHSA-75v9-hg2f-5g9v](https://github.com/freema/vellum/security/advisories/GHSA-75v9-hg2f-5g9v)).
-  Also released as 1.12.2 — see there for the details.
+  Also released as 1.12.2 — see there for the details. If you ran
+  1.13.0-beta.1 reachable from the internet with `VELLUM_SHARING=on`,
+  also look through **Public links** for links you did not create: an
+  agent token can publish notes, and links outlive a restart.
+- `golang.org/x/text` 0.37.0 → 0.39.0 (GO-2026-5970, an infinite loop on
+  invalid input).
 
 ### Added
 - **Public share links.** Any note can become a read-only URL that opens
@@ -70,9 +75,11 @@ Notes you can hand to somebody.
   one-click consent. The page can no longer be framed by another site.
 
   Upgrading restarts the server, which drops every token issued so far.
-  If your server was reachable from the internet, also look through
-  **Public links** for links you did not create, and the vault for
-  changes you did not make.
+  If your server was reachable from the internet, also look through the
+  vault for changes you did not make.
+- `golang.org/x/text` 0.37.0 → 0.39.0 (GO-2026-5970, an infinite loop on
+  invalid input). The image is rebuilt with the current Go 1.26 toolchain,
+  which carries the standard library fixes released since 1.12.1.
 
 ## [1.12.1] — 2026-07-22
 
