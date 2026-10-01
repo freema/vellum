@@ -10,6 +10,11 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Notes you can hand to somebody.
 
+### Security
+- **Approving a connection requires the vault's client secret**
+  ([GHSA-75v9-hg2f-5g9v](https://github.com/freema/vellum/security/advisories/GHSA-75v9-hg2f-5g9v)).
+  Also released as 1.12.2 — see there for the details.
+
 ### Added
 - **Public share links.** Any note can become a read-only URL that opens
   without an account — for handing over a document your agent just wrote,
@@ -48,6 +53,26 @@ Notes you can hand to somebody.
   Reference: [docs/sharing.md](docs/sharing.md); the security posture is
   in [SECURITY.md](SECURITY.md) and
   [docs/threat-model.md](docs/threat-model.md).
+
+## [1.12.2] — 2026-10-01
+
+### Security
+- **Approving a connection requires the vault's client secret**
+  ([GHSA-75v9-hg2f-5g9v](https://github.com/freema/vellum/security/advisories/GHSA-75v9-hg2f-5g9v),
+  critical). Since 1.3.0 an MCP client could register itself and the
+  consent screen issued a code to whoever pressed *Authorize*; a
+  self-registered client then exchanged it without a secret. Anyone who
+  could reach a server with `AUTH_ENABLED=true` could therefore mint a
+  token with full read, write and delete access to the vault. For a
+  self-registered client the consent screen now asks for
+  `VELLUM_CLIENT_SECRET` and issues no code without it. The configured
+  `vellum` client, which presents the secret at `/token`, keeps its
+  one-click consent. The page can no longer be framed by another site.
+
+  Upgrading restarts the server, which drops every token issued so far.
+  If your server was reachable from the internet, also look through
+  **Public links** for links you did not create, and the vault for
+  changes you did not make.
 
 ## [1.12.1] — 2026-07-22
 

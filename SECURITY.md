@@ -23,7 +23,7 @@ vellum is a deliberately small attack surface:
 
 | Threat | Risk | Mitigation |
 |--------|------|------------|
-| Unauthorized vault access | High | OAuth 2.1 with client secret + PKCE; Bearer required on `/mcp` |
+| Unauthorized vault access | High | OAuth 2.1 + PKCE; approving a connection takes the client secret (on the consent screen for self-registered clients, at `/token` for the configured one); Bearer required on `/mcp` |
 | Path traversal / escape | High | Path validation, symlink rejection, vault-root confinement (tested) |
 | Token theft | Medium | 1h access tokens, refresh rotation, HTTPS-only deployment |
 | Cross-origin abuse | Medium | Origin allowlist (403) + CORS allowlist |
