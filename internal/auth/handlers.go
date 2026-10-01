@@ -48,8 +48,9 @@ func (p *Provider) handleASMetadata(w http.ResponseWriter, r *http.Request) {
 // handleRegister implements OAuth 2.0 Dynamic Client Registration (RFC 7591).
 // MCP clients (Inspector, claude.ai, Cursor, …) call this to obtain a
 // client_id before the authorization-code flow. Registration is open and
-// anonymous — it only issues an identifier; the human consent at /authorize is
-// the actual gate. Clients are registered as public (PKCE, no secret).
+// anonymous — it only issues an identifier. Clients are registered as public
+// (PKCE, no secret), so the gate is the consent at /authorize, where approving
+// requires the vault's client secret (handleAuthorizePost).
 func (p *Provider) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		RedirectURIs            []string `json:"redirect_uris"`
@@ -128,8 +129,8 @@ func (p *Provider) validate(params authorizeParams, responseType string) string 
 }
 
 // handleAuthorizeGet validates the request and renders the consent screen
-// (design artboard 1b). The client secret is NOT entered here — it is
-// verified at /token; the consent screen is the human checkpoint.
+// (design artboard 1b). For a public client the screen asks for the client
+// secret; the confidential client's secret is verified at /token instead.
 func (p *Provider) handleAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	params := readAuthorizeParams(q.Get)
@@ -137,13 +138,20 @@ func (p *Provider) handleAuthorizeGet(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errCode})
 		return
 	}
-	p.renderConsent(w, params)
+	p.renderConsent(w, http.StatusOK, params, "")
 }
 
 // handleAuthorizePost processes the consent decision. Deny redirects with
-// error=access_denied; approve issues a single-use code. There is no cookie
-// session, so there is nothing for CSRF to ride on — security rests on
-// PKCE + the client secret at /token, exactly like openclaw's auto-approve.
+// error=access_denied; approve issues a single-use code.
+//
+// Who may approve depends on the client. The confidential client presents
+// the secret at /token, so its code is worthless without it. A public client
+// presents nothing at /token — anyone can register one and supply their own
+// redirect_uri and PKCE pair — so for it approving here must prove the person
+// owns the vault: the form has to carry the client secret. Without that, the
+// approve button would mint a vault token for whoever pressed it. There is no
+// cookie session, so there is nothing for CSRF to ride on, and the secret
+// itself cannot be forged by a cross-site form.
 func (p *Provider) handleAuthorizePost(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})
@@ -160,6 +168,12 @@ func (p *Provider) handleAuthorizePost(w http.ResponseWriter, r *http.Request) {
 	if r.PostForm.Get("decision") != "approve" {
 		qs.Set("error", "access_denied")
 	} else {
+		// validate() has already confirmed the client exists, and clients are
+		// never reaped.
+		if reg, _ := p.lookupClient(params.clientID); reg.public && !p.secretEquals(r.PostForm.Get("secret")) {
+			p.renderConsent(w, http.StatusUnauthorized, params, "That is not the client secret of this vault.")
+			return
+		}
 		var scopes []string
 		if params.scope != "" {
 			scopes = strings.Fields(params.scope)
@@ -197,8 +211,9 @@ func (p *Provider) authenticateClient(w http.ResponseWriter, r *http.Request) bo
 
 // authenticateTokenClient authenticates the client for the authorization_code
 // and refresh_token grants. Public (dynamically-registered) clients present no
-// secret — PKCE and the code/refresh→client binding are the gate. Confidential
-// clients must present the shared secret.
+// secret here — their code was only issued after the owner entered the secret
+// at the consent screen, and PKCE plus the code/refresh→client binding keep it
+// with the client that asked. Confidential clients must present the secret.
 func (p *Provider) authenticateTokenClient(w http.ResponseWriter, r *http.Request, clientID string) bool {
 	reg, ok := p.lookupClient(clientID)
 	if !ok {
@@ -217,8 +232,9 @@ func (p *Provider) authenticateTokenClient(w http.ResponseWriter, r *http.Reques
 }
 
 // handleToken implements the token endpoint: authorization_code (with PKCE
-// verification) and refresh_token (with rotation). The client secret check
-// here is the actual authorization gate.
+// verification) and refresh_token (with rotation). For the confidential client
+// the secret check here is the authorization gate; a public client's code was
+// only issued after the secret was entered at the consent screen.
 func (p *Provider) handleToken(w http.ResponseWriter, r *http.Request) {
 	if err := r.ParseForm(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid_request"})

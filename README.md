@@ -131,11 +131,13 @@ claude mcp add --transport http vellum https://your-host/mcp
 ```
 
 Claude runs the OAuth flow: a browser window opens vellum's consent screen,
-you approve, tokens are exchanged with your `VELLUM_CLIENT_SECRET` behind
-the scenes (authorization code + PKCE; vellum is its own OAuth issuer — no
-external identity provider, no calls out). The same works for a
-[claude.ai custom connector](https://claude.ai/settings/connectors) — enter
-`vellum` as client ID and your secret.
+you enter your `VELLUM_CLIENT_SECRET` and approve (authorization code +
+PKCE; vellum is its own OAuth issuer — no external identity provider, no
+calls out). The secret is what stops anyone else who can reach the server
+from approving a connection of their own. The same works for a
+[claude.ai custom connector](https://claude.ai/settings/connectors) — either
+leave the OAuth fields empty and enter the secret on the consent screen, or
+enter `vellum` as client ID and your secret there and approve with one click.
 
 Local, no Docker: `vellum -mcp-stdio` serves MCP over stdio.
 

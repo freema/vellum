@@ -84,6 +84,14 @@ var consentTmpl = template.Must(template.New("consent").Parse(`<!DOCTYPE html>
   .kind-write { color: #976A28; background: #F7EEDD; }
   .kind-delete { color: #8A3E29; background: #F7ECE8; }
   .tool-desc { font-size: 12px; color: #7A7266; margin-top: 3px; }
+  .owner { padding: 4px 34px 22px; }
+  .owner-label { display: block; font-size: 12px; color: #7A7266; margin-bottom: 8px; }
+  .owner-field { display: flex; align-items: center; gap: 8px; background: #FFFFFF; border: 1px solid #E0D9CD; border-radius: 8px; padding: 11px 13px; }
+  .owner-field.invalid { border-color: #8A3E29; }
+  .owner-icon { color: #9A938A; font-size: 13px; flex: none; }
+  .owner-input { flex: 1; min-width: 0; border: none; outline: none; background: transparent; font-size: 13.5px; color: #2A2622; letter-spacing: 0.04em; }
+  .owner-sub { font-size: 11.5px; color: #9A938A; line-height: 1.5; margin-top: 8px; }
+  .owner-error { font-size: 12px; color: #8A3E29; margin-top: 8px; }
   .scopes { padding: 6px 34px 20px; display: flex; align-items: center; gap: 8px; font-size: 11px; color: #9A938A; }
   .scopes .on { color: #8B6F47; }
   .actions { display: flex; gap: 12px; padding: 18px 34px; border-top: 1px solid #EDE6DB; background: #F6F1E8; }
@@ -137,6 +145,18 @@ var consentTmpl = template.Must(template.New("consent").Parse(`<!DOCTYPE html>
     {{end}}
   </div>
 
+  {{if .NeedsSecret}}
+  <div class="owner">
+    <label class="owner-label" for="secret">Client secret</label>
+    <div class="owner-field{{if .Error}} invalid{{end}}">
+      <span class="owner-icon">&#9919;</span>
+      <input id="secret" class="owner-input mono" type="password" name="secret" placeholder="paste your secret" autocomplete="current-password" required autofocus>
+    </div>
+    {{if .Error}}<div class="owner-error" role="alert">{{.Error}}</div>{{end}}
+    <div class="owner-sub">Only the owner of this vault can approve a connection: enter the <span class="mono">VELLUM_CLIENT_SECRET</span> it runs with.</div>
+  </div>
+  {{end}}
+
   <div class="scopes mono">
     <span>scope:</span>
     <span class="on">vault.read</span>
@@ -145,7 +165,7 @@ var consentTmpl = template.Must(template.New("consent").Parse(`<!DOCTYPE html>
   </div>
 
   <div class="actions">
-    <button class="deny" type="submit" name="decision" value="deny">Deny</button>
+    <button class="deny" type="submit" name="decision" value="deny" formnovalidate>Deny</button>
     <button class="approve" type="submit" name="decision" value="approve">Authorize {{.ToolCount}} tools &middot; start session</button>
   </div>
 </form>
@@ -165,17 +185,34 @@ type consentData struct {
 	Host                string
 	Tools               []consentTool
 	ToolCount           int
+	NeedsSecret         bool   // public client: approving requires the owner's secret
+	Error               string // shown under the secret field after a failed attempt
 }
 
 // renderConsent serves the authorize consent screen (design artboard 1b,
 // static variant: all tools listed and granted; per-tool selection is a
 // possible follow-up, PHY-112 marks it nice-to-have).
-func (p *Provider) renderConsent(w http.ResponseWriter, params authorizeParams) {
+//
+// For a public (dynamically-registered) client the screen also asks for the
+// vault's client secret, because for those clients approving here is the only
+// authorization gate — see handleAuthorizePost. errMsg is set when a previous
+// attempt was rejected; status is the HTTP status to answer with.
+func (p *Provider) renderConsent(w http.ResponseWriter, status int, params authorizeParams, errMsg string) {
 	host := p.issuer
 	if u, err := url.Parse(p.issuer); err == nil && u.Host != "" {
 		host = u.Host
 	}
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	reg, _ := p.lookupClient(params.clientID)
+	h := w.Header()
+	h.Set("Content-Type", "text/html; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	h.Set("Referrer-Policy", "no-referrer")
+	h.Set("X-Content-Type-Options", "nosniff")
+	// The page asks for the vault secret, so no other site may frame it and
+	// overlay its own UI on the field (clickjacking).
+	h.Set("X-Frame-Options", "DENY")
+	h.Set("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'; frame-ancestors 'none'")
+	w.WriteHeader(status)
 	_ = consentTmpl.Execute(w, consentData{
 		ClientID:            params.clientID,
 		ClientName:          "Claude",
@@ -188,5 +225,7 @@ func (p *Provider) renderConsent(w http.ResponseWriter, params authorizeParams) 
 		Host:                host,
 		Tools:               consentTools,
 		ToolCount:           len(consentTools),
+		NeedsSecret:         reg != nil && reg.public,
+		Error:               errMsg,
 	})
 }
