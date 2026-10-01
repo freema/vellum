@@ -319,6 +319,10 @@ task lint         # golangci-lint
 task e2e          # compose stack with the fixture vault (docs/e2e.md)
 ```
 
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) for the local setup and the
+ground rules, and [ARCHITECTURE.md](ARCHITECTURE.md) for the map of the
+code. Every page of documentation is listed in [docs/](docs/README.md).
+
 ### Design decisions kept deliberately simple
 
 - **Search = ranked RAM scan, not bleve.** The metadata index narrows by
@@ -351,8 +355,10 @@ task e2e          # compose stack with the fixture vault (docs/e2e.md)
 
 Created by **Tomáš Grasl** ([@freema](https://github.com/freema)).
 
-Issues and PRs welcome — the [threat model](docs/threat-model.md) and
-[SECURITY.md](SECURITY.md) explain the boundaries contributions must keep.
+Issues and PRs welcome: see [CONTRIBUTING.md](CONTRIBUTING.md), and
+[SUPPORT.md](SUPPORT.md) for where to ask. The
+[threat model](docs/threat-model.md) and [SECURITY.md](SECURITY.md) explain
+the boundaries contributions must keep.
 
 ## License
 
