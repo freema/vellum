@@ -24,6 +24,9 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Upgrading restarts the server, which drops every token issued so far.
   If your server was reachable from the internet, also look through the
   vault for changes you did not make.
+- `golang.org/x/text` 0.37.0 → 0.39.0 (GO-2026-5970, an infinite loop on
+  invalid input). The image is rebuilt with the current Go 1.26 toolchain,
+  which carries the standard library fixes released since 1.12.1.
 
 ## [1.12.1] — 2026-07-22
 
