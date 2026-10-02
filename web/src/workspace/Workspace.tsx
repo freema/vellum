@@ -6,6 +6,7 @@ import {
   AuthError,
   ExistsError,
   NotFoundError,
+  RevokeRefusedError,
   relativeAge,
   type Note,
   type NoteEntry,
@@ -465,9 +466,10 @@ export default function Workspace({ api, version }: { api: ApiClient; version: s
       try {
         await api.revokeConnection(id)
         setConnData(await api.connections())
-        showToast('Session revoked', 'danger')
+        showToast('Access revoked — the client has to be approved again', 'danger')
       } catch (err) {
-        if (!(err instanceof AuthError)) showToast('Revoke failed', 'danger')
+        if (err instanceof RevokeRefusedError) showToast(err.message, 'danger')
+        else if (!(err instanceof AuthError)) showToast('Revoke failed', 'danger')
       }
     },
     [api, showToast],
@@ -3369,9 +3371,18 @@ function ConnectionCard({ c, onRevoke }: { c: Connection; onRevoke: (id: string)
         <span className="ws-conn-card__ago">{c.lastAgo} ago</span>
         <span className="ws-conn-card__spacer" />
         <span className="ws-conn-card__calls">{c.calls} calls</span>
-        <span className="ws-conn-card__revoke" onClick={() => onRevoke(c.id)}>
-          Revoke
-        </span>
+        {c.revocable ? (
+          <span className="ws-conn-card__revoke" onClick={() => onRevoke(c.id)}>
+            Revoke
+          </span>
+        ) : (
+          <span
+            className="ws-conn-card__no-revoke"
+            title="Revoking would not cut this client off: auth is off, or it holds the client secret"
+          >
+            Can't revoke
+          </span>
+        )}
       </div>
     </div>
   )

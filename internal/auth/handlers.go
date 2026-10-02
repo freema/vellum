@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -332,8 +333,8 @@ func (p *Provider) RequireBearer(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
 		if ok {
-			if _, err := p.VerifyAccessToken(strings.TrimSpace(token)); err == nil {
-				next.ServeHTTP(w, r)
+			if info, err := p.VerifyAccessToken(strings.TrimSpace(token)); err == nil {
+				next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), tokenCtxKey{}, info)))
 				return
 			}
 		}

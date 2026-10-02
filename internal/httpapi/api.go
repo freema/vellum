@@ -27,6 +27,9 @@ type API struct {
 	Activity *activity.Recorder
 	Endpoint string
 	Curator  bool
+	// Revoker cuts off the OAuth client behind a connection. Nil when auth
+	// is off: connections are then keyed by address and hold no token.
+	Revoker ConnectionRevoker
 
 	// Shares, when set, enables the /api/shares endpoints. Sharing is the
 	// configured mode ("ui" or "on") reported to the workspace, and
@@ -34,6 +37,16 @@ type API struct {
 	Shares    *share.Store
 	Sharing   string
 	PublicURL string
+}
+
+// ConnectionRevoker revokes the OAuth grant behind a connection
+// (implemented by *auth.Provider).
+type ConnectionRevoker interface {
+	// RevokeClient drops all tokens of a client and reports how many.
+	RevokeClient(clientID string) int
+	// IsSecretClient reports whether the client holds the client secret,
+	// and so can get a new token whenever it likes.
+	IsSecretClient(clientID string) bool
 }
 
 // routes registers /api/* handlers on mux.

@@ -55,6 +55,9 @@ export interface Connection {
   lastTool?: string
   lastAgo: string
   calls: number
+  /** False when revoking would not cut the client off: auth is off, or the
+   * client holds the client secret. */
+  revocable: boolean
 }
 
 export interface ConnectionsData {
@@ -193,6 +196,9 @@ export class AuthError extends Error {
     super('unauthorized')
   }
 }
+
+/** The server refused to revoke a connection; the message says why. */
+export class RevokeRefusedError extends Error {}
 
 export class NotFoundError extends Error {
   constructor(path: string) {
@@ -478,8 +484,16 @@ export class ApiClient {
     return (await this.request('GET', '/api/connections')) as ConnectionsData
   }
 
+  /** Revokes the client behind a connection: its tokens stop working and it
+   * has to be approved again. */
   async revokeConnection(id: string): Promise<void> {
-    await this.request('DELETE', `/api/connections/${encodeURIComponent(id)}`)
+    const url = `/api/connections/${encodeURIComponent(id)}`
+    const res = await this.rawRequest('DELETE', url)
+    if (res.status === 409) {
+      const body = (await res.json().catch(() => ({}))) as { error?: string }
+      throw new RevokeRefusedError(body.error ?? 'This connection cannot be revoked')
+    }
+    if (!res.ok) throw new Error(`DELETE ${url}: ${res.status}`)
   }
 
   async activity(filter = 'all'): Promise<ActivityData> {

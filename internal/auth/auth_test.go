@@ -700,6 +700,53 @@ func TestBearer401Challenge(t *testing.T) {
 	}
 }
 
+func TestRevokeClientDropsAllItsTokens(t *testing.T) {
+	p := newTestProvider(t)
+	a1, r1, _, _ := p.grantDirect("mcp-a", Scopes)
+	a2, r2, _, _ := p.grantDirect("mcp-a", Scopes) // an earlier session of the same client
+	b, _, _, _ := p.grantDirect("mcp-b", Scopes)
+	code := p.issueCode("mcp-a", "https://app.example/cb", "challenge", "", Scopes)
+
+	if n := p.RevokeClient("mcp-a"); n != 4 {
+		t.Fatalf("RevokeClient dropped %d tokens, want 4", n)
+	}
+	for _, tok := range []string{a1, a2} {
+		if _, err := p.VerifyAccessToken(tok); err == nil {
+			t.Error("access token of the revoked client still verifies")
+		}
+	}
+	for _, rt := range []string{r1, r2} {
+		if _, _, _, err := p.exchangeRefresh("mcp-a", rt, nil); err == nil {
+			t.Error("refresh token of the revoked client still works")
+		}
+	}
+	if _, _, _, err := p.exchangeCode("mcp-a", code, "verifier", ""); err == nil ||
+		!strings.Contains(err.Error(), "invalid authorization code") {
+		t.Errorf("pending code of the revoked client = %v, want invalid", err)
+	}
+	if _, err := p.VerifyAccessToken(b); err != nil {
+		t.Errorf("another client's token was revoked: %v", err)
+	}
+	if !p.IsSecretClient("vellum") || p.IsSecretClient("mcp-a") {
+		t.Error("IsSecretClient mixes up the configured and registered clients")
+	}
+}
+
+func TestRequireBearerPassesTheTokenOn(t *testing.T) {
+	p := newTestProvider(t)
+	access, _, _, _ := p.grantDirect("mcp-a", Scopes)
+	var got *TokenInfo
+	h := p.RequireBearer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ = TokenFromContext(r.Context())
+	}))
+	req := httptest.NewRequest(http.MethodPost, "/mcp", nil)
+	req.Header.Set("Authorization", "Bearer "+access)
+	h.ServeHTTP(httptest.NewRecorder(), req)
+	if got == nil || got.ClientID != "mcp-a" {
+		t.Fatalf("token in context = %+v, want client mcp-a", got)
+	}
+}
+
 func TestCORS(t *testing.T) {
 	handler := CORS([]string{"https://claude.ai"}, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -13,6 +13,7 @@
 package auth
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
@@ -407,4 +408,48 @@ func (p *Provider) revokeToken(token string) {
 	delete(p.tokens, token)
 	delete(p.refresh, token)
 	p.mu.Unlock()
+}
+
+// IsSecretClient reports whether clientID is the configured confidential
+// client. Whoever uses it holds VELLUM_CLIENT_SECRET and can get a new token
+// at any time, so revoking its tokens would not disconnect it.
+func (p *Provider) IsSecretClient(clientID string) bool {
+	return clientID == p.cfg.ClientID
+}
+
+// RevokeClient drops every access token, refresh token and pending
+// authorization code of a client and reports how many tokens it dropped. The
+// registration stays: the client can come back only through the consent
+// screen, which asks for the client secret.
+func (p *Provider) RevokeClient(clientID string) int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	n := 0
+	for tk, d := range p.tokens {
+		if d.ClientID == clientID {
+			delete(p.tokens, tk)
+			n++
+		}
+	}
+	for rt, d := range p.refresh {
+		if d.clientID == clientID {
+			delete(p.refresh, rt)
+			n++
+		}
+	}
+	for c, d := range p.codes {
+		if d.clientID == clientID {
+			delete(p.codes, c)
+		}
+	}
+	return n
+}
+
+type tokenCtxKey struct{}
+
+// TokenFromContext returns the access token RequireBearer verified for the
+// request, if any.
+func TokenFromContext(ctx context.Context) (*TokenInfo, bool) {
+	info, ok := ctx.Value(tokenCtxKey{}).(*TokenInfo)
+	return info, ok
 }

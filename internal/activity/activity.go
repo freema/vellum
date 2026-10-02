@@ -36,6 +36,7 @@ type Session struct {
 	LastTool  string    `json:"lastTool,omitempty"`
 	Calls     int       `json:"calls"`
 	revoked   bool
+	clientID  string // OAuth client behind the token; empty without auth
 }
 
 // Recorder is a concurrency-safe, bounded store of events and sessions.
@@ -72,8 +73,9 @@ func (r *Recorder) Record(ev Event) {
 }
 
 // Touch upserts a session by key and, when tool is non-empty, counts a call.
-// key is a stable non-secret handle (e.g. a token hash prefix).
-func (r *Recorder) Touch(key, name, kind, tool string) {
+// key is a stable non-secret handle (e.g. a token hash prefix); clientID is
+// the OAuth client the token was issued to, empty when auth is off.
+func (r *Recorder) Touch(key, clientID, name, kind, tool string) {
 	if key == "" {
 		return
 	}
@@ -91,6 +93,9 @@ func (r *Recorder) Touch(key, name, kind, tool string) {
 	if kind != "" {
 		s.Kind = kind
 	}
+	if clientID != "" {
+		s.clientID = clientID
+	}
 	s.LastSeen = now
 	s.revoked = false
 	if tool != "" {
@@ -99,15 +104,38 @@ func (r *Recorder) Touch(key, name, kind, tool string) {
 	}
 }
 
-// Revoke drops a session. Reports whether one was removed.
-func (r *Recorder) Revoke(id string) bool {
+// ClientID is the OAuth client the session's token was issued to, empty
+// when auth is off.
+func (s Session) ClientID() string { return s.clientID }
+
+// ClientOf returns the OAuth client of a session ("" without auth) and
+// whether the session exists.
+func (r *Recorder) ClientOf(id string) (string, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if _, ok := r.sessions[id]; !ok {
-		return false
+	s, ok := r.sessions[id]
+	if !ok {
+		return "", false
 	}
-	delete(r.sessions, id)
-	return true
+	return s.clientID, true
+}
+
+// RevokeClient drops every session of an OAuth client (one per access token
+// it used) and reports how many it dropped.
+func (r *Recorder) RevokeClient(clientID string) int {
+	if clientID == "" {
+		return 0
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	n := 0
+	for k, s := range r.sessions {
+		if s.clientID == clientID {
+			delete(r.sessions, k)
+			n++
+		}
+	}
+	return n
 }
 
 // Events returns a copy filtered by source ("", "all" or a source name),

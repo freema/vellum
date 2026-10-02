@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/freema/vellum/internal/activity"
+	"github.com/freema/vellum/internal/auth"
 )
 
 // mcpRecord wraps the /mcp handler to populate the activity recorder: every
@@ -27,16 +28,20 @@ func mcpRecord(rec *activity.Recorder, next http.Handler) http.Handler {
 			if err == nil {
 				r.Body = io.NopCloser(bytes.NewReader(body))
 				key := sessionKey(r)
+				clientID := ""
+				if info, ok := auth.TokenFromContext(r.Context()); ok {
+					clientID = info.ClientID
+				}
 				name, kind := clientIdentity(r.UserAgent())
 				method, tool, target := parseRPC(body)
 				if method == "tools/call" && tool != "" {
-					rec.Touch(key, name, kind, tool)
+					rec.Touch(key, clientID, name, kind, tool)
 					rec.Record(activity.Event{
 						Source: "mcp", Actor: name, Kind: toolKind(tool),
 						Target: target, Detail: tool,
 					})
 				} else {
-					rec.Touch(key, name, kind, "")
+					rec.Touch(key, clientID, name, kind, "")
 				}
 			}
 		}
@@ -147,7 +152,8 @@ var kindVerb = map[string]string{
 	"delete": "deleted", "tag": "tagged", "link": "linked",
 	"organize": "organized", "archive": "archived", "summary": "summarized",
 	"share": "shared", "unshare": "stopped sharing",
-	"error": "hit an error in",
+	"revoke": "revoked access for",
+	"error":  "hit an error in",
 }
 
 func kindToVerb(kind string) string {
@@ -170,6 +176,9 @@ func (a *API) handleConnections(w http.ResponseWriter, r *http.Request) {
 		LastTool string `json:"lastTool,omitempty"`
 		LastAgo  string `json:"lastAgo"`
 		Calls    int    `json:"calls"`
+		// Revocable is false when Revoke could not cut the client off:
+		// auth is off, or the client holds the client secret.
+		Revocable bool `json:"revocable"`
 	}
 	now := time.Now()
 	sessions := a.Activity.Sessions()
@@ -183,6 +192,7 @@ func (a *API) handleConnections(w http.ResponseWriter, r *http.Request) {
 			ID: s.ID, Name: s.Name, Kind: s.Kind, Mono: monogram(s.Name),
 			Status: s.Status, Since: durSince(now.Sub(s.FirstSeen)),
 			LastTool: s.LastTool, LastAgo: reltime(now.Sub(s.LastSeen)), Calls: s.Calls,
+			Revocable: a.revocable(s.ClientID()),
 		})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -193,13 +203,45 @@ func (a *API) handleConnections(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// revocable reports whether revoking the client's tokens disconnects it.
+func (a *API) revocable(clientID string) bool {
+	return a.Revoker != nil && clientID != "" && !a.Revoker.IsSecretClient(clientID)
+}
+
+// handleRevoke cuts off the OAuth client behind a connection: all its access
+// and refresh tokens go, so its next call fails and it has to pass the
+// consent screen (and the client secret) again. Hiding the session alone
+// would not do: the client's next call would bring it back.
 func (a *API) handleRevoke(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
-	if !a.Activity.Revoke(id) {
+	clientID, ok := a.Activity.ClientOf(id)
+	if !ok {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": "no such session"})
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]string{"revoked": id})
+	switch {
+	case a.Revoker == nil || clientID == "":
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "Auth is off, so this connection has no token to revoke",
+		})
+		return
+	case a.Revoker.IsSecretClient(clientID):
+		writeJSON(w, http.StatusConflict, map[string]string{
+			"error": "This connection uses the client secret; rotate VELLUM_CLIENT_SECRET to cut it off",
+		})
+		return
+	}
+	name := id
+	for _, s := range a.Activity.Sessions() {
+		if s.ID == id {
+			name = s.Name
+			break
+		}
+	}
+	tokens := a.Revoker.RevokeClient(clientID)
+	a.Activity.RevokeClient(clientID)
+	a.recordUser("revoke", name, id)
+	writeJSON(w, http.StatusOK, map[string]any{"revoked": id, "tokens": tokens})
 }
 
 func (a *API) handleActivity(w http.ResponseWriter, r *http.Request) {

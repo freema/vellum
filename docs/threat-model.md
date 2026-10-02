@@ -45,6 +45,13 @@ radius. It cannot:
 
 Mitigation for data loss stays operational: back up the vault (plain files).
 
+To cut a connected agent off, use **Revoke** in the workspace's
+Connections panel: it drops every access and refresh token of that client,
+so the agent's next call fails and it can come back only through the
+consent screen, which asks for the client secret. A client that holds the
+secret itself can always get a new token; for that one, rotate the secret
+(below).
+
 ## Public share links (`VELLUM_SHARING`)
 
 Off by default, and while off no route, tool or state file exists.

@@ -12,9 +12,9 @@ func TestTouchAndSessions(t *testing.T) {
 	r := New()
 	r.now = fixedClock(base)
 
-	r.Touch("sk-1", "Claude Code", "CLI", "write_note")
-	r.Touch("sk-1", "Claude Code", "CLI", "read_note")
-	r.Touch("sk-2", "claude.ai", "Web", "") // no tool → no call counted
+	r.Touch("sk-1", "", "Claude Code", "CLI", "write_note")
+	r.Touch("sk-1", "", "Claude Code", "CLI", "read_note")
+	r.Touch("sk-2", "", "claude.ai", "Web", "") // no tool → no call counted
 
 	sessions := r.Sessions()
 	if len(sessions) != 2 {
@@ -47,7 +47,7 @@ func TestSessionGoesIdle(t *testing.T) {
 	base := time.Date(2026, 7, 4, 12, 0, 0, 0, time.UTC)
 	r := New()
 	r.now = fixedClock(base)
-	r.Touch("sk-1", "x", "y", "read_note")
+	r.Touch("sk-1", "", "x", "y", "read_note")
 
 	r.now = fixedClock(base.Add(5 * time.Minute)) // past idleAfter
 	if s := r.Sessions(); len(s) != 1 || s[0].Status != "idle" {
@@ -55,17 +55,25 @@ func TestSessionGoesIdle(t *testing.T) {
 	}
 }
 
-func TestRevoke(t *testing.T) {
+func TestRevokeClient(t *testing.T) {
 	r := New()
-	r.Touch("sk-1", "x", "y", "read_note")
-	if !r.Revoke("sk-1") {
-		t.Fatal("revoke returned false")
+	r.Touch("sk-1", "mcp-a", "x", "y", "read_note")
+	r.Touch("sk-2", "mcp-a", "x", "y", "") // the same client after a token refresh
+	r.Touch("sk-3", "mcp-b", "z", "y", "")
+	if got, ok := r.ClientOf("sk-2"); !ok || got != "mcp-a" {
+		t.Fatalf("ClientOf(sk-2) = %q, %v", got, ok)
 	}
-	if len(r.Sessions()) != 0 {
-		t.Fatal("session survived revoke")
+	if n := r.RevokeClient("mcp-a"); n != 2 {
+		t.Fatalf("RevokeClient dropped %d sessions, want 2", n)
 	}
-	if r.Revoke("nope") {
-		t.Fatal("revoke of unknown id returned true")
+	if s := r.Sessions(); len(s) != 1 || s[0].ID != "sk-3" {
+		t.Fatalf("sessions after revoke = %+v", s)
+	}
+	if _, ok := r.ClientOf("sk-1"); ok {
+		t.Fatal("revoked session still known")
+	}
+	if n := r.RevokeClient(""); n != 0 {
+		t.Fatalf("RevokeClient(\"\") dropped %d sessions", n)
 	}
 }
 

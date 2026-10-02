@@ -17,6 +17,13 @@ Notes you can hand to somebody.
   1.13.0-beta.1 reachable from the internet with `VELLUM_SHARING=on`,
   also look through **Public links** for links you did not create: an
   agent token can publish notes, and links outlive a restart.
+- **Revoke in the Connections panel cuts the client off.** It used to only
+  hide the session: the client's token kept working, and its next call put
+  the session back. Revoke now drops every access and refresh token of
+  that client, so it has to be approved on the consent screen (with the
+  client secret) again. A connection that uses the client secret itself,
+  or any connection while auth is off, shows "Can't revoke" instead, since
+  revoking would not stop it; rotate `VELLUM_CLIENT_SECRET` for those.
 - `golang.org/x/text` 0.37.0 → 0.39.0 (GO-2026-5970, an infinite loop on
   invalid input).
 
