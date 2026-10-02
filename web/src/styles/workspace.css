@@ -1377,6 +1377,7 @@
 .ws-conn-card__calls { font-family: var(--font-mono); font-size: 11px; color: var(--ink-faint); }
 .ws-conn-card__revoke { font-size: 11.5px; color: var(--danger); cursor: pointer; padding: 2px 7px; border-radius: 5px; }
 .ws-conn-card__revoke:hover { background: var(--danger-soft); }
+.ws-conn-card__no-revoke { font-size: 11.5px; color: var(--ink-faint); padding: 2px 7px; cursor: help; }
 
 /* ---- notifications popover ---- */
 .ws-notif-scrim { position: absolute; inset: 0; z-index: 53; }

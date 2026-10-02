@@ -166,22 +166,26 @@ func main() {
 		Projects: cfg.ProjectsDir,
 		Archive:  cfg.ArchiveDir,
 	}
+	api := &httpapi.API{
+		Vault:     v,
+		Index:     index,
+		Searcher:  searcher,
+		Structure: structure,
+		Activity:  recorder,
+		Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",
+		Curator:   cfg.Curator,
+		Shares:    shares,
+		Sharing:   cfg.Sharing,
+		PublicURL: cfg.IssuerURL,
+	}
+	if authProvider != nil {
+		api.Revoker = authProvider // a nil *auth.Provider would be a non-nil interface
+	}
 	srv := &http.Server{
 		Addr: ":" + cfg.Port,
 		Handler: httpapi.NewRouter(version, httpapi.Options{
-			MCPHandler: mcpserver.Handler(mcpSrv),
-			API: &httpapi.API{
-				Vault:     v,
-				Index:     index,
-				Searcher:  searcher,
-				Structure: structure,
-				Activity:  recorder,
-				Endpoint:  strings.TrimRight(cfg.IssuerURL, "/") + "/mcp",
-				Curator:   cfg.Curator,
-				Shares:    shares,
-				Sharing:   cfg.Sharing,
-				PublicURL: cfg.IssuerURL,
-			},
+			MCPHandler:     mcpserver.Handler(mcpSrv),
+			API:            api,
 			SPA:            vellum.DistFS(),
 			AllowedOrigins: cfg.AllowedOrigins,
 			Auth:           authProvider,
