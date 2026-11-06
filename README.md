@@ -238,7 +238,7 @@ curl http://localhost:8080/healthz
 Open http://localhost:8080, paste the client secret: that's your vault.
 
 Everything else is tunable from the same `.env`: pin the image with
-`VELLUM_IMAGE=ghcr.io/freema/vellum:1.13.0` (recommended for production,
+`VELLUM_IMAGE=ghcr.io/freema/vellum:1.13.1` (recommended for production,
 since `latest` moves), change the host port with `VELLUM_PORT`, plus any
 variable from the [configuration table](#configuration). The image already
 listens on all interfaces (`VELLUM_HOST=0.0.0.0`), so compose files need no
@@ -424,7 +424,7 @@ on a platform that gives you TLS and a public URL for free. vellum honours
 the `PORT` the platform injects, so the only three things that matter are the
 **same everywhere**:
 
-1. **Image**: `ghcr.io/freema/vellum:1.13.0` (pin a version, not `:latest`).
+1. **Image**: `ghcr.io/freema/vellum:1.13.1` (pin a version, not `:latest`).
 2. **A persistent volume mounted at `/vault`**. This is not optional: vellum
    stores every note as a file; without a persistent disk your vault is wiped
    on the next redeploy. (Serverless hosts like Vercel/Netlify/Cloudflare
@@ -444,11 +444,11 @@ metadata must advertise the real HTTPS host or Claude fails after the consent
 step.
 
 - **Railway**: New Project → Deploy from Docker image →
-  `ghcr.io/freema/vellum:1.13.0`. Add a Volume mounted at `/vault`, set the env
+  `ghcr.io/freema/vellum:1.13.1`. Add a Volume mounted at `/vault`, set the env
   above (Railway provides `PORT` and a `*.up.railway.app` domain).
 - **Render**: New → Web Service → *Deploy an existing image* →
-  `ghcr.io/freema/vellum:1.13.0`. Add a Disk mounted at `/vault`, set the env.
-- **Fly.io**: `fly launch --image ghcr.io/freema/vellum:1.13.0`, then
+  `ghcr.io/freema/vellum:1.13.1`. Add a Disk mounted at `/vault`, set the env.
+- **Fly.io**: `fly launch --image ghcr.io/freema/vellum:1.13.1`, then
   `fly volume create vault` and mount it at `/vault` in `fly.toml`; set the env
   with `fly secrets set VELLUM_CLIENT_SECRET=… VELLUM_ISSUER_URL=… TRUST_PROXY=1 AUTH_ENABLED=true`.
 
@@ -456,7 +456,7 @@ Then connect Claude to `https://<your-public-url>/mcp` (see
 [Connect Claude](#connect-claude)).
 
 **Coolify / Traefik**: point Coolify at the repo or image
-`ghcr.io/freema/vellum:1.13.0` (pin a version, not `:latest`), mount a
+`ghcr.io/freema/vellum:1.13.1` (pin a version, not `:latest`), mount a
 volume at `/vault`, set the env from the table above. Running raw
 compose behind Traefik, uncomment the labels in `docker-compose.yml`:
 

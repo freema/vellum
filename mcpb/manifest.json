@@ -2,7 +2,7 @@
   "manifest_version": "0.3",
   "name": "vellum",
   "display_name": "vellum",
-  "version": "1.13.0",
+  "version": "1.13.1",
   "description": "Read, write and search a folder of markdown notes. Notes stay plain .md files on your disk.",
   "long_description": "vellum gives Claude your markdown notes: full-text search that forgives typos and missing accents, tags, tasks, backlinks and conflict-safe edits. The notes stay plain `.md` files in the folder you pick, so Obsidian, VS Code and git keep working alongside. Nothing leaves your computer: no account, no cloud, no database.\n\nThis bundle runs the MCP server only. The web UI and the REST API come with the self-hosted server: see the documentation.",
   "author": {
