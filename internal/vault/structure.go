@@ -52,12 +52,18 @@ func (v *Vault) InitStructure(s Structure) (bool, error) {
 // ResolveWritePath decides where a new note lands. When the agent names a
 // directory the request is honored; a bare filename or no path at all falls
 // back to the inbox. With no path the filename is derived from the content
-// title and uniquified against existing notes.
+// title and uniquified against existing notes. The one bare filename that
+// stays in the vault root is the folder description file (_index.md by
+// default): at the root it describes the whole vault (NSO-573), and in the
+// inbox it would describe the inbox instead.
 func (v *Vault) ResolveWritePath(requested, content string, s Structure) (string, error) {
 	if requested != "" {
 		clean := path.Clean(strings.ReplaceAll(requested, "\\", "/"))
 		if strings.Contains(clean, "/") {
 			return clean, nil // explicit directory: use as requested
+		}
+		if clean == v.contextFile {
+			return clean, nil // the vault's own description: root
 		}
 		return path.Join(s.Inbox, clean), nil // bare filename: inbox
 	}

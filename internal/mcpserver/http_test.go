@@ -173,13 +173,13 @@ func TestMCPOverHTTPFullFlow(t *testing.T) {
 	session := connectHTTP(t, srv, fetchToken(t, srv))
 	ctx := context.Background()
 
-	// tools/list: 15 core + 6 curator tools.
+	// tools/list: 17 core + 7 curator tools.
 	tools, err := session.ListTools(ctx, &mcp.ListToolsParams{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tools.Tools) != 21 {
-		t.Errorf("tools = %d, want 21 (15 core + 6 curator)", len(tools.Tools))
+	if len(tools.Tools) != 24 {
+		t.Errorf("tools = %d, want 24 (17 core + 7 curator)", len(tools.Tools))
 	}
 
 	call := func(name string, args map[string]any) *mcp.CallToolResult {

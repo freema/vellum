@@ -115,8 +115,8 @@ func TestToolSurface(t *testing.T) {
 	want := []string{
 		"add_tags", "append_to_note", "delete_note", "get_backlinks",
 		"list_notes", "list_tags", "list_tasks", "move_note", "patch_note",
-		"prepend_to_note", "read_note", "remove_tags", "search_notes",
-		"set_status", "write_note",
+		"prepend_to_note", "read_note", "read_notes", "remove_tags", "replace_in_note",
+		"search_notes", "set_status", "write_note",
 	}
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Errorf("tools = %v\nwant %v", names, want)
@@ -131,14 +131,15 @@ func TestToolAnnotationsAndTitles(t *testing.T) {
 	}
 
 	readOnly := map[string]bool{
-		"list_notes": true, "read_note": true, "search_notes": true,
+		"list_notes": true, "read_note": true, "read_notes": true, "search_notes": true,
 		"list_tags": true, "get_backlinks": true, "list_tasks": true,
 		"suggest_location": true, "suggest_tags": true, "suggest_links": true,
 		"find_untagged": true, "find_orphans": true, "find_inbox_stale": true,
+		"find_undescribed_folders": true,
 	}
 	// Destructive = can discard existing note content; metadata-only,
 	// reversible edits (tags, status, move) stay non-destructive.
-	destructive := map[string]bool{"write_note": true, "patch_note": true, "delete_note": true}
+	destructive := map[string]bool{"write_note": true, "patch_note": true, "replace_in_note": true, "delete_note": true}
 
 	for _, tool := range res.Tools {
 		if tool.Title == "" {
@@ -176,7 +177,7 @@ func TestCuratorToolsBehindFlag(t *testing.T) {
 		}
 	}
 
-	// On: all six appear and return structured context.
+	// On: all seven appear and return structured context.
 	sc := newSession(t, func(d *Deps) { d.Curator = true })
 	res, err = sc.ListTools(context.Background(), &mcp.ListToolsParams{})
 	if err != nil {
@@ -188,8 +189,8 @@ func TestCuratorToolsBehindFlag(t *testing.T) {
 			count++
 		}
 	}
-	if count != 6 {
-		t.Fatalf("curator tools = %d, want 6", count)
+	if count != 7 {
+		t.Fatalf("curator tools = %d, want 7", count)
 	}
 
 	call(t, sc, "write_note", map[string]any{"path": "inbox/lonely.md", "content": "# Lonely\n"}, nil)

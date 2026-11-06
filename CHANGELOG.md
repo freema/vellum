@@ -6,6 +6,215 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+vellum runs locally next to your editor, agents read only the part they
+need, and search ranks with BM25F.
+
+### Added
+- **Run vellum locally with one command.** `vellum mcp <vault>` serves MCP
+  over stdio for a local folder, for example
+  `claude mcp add vellum -- vellum mcp ~/notes`. `~/` is expanded by vellum,
+  so paths in MCP client JSON configs work too. `-vault <path>` sets the
+  folder in both modes (the argument or `-vault` first, then
+  `VELLUM_VAULT_PATH`, then `./vault` in HTTP mode only), and `-init` lets
+  stdio mode create a missing folder. The startup log shows the absolute
+  vault path and the number of notes. `vellum -mcp-stdio` with
+  `VELLUM_VAULT_PATH` keeps working.
+- **Ready-to-run binaries on every release.** Each release now attaches
+  archives with the web UI built in, for Linux, macOS and Windows (amd64
+  and arm64), plus `checksums.txt` and signed build provenance:
+  `gh attestation verify vellum_darwin_arm64.tar.gz --repo freema/vellum`
+  shows the archive came from this repository's release workflow. The
+  archive names carry no version, so
+  `releases/latest/download/vellum_<os>_<arch>.tar.gz` always points at
+  the newest stable release, which also makes
+  `mise use -g github:freema/vellum` work. Pre-release tags stay
+  pre-releases and leave the Docker `latest` tag alone.
+- **Homebrew cask.** Stable releases can publish a cask to the
+  freema/homebrew-tap tap (`brew install freema/tap/vellum`, then
+  `brew upgrade vellum`); pre-releases never touch it. The cask clears the
+  macOS quarantine flag after install, since the binary is not notarized.
+  Without the tap token a release simply skips this step.
+- **Claude Desktop extension.** Every release ships `vellum.mcpb`. Open it
+  in Claude Desktop on macOS (Apple Silicon and Intel) or Windows, pick
+  the folder with your markdown notes, and vellum runs as a local MCP
+  server. No terminal, Docker or config file needed.
+- **MCP Registry entry.** vellum is prepared for the official MCP Registry
+  as `io.github.freema/vellum`, listed with both the Docker image and the
+  Claude Desktop bundle.
+- **Notes changed outside vellum show up without a restart.** An edit in
+  Obsidian or VS Code, a `git pull`, or a second vellum process over the
+  same folder now reaches search, tags, backlinks, tasks, folder
+  descriptions and the curator tools. Before a call that reads the index,
+  vellum checks the disk once the rescan interval has passed
+  (`VELLUM_RESCAN`, default `5s`, `off` disables). There is no file watcher
+  and no background work, so it also works on Docker bind mounts and
+  network drives; a rescan of 5 000 unchanged notes takes about 11 ms.
+  Subscribers of `vellum://note/{path}` get `resources/updated` for these
+  changes too, and a note renamed outside vellum keeps its share link when
+  the move is unambiguous (same file name and size).
+- **`read_note` reads part of a note.** `outline: true` returns just the
+  headings with their line numbers (plus frontmatter, tags, hash and line
+  count), `section` returns one heading and everything under it (exactly
+  what `patch_note` replaces), and `start_line` / `max_lines` return a line
+  range; `line_numbers: true` prefixes each line with its number. Lines
+  count from 1 over the whole file, frontmatter included, the same
+  numbering `search_notes` reports, so a search hit's line goes straight
+  into `start_line`. The returned `hash` is always that of the whole note,
+  so `expected_hash` still works after a partial read. Reading one section
+  of a 620-line note costs about 6 KB instead of 64 KB. Calls without the
+  new parameters return what they did before.
+- **`read_notes` reads up to 20 notes in one call**, by a list of `paths` or
+  a glob `pattern` such as `projects/x/*.md`. Every note comes back on its
+  own (content, hash, tags and title, or its own error), so one bad path
+  does not fail the rest. A byte budget keeps answers small: a note over
+  `max_bytes_per_note` (default 10 KB) is skipped with its size and line
+  count, never cut in the middle, and once `max_total_bytes` (default
+  60 KB) is spent the remaining notes are skipped too. `outline_only: true`
+  returns each note's outline instead. It never reads notes in hidden
+  folders.
+- **`replace_in_note` for small edits.** It replaces an exact piece of text
+  (`old_text`, matched character for character, also in the frontmatter)
+  with `new_text`. The text must occur once unless `replace_all` is set;
+  otherwise the error lists the line of every match and nothing is
+  written. The answer has the new hash, the number of replacements and the
+  edited lines with two lines around them, numbered, so the agent can check
+  the edit without reading the note again. An empty `new_text` deletes the
+  text; `expected_hash` works as in the other edit tools.
+- **`patch_note` can add to a section.** An optional `operation`: `replace`
+  (the default, unchanged), `append` (end of the section), `prepend` (right
+  under its heading), `insert_before` (before its heading) and
+  `insert_after` (after the section's end). A heading next to inserted
+  content always gets exactly one blank line. `section` also takes a
+  heading path such as `Project A > Notes`, and the answer carries
+  `startLine` and `endLine`, the lines the new content occupies.
+- **Paging for `search_notes` and `list_notes`.** Both report `total`,
+  `truncated` and a `hint` that says how to narrow the call or where the
+  next page (`offset`) starts. `search_notes` gets
+  `response_format: "concise"` (per note only the path, the title and the
+  line number of the first match: about 2 kB for 20 hits),
+  `context_lines` (`0` for the matching line alone) and `max_snippets`.
+  `list_notes` gets `limit` and `offset`, and always returns `dirs`, the
+  direct subfolders with their note counts, so listing the root shows the
+  vault's structure in a few hundred bytes.
+- **`list_notes` shows what changed recently.** `sort: "modified"` lists
+  notes newest first, each with a short excerpt, and `since` keeps only
+  notes modified in the last `24h`, `7d`, `2w` or since a date such as
+  `2026-11-01`. Both combine with `dir`, `recursive`, `limit` and
+  `offset`. The time is the file's own: after a `git clone`, a backup
+  restore or a sync tool it may be the time of that operation.
+- **Folder descriptions.** A folder can say what it is for in an
+  `_index.md` note (frontmatter `description:`, or its first paragraph, up
+  to 300 characters). `search_notes` returns the descriptions of the
+  result folders once per answer in `contexts`, `list_notes` shows them on
+  `dirs`, the `read_note` outline lists the folder chain, and
+  `suggest_location` also matches words of the description, so a folder
+  without shared tags can still be suggested. `_index.md` in the vault root
+  describes the whole vault and is added to the server instructions (read
+  at startup). Agents write descriptions with `write_note`; a bare
+  `_index.md` path now stays in the vault root instead of going to the
+  inbox. `VELLUM_CONTEXT_FILE` (default `_index.md`) suits vaults that use
+  `README.md` or `index.md`.
+- **Curator tool `find_undescribed_folders`** (with `VELLUM_CURATOR=on`):
+  folders with at least five notes and no description, with sample titles
+  and common tags.
+- **Relevance score.** Every ranked hit of `search_notes` and
+  `GET /api/search` carries a `score` from 0 to 1 that does not depend on
+  the other hits, and `search_notes` takes an optional `min_score`
+  (`0.3` keeps the clear matches) to drop weak hits before paging. Regex
+  searches and pure tag filters are not ranked and carry no score.
+- **Search understands Czech word forms.** `faktury` finds a note that says
+  `fakturu`, and `smlouvami` finds `smlouvu`. A word-form match scores
+  below an exact match and above a typo.
+- **Relaxed search when no note holds every word.** Search then returns the
+  notes that miss exactly one word, if the words they do hold carry most of
+  the query's weight. These results are marked `relaxed: true` in
+  `search_notes` and `GET /api/search`.
+- For maintainers: `task bump VERSION=x.y.z` sets the release version in
+  `server.json`, `mcpb/manifest.json`, the Claude plugin manifests and the
+  image tags pinned in the README examples in one go;
+  `task release-snapshot` builds every release archive into `dist/`
+  without publishing; `task payload` replays typical agent
+  scenarios and prints the bytes each MCP tool returns (baseline in
+  [docs/payload-baseline.md](docs/payload-baseline.md)); a golden set of
+  47 Czech and English queries gates search quality in CI
+  ([docs/search-quality.md](docs/search-quality.md)).
+
+### Changed
+- **A plain binary now listens on `127.0.0.1` only.** The HTTP server binds
+  `VELLUM_HOST` (default `127.0.0.1`), so `vellum` started on a laptop is
+  reachable from that machine alone. Set `VELLUM_HOST=0.0.0.0` to accept
+  connections from the network, and enable `AUTH_ENABLED` when you do. The
+  official Docker image sets `VELLUM_HOST=0.0.0.0`, so containers and
+  compose files need no change; a bare-metal install reached from another
+  host (a reverse proxy on a different machine, for example) must set it.
+- **The auth-disabled warning names the listen address** and appears only
+  when the server is reachable from the network. On loopback an info line
+  says `/mcp` is reachable from this machine only.
+- **Stdio mode no longer creates a missing vault or falls back to
+  `./vault`.** It exits with an error that names the path; add `-init` to
+  create the folder.
+- **Search ranks with BM25F.** Rare words count more than common ones, a
+  match in the title, file name, headings or tags counts more than one in
+  the body, and a short note about the topic beats a long note that
+  mentions it in passing. On the golden query set MRR rose from 0.79 to
+  0.90 and nDCG@10 from 0.82 to 0.91; p95 latency on 5 000 notes stays
+  within 10 % of before. The set of results only grows (word forms and
+  relaxed matches); the order changed. For the transition,
+  `VELLUM_RANKER=legacy` restores the previous ranking.
+- **`search_notes` returns at most 20 notes per call by default** (was 50).
+  Ask for more with `max_results`, or page with `offset`. The REST API and
+  the web UI still return 50. **`list_notes` returns at most 200 notes per
+  call** (`limit` and `offset` to page).
+- **`read_note` over MCP no longer returns `body`.** Use `content` (the raw
+  file, which `hash` is computed over); the REST API still returns `body`.
+  Reading a note now sends about half as many bytes.
+- **Tool text blocks are plain text.** The text block of `read_note`,
+  `search_notes`, `suggest_tags` and `suggest_links` is no longer a JSON
+  copy of the structured result: `read_note` sends a short header (path,
+  hash, tags, line count) and the raw note, and `search_notes` one entry
+  per hit with its path, title and best matching line with its number.
+  The structured output is unchanged apart from the dropped `body`; other
+  tools keep the JSON copy. Together with the changes above, the measured
+  agent scenarios now send about 13 % of the bytes v1.12.1 did.
+- **`patch_note` no longer silently edits the first matching heading.** If
+  the section name matches several headings, it returns an error listing
+  each candidate with its heading path and line number, and writes
+  nothing; a heading path such as `Project A > Notes` picks one.
+  `read_note` with `section` behaves the same way. `patch_note` is no
+  longer marked idempotent, because appends and inserts add again when
+  repeated.
+- **Server instructions guide lean use.** They now tell agents to ask for
+  a long note's outline first or use the line number from search, rank the
+  edit tools (`replace_in_note` for a word or sentence, `patch_note` for a
+  section, `append_to_note` / `prepend_to_note` to add text, `write_note`
+  only for a rewrite), point at `list_notes` with `sort: "modified"` and
+  `since` to see what is new, and explain `_index.md` folder descriptions.
+- **Curator reports skip folder description notes**: `find_untagged`,
+  `find_orphans` and `find_inbox_stale` no longer list `_index.md` notes.
+- The Docker image carries the `io.modelcontextprotocol.server.name` label
+  the MCP Registry needs, and `server.json` passes the registry's rules.
+- The release workflow stops a stable tag whose manifests do not match it,
+  before any image is built, and names the file that is out of date.
+
+### Fixed
+- The MCP registry entry (`server.json`) and the Claude Code plugin
+  manifests carried version 1.9.0 for three releases; they now match the
+  latest release.
+- An edit that kept a note's size within the same second could be served
+  stale from the search cache; the cache now keys on the nanosecond
+  modification time.
+- **Search uses far less memory.** The search cache holds each note in
+  about a third of the memory it took, and the metadata index no longer
+  keeps every note's full text alive by accident. On 5,000 realistic notes
+  the server's heap after the first search drops from 250 MiB to 68 MiB.
+  Results, scores and snippets are unchanged.
+- **Large vaults no longer fall off a cliff.** Past 8,192 notes the search
+  cache used to empty itself on every search, so each search read the whole
+  vault from disk again (0.85 s on 15,000 notes). The cache now also
+  accepts notes up to 256 MiB, keeps what it holds when full and reads only
+  the rest from disk: 15,000 notes search in about 10 ms, 30,000 in about
+  0.45 s instead of 1.7 s.
+
 ## [1.13.0] — 2026-08-20
 
 Notes you can hand to somebody.

@@ -9,8 +9,28 @@ permissions:
   packages: write
 
 jobs:
+  # server.json and the Claude plugin manifests carry the version by hand
+  # (task bump) and once lagged three releases behind. A stable tag whose
+  # manifests do not match it fails here, before any image is built; the
+  # error names the file that is behind. A pre-release tag (a hyphen, as in
+  # v1.13.0-beta.1) needs no bump and skips the check.
+  manifests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check manifest versions
+        run: |
+          case "$GITHUB_REF_NAME" in
+            *-*)
+              echo "Pre-release $GITHUB_REF_NAME: manifest versions not checked."
+              exit 0
+              ;;
+          esac
+          bash scripts/manifest-versions.sh check "${GITHUB_REF_NAME#v}"
+
   image:
     runs-on: ubuntu-latest
+    needs: manifests
     steps:
       - uses: actions/checkout@v4
       - uses: docker/setup-qemu-action@v3
@@ -45,38 +65,156 @@ jobs:
 
   # The GitHub Release entry, with notes lifted from the tag's CHANGELOG
   # section — keeps /releases in step with the tags (they drifted apart
-  # between v1.0.1 and v1.8.0, all created image-only).
+  # between v1.0.1 and v1.8.0, all created image-only). GoReleaser creates
+  # it and attaches the binaries (.goreleaser.yaml); it is the only step
+  # that creates the release. Still after `image`: a failed image build
+  # leaves no release behind.
   release:
     runs-on: ubuntu-latest
     needs: image
     permissions:
       contents: write
+      # Build provenance for the archives (actions/attest below).
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          # GoReleaser reads the tags to find the previous version.
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          # The toolchain the Docker image builds with (Dockerfile: golang:1.26).
+          go-version: "1.26"
+      - uses: actions/setup-node@v4
+        with:
+          # Same as the Dockerfile's SPA stage (node:22-alpine).
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
       - name: Extract changelog section
         run: |
           # A pre-release (1.13.0-beta.1) has no section of its own; it
           # carries the notes of the version it is a candidate for.
+          # Written outside the checkout: GoReleaser refuses to release
+          # from a work tree with untracked files.
+          notes="$RUNNER_TEMP/notes.md"
           ver="${GITHUB_REF_NAME#v}"
           ver="${ver%%-*}"
           awk -v ver="$ver" '
             $0 ~ "^## \\[" ver "\\]" { grab = 1; next }
             grab && /^## \[/ { exit }
             grab { print }
-          ' CHANGELOG.md > notes.md
-          if ! grep -q '[^[:space:]]' notes.md; then
-            echo "_No changelog section found for ${GITHUB_REF_NAME}._" > notes.md
+          ' CHANGELOG.md > "$notes"
+          if ! grep -q '[^[:space:]]' "$notes"; then
+            echo "_No changelog section found for ${GITHUB_REF_NAME}._" > "$notes"
           fi
-      - name: Create GitHub Release
+      - name: Build binaries and create GitHub Release
+        uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          # Pinned, not "latest", for the same reason as golangci-lint in
+          # ci.yml: a tool release must not break a tag on its own. Bump it
+          # together with GORELEASER_VERSION in Taskfile.yml.
+          version: v2.20.0
+          # A hyphen in the tag (v1.13.0-beta.1) makes it a pre-release:
+          # release.prerelease is "auto" in .goreleaser.yaml.
+          args: release --clean --release-notes ${{ runner.temp }}/notes.md
         env:
-          GH_TOKEN: ${{ github.token }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Pushes the cask to freema/homebrew-tap (homebrew_casks in
+          # .goreleaser.yaml). Optional: while the secret does not exist the
+          # variable is empty and GoReleaser skips the tap upload.
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+      # Signed SLSA provenance for every archive listed in checksums.txt;
+      # check one with: gh attestation verify <archive> --repo freema/vellum
+      - uses: actions/attest@v4
+        with:
+          subject-checksums: ./dist/checksums.txt
+      # The Claude Desktop bundle (mcpb/manifest.json, scripts/mcpb): the
+      # universal macOS binary and the Windows amd64 one from dist/, packed
+      # into dist/vellum.mcpb. Attached to every release, betas included, so
+      # a pre-release can be tried in Claude Desktop before it ships. The
+      # fixed name keeps releases/latest/download/vellum.mcpb stable and
+      # contains "mcp", which the MCP registry requires of a bundle URL.
+      - name: Build the MCP bundle
+        env:
+          # Bump together with MCPB_CLI in Taskfile.yml and ci.yml.
+          MCPB_CLI: "@anthropic-ai/mcpb@2.1.2"
         run: |
-          # A hyphen in the tag means a pre-release (v1.13.0-beta.1), which
-          # must not be presented as the current version on /releases.
-          prerelease=""
-          case "$GITHUB_REF_NAME" in *-*) prerelease="--prerelease" ;; esac
-          gh release create "$GITHUB_REF_NAME" \
-            --title "$GITHUB_REF_NAME" \
-            --notes-file notes.md \
-            $prerelease \
-            --verify-tag
+          go run ./scripts/mcpb -dist dist -out dist/vellum.mcpb
+          npx --yes "$MCPB_CLI" validate dist/mcpb/manifest.json
+      - name: Attach the MCP bundle to the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # A re-run replaces the bundle with the same bytes: scripts/mcpb packs
+        # deterministically, so a hash already in the MCP registry stays valid.
+        run: gh release upload "$GITHUB_REF_NAME" dist/vellum.mcpb --clobber
+      - uses: actions/attest@v4
+        with:
+          subject-path: ./dist/vellum.mcpb
+
+  # Lists the release in the MCP registry (registry.modelcontextprotocol.io)
+  # as io.github.freema/vellum, with both packages in server.json: the image
+  # and the Claude Desktop bundle. Stable tags only, so a beta never becomes
+  # the registry's latest version. Opt-in: the job runs once the repository
+  # variable MCP_REGISTRY_PUBLISH is "true" (Settings > Secrets and variables
+  # > Actions > Variables); until then it is skipped and the release is
+  # complete without it. GitHub OIDC proves the io.github.freema namespace,
+  # so no secret is involved. A version, once published, cannot be changed.
+  registry:
+    runs-on: ubuntu-latest
+    needs: release
+    if: >-
+      github.repository == 'freema/vellum' &&
+      startsWith(github.ref, 'refs/tags/v') &&
+      !contains(github.ref_name, '-') &&
+      vars.MCP_REGISTRY_PUBLISH == 'true'
+    permissions:
+      contents: read
+      # mcp-publisher login github-oidc
+      id-token: write
+    env:
+      # Pinned like every other tool here; the download is verified below.
+      MCP_PUBLISHER_VERSION: v1.8.7
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download the MCP bundle
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release download "$GITHUB_REF_NAME" --pattern vellum.mcpb --dir "$RUNNER_TEMP"
+      - name: Fill in server.json
+        run: |
+          # The bundle's hash exists only once the bundle does, so the
+          # committed server.json leaves fileSha256 out and this step adds
+          # it, from the file exactly as users download it. The manifests
+          # job already made sure the identifiers name this tag.
+          url="https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/vellum.mcpb"
+          sha=$(shasum -a 256 "$RUNNER_TEMP/vellum.mcpb" | cut -d' ' -f1)
+          jq --arg url "$url" --arg sha "$sha" '
+            if ([.packages[] | select(.registryType == "mcpb" and .identifier == $url)] | length) != 1
+            then error("server.json needs exactly one mcpb package at " + $url)
+            else (.packages[] | select(.registryType == "mcpb")).fileSha256 = $sha
+            end' server.json > "$RUNNER_TEMP/server.json"
+          cat "$RUNNER_TEMP/server.json"
+      - uses: sigstore/cosign-installer@v4
+      - name: Install mcp-publisher
+        run: |
+          set -euo pipefail
+          archive="mcp-publisher_linux_amd64.tar.gz"
+          base="https://github.com/modelcontextprotocol/registry/releases/download/${MCP_PUBLISHER_VERSION}"
+          cd "$RUNNER_TEMP"
+          curl -fsSL -o "$archive" "$base/$archive"
+          curl -fsSL -o "$archive.sigstore.json" "$base/$archive.sigstore.json"
+          cosign verify-blob --bundle "$archive.sigstore.json" \
+            --certificate-identity "https://github.com/modelcontextprotocol/registry/.github/workflows/release.yml@refs/tags/${MCP_PUBLISHER_VERSION}" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com \
+            "$archive"
+          tar xzf "$archive" mcp-publisher
+      - name: Validate server.json
+        run: |
+          "$RUNNER_TEMP/mcp-publisher" validate "$RUNNER_TEMP/server.json"
+      - name: Publish to the MCP registry
+        run: |
+          "$RUNNER_TEMP/mcp-publisher" login github-oidc
+          "$RUNNER_TEMP/mcp-publisher" publish "$RUNNER_TEMP/server.json"

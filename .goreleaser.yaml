@@ -1,0 +1,120 @@
+# GoReleaser builds the downloadable binaries that a `v*` tag attaches to
+# its GitHub Release (.github/workflows/release.yml). The Docker image is
+# built separately by that workflow, so there is no `dockers` section here.
+#
+# Try it locally without publishing anything: task release-snapshot
+version: 2
+
+project_name: vellum
+
+before:
+  hooks:
+    # The SPA is embedded into every binary (-tags embedspa), so it has to
+    # exist in web/dist before the first build starts.
+    - npm --prefix web ci --no-fund --no-audit
+    - npm --prefix web run build
+
+builds:
+  - id: vellum
+    main: ./cmd/vellum
+    binary: vellum
+    env:
+      - CGO_ENABLED=0
+    flags:
+      - -trimpath
+    tags:
+      - embedspa
+    # The full tag, with its "v" prefix, exactly as the Dockerfile gets it
+    # through VERSION=${{ github.ref_name }}.
+    ldflags:
+      - -s -w -X main.version={{ .Tag }}
+    # Stamp files with the commit time so the same commit builds the same
+    # archives byte for byte.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+    goos:
+      - linux
+      - darwin
+      - windows
+    goarch:
+      - amd64
+      - arm64
+
+# One macOS binary carrying both architectures, for the Claude Desktop bundle
+# (dist/vellum.mcpb, built by scripts/mcpb after GoReleaser): an MCPB manifest
+# can pick a command per operating system but not per CPU
+# (https://github.com/modelcontextprotocol/mcpb/issues/10). Its own id keeps it
+# out of the archives below, whose names and contents stay as they were.
+universal_binaries:
+  - id: vellum-macos-universal
+    ids:
+      - vellum
+    replace: false
+    name_template: vellum
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
+archives:
+  - id: vellum
+    ids:
+      - vellum
+    # No version in the name: the stable URL
+    # https://github.com/freema/vellum/releases/latest/download/vellum_linux_amd64.tar.gz
+    # always points at the newest stable binary.
+    name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+    formats:
+      - tar.gz
+    format_overrides:
+      - goos: windows
+        formats:
+          - zip
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+# The release notes are the tag's CHANGELOG.md section, which the workflow
+# passes in with --release-notes. Do not set changelog.disable: that skips the
+# step that reads the file, and the release would get no notes at all.
+release:
+  # A hyphen in the tag (v1.13.0-beta.1) marks a pre-release, which must not
+  # be presented as the current version on /releases.
+  prerelease: auto
+  # A re-run of a failed release job finds the assets it already uploaded;
+  # replace them instead of failing on the name clash.
+  replace_existing_artifacts: true
+
+# `brew install freema/tap/vellum`: on every stable release GoReleaser writes
+# Casks/vellum.rb into the freema/homebrew-tap repo. A cask, not a formula:
+# `brews` is deprecated since GoReleaser 2.10 and goes away in v3.
+homebrew_casks:
+  - name: vellum
+    ids:
+      - vellum
+    binaries:
+      - vellum
+    description: Self-hosted MCP server and web UI over a folder of markdown notes
+    homepage: https://github.com/freema/vellum
+    repository:
+      owner: freema
+      name: homebrew-tap
+      # A fine-grained token that can write only to freema/homebrew-tap; the
+      # release workflow's GITHUB_TOKEN cannot push to another repo.
+      token: "{{ .Env.TAP_TOKEN }}"
+    # "auto" leaves the tap alone for a pre-release (v1.13.0-beta.1), so a
+    # beta never reaches `brew upgrade`. Without the TAP_TOKEN secret the
+    # upload is skipped altogether instead of failing the release: the cask
+    # is still written to dist/homebrew/Casks/vellum.rb, just not pushed.
+    skip_upload: '{{ if isEnvSet "TAP_TOKEN" }}auto{{ else }}true{{ end }}'
+    hooks:
+      post:
+        # The binary is not signed or notarized, and Homebrew downloads casks
+        # with the quarantine flag, so Gatekeeper would refuse to start it
+        # ("is damaged and cannot be opened"). Apple may close this route
+        # one day; the release archives and mise stay the fallback.
+        install_steps: |
+          on_macos do
+            run "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "{{ .StagedPath }}/vellum"]
+          end

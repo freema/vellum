@@ -4,7 +4,9 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"strings"
+	"time"
 )
 
 // Sharing modes for VELLUM_SHARING. Sharing is the only feature that answers
@@ -19,8 +21,16 @@ const (
 	SharingOn = "on"
 )
 
+// DefaultHost is the HTTP listen address when VELLUM_HOST is unset: loopback
+// only, so a vault without auth is never exposed to the network by accident.
+const DefaultHost = "127.0.0.1"
+
 // Config holds the runtime configuration.
 type Config struct {
+	// Host is the HTTP listen address (env VELLUM_HOST, default 127.0.0.1).
+	// The default keeps a bare binary reachable only from its own machine,
+	// since auth is off by default; the Docker image sets 0.0.0.0.
+	Host string
 	// Port is the HTTP listen port (env PORT).
 	Port string
 	// VaultPath is the root directory of the markdown vault (env VELLUM_VAULT_PATH).
@@ -34,6 +44,23 @@ type Config struct {
 	InboxDir    string
 	ProjectsDir string
 	ArchiveDir  string
+	// ContextFile is the file name of a folder's description note
+	// (env VELLUM_CONTEXT_FILE, default _index.md).
+	ContextFile string
+	// Ranker picks the search ranking while BM25F rolls out (env
+	// VELLUM_RANKER=bm25f|legacy, default bm25f). Goes once the legacy
+	// ranker is removed.
+	Ranker string
+
+	// Rescan is how often the in-memory index checks the disk for notes
+	// changed outside vellum (env VELLUM_RESCAN, a Go duration such as 5s
+	// or 1m, or a plain number of seconds; off or 0 disables; default 5s).
+	// The check is lazy: it runs before an index read once the interval has
+	// passed, never in the background. 0 means off.
+	Rescan time.Duration
+	// RescanInvalid holds an unparseable VELLUM_RESCAN value, so main can
+	// warn about it; Rescan then falls back to the default.
+	RescanInvalid string
 
 	// Curator enables the suggest_*/find_* MCP tools
 	// (env VELLUM_CURATOR=on|off, default off).
@@ -72,12 +99,15 @@ type Config struct {
 // Load reads configuration from the environment, applying defaults.
 func Load() Config {
 	cfg := Config{
+		Host:              getenv("VELLUM_HOST", DefaultHost),
 		Port:              getenv("PORT", "8080"),
 		VaultPath:         getenv("VELLUM_VAULT_PATH", "./vault"),
 		InitStructure:     getbool("VELLUM_INIT_STRUCTURE", true),
 		InboxDir:          getenv("VELLUM_INBOX_DIR", "inbox"),
 		ProjectsDir:       getenv("VELLUM_PROJECTS_DIR", "projects"),
 		ArchiveDir:        getenv("VELLUM_ARCHIVE_DIR", "archive"),
+		ContextFile:       getenv("VELLUM_CONTEXT_FILE", "_index.md"),
+		Ranker:            strings.ToLower(strings.TrimSpace(getenv("VELLUM_RANKER", "bm25f"))),
 		Curator:           getenv("VELLUM_CURATOR", "off") == "on",
 		Sharing:           sharingMode(os.Getenv("VELLUM_SHARING")),
 		Notify:            getbool("VELLUM_NOTIFY", false),
@@ -93,6 +123,10 @@ func Load() Config {
 		TrustProxy:   getbool("TRUST_PROXY", false),
 	}
 	cfg.CORSOrigins = getlist("CORS_ORIGINS", cfg.AllowedOrigins)
+	var ok bool
+	if cfg.Rescan, ok = rescanInterval(os.Getenv("VELLUM_RESCAN")); !ok {
+		cfg.RescanInvalid = os.Getenv("VELLUM_RESCAN")
+	}
 	if cfg.IssuerURL == "" {
 		// Without a public URL the OAuth metadata can only point at
 		// localhost — fine for local use, must be overridden behind a proxy.
@@ -118,6 +152,32 @@ func sharingMode(raw string) string {
 	default:
 		return SharingOff
 	}
+}
+
+// DefaultRescan is the VELLUM_RESCAN default. Measured: a rescan of an
+// unchanged 5,000-note vault costs a few milliseconds of stat calls, so
+// checking at most every five seconds is invisible next to a search.
+const DefaultRescan = 5 * time.Second
+
+// rescanInterval parses VELLUM_RESCAN: empty means the default, off (or 0,
+// 0s, false, no) disables, otherwise a Go duration or a whole number of
+// seconds. ok is false for anything else, which falls back to the default
+// rather than silently turning the rescan off.
+func rescanInterval(raw string) (d time.Duration, ok bool) {
+	raw = strings.ToLower(strings.TrimSpace(raw))
+	switch raw {
+	case "":
+		return DefaultRescan, true
+	case "off", "0", "false", "no", "none":
+		return 0, true
+	}
+	if n, err := strconv.Atoi(raw); err == nil && n > 0 {
+		return time.Duration(n) * time.Second, true
+	}
+	if d, err := time.ParseDuration(raw); err == nil && d >= 0 { // 0s = off
+		return d, true
+	}
+	return DefaultRescan, false
 }
 
 func getlist(key string, fallback []string) []string {

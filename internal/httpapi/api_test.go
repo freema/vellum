@@ -275,3 +275,29 @@ func TestAPIVersion(t *testing.T) {
 		t.Errorf("version = %d %s", resp.StatusCode, body)
 	}
 }
+
+// The REST note read keeps body (the web UI renders it). Only the MCP
+// read_note dropped it (NSO-570).
+func TestGetNoteKeepsBody(t *testing.T) {
+	srv := newAPIServer(t)
+	content := "---\ntags: [go]\n---\n# Note\n\nthe needle\n"
+	doReq(t, http.MethodPut, srv.URL+"/api/notes/projects/p/body.md", content, nil)
+
+	resp, body := doReq(t, http.MethodGet, srv.URL+"/api/notes/projects/p/body.md", "", nil)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("GET = %d: %s", resp.StatusCode, body)
+	}
+	var note struct {
+		Content *string `json:"content"`
+		Body    *string `json:"body"`
+	}
+	if err := json.Unmarshal(body, &note); err != nil {
+		t.Fatal(err)
+	}
+	if note.Content == nil || *note.Content != content {
+		t.Errorf("content = %v, want the raw file", note.Content)
+	}
+	if note.Body == nil || *note.Body != "# Note\n\nthe needle\n" {
+		t.Errorf("body = %v, want the content without frontmatter", note.Body)
+	}
+}

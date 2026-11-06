@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/freema/vellum/internal/share"
+	"github.com/freema/vellum/internal/vault"
 )
 
 // Share tools — registered only when VELLUM_SHARING=on.
@@ -132,6 +133,22 @@ func (d Deps) shareFollow(from, to string) {
 	if d.Shares != nil {
 		d.Shares.Rename(from, to)
 	}
+}
+
+// followOutsideMoves keeps a link on its note when the note is moved
+// outside vellum (an editor, git): the index's rescan reports such a move
+// as a Change with From set (NSO-562). A note deleted outside vellum keeps
+// its link, which answers 410 Gone until a note is back at the path: a
+// branch switch or an undo must not revoke links for good.
+func followOutsideMoves(d Deps) {
+	if d.Shares == nil || d.Index == nil {
+		return
+	}
+	d.Index.OnChange(func(c vault.Change) {
+		if c.From != "" {
+			d.shareFollow(c.From, c.Path)
+		}
+	})
 }
 
 // shareDrop revokes the link of a deleted note.

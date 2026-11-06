@@ -4,6 +4,11 @@ vars:
   VERSION:
     sh: git describe --tags --always --dirty 2>/dev/null || echo dev
   LDFLAGS: -s -w -X main.version={{.VERSION}}
+  # Keep in step with the goreleaser-action pin in .github/workflows/release.yml.
+  GORELEASER_VERSION: v2.20.0
+  # The MCPB CLI that validates the Claude Desktop bundle manifest. Keep in
+  # step with MCPB_CLI in .github/workflows/release.yml and ci.yml.
+  MCPB_CLI: "@anthropic-ai/mcpb@2.1.2"
 
 tasks:
   build:
@@ -23,6 +28,32 @@ tasks:
     cmds:
       - go build -trimpath -tags embedspa -ldflags "{{.LDFLAGS}}" -o bin/vellum ./cmd/vellum
 
+  release-snapshot:
+    desc: Build the release archives into dist/ with GoReleaser, without publishing anything
+    cmds:
+      # Installed and then run as a binary rather than with `go run`: GoReleaser
+      # needs a newer Go than vellum, and `go run` would pass that toolchain
+      # on to the vellum builds (GOTOOLCHAIN), unlike the release workflow.
+      - GOBIN="{{.ROOT_DIR}}/bin/tools" go install github.com/goreleaser/goreleaser/v2@{{.GORELEASER_VERSION}}
+      - '"{{.ROOT_DIR}}/bin/tools/goreleaser" release --snapshot --clean'
+
+  mcpb:
+    desc: Build the Claude Desktop bundle dist/vellum.mcpb from a release snapshot, without publishing anything
+    deps: [release-snapshot]
+    cmds:
+      # Stages the bundle in dist/mcpb/ and packs dist/vellum.mcpb; prints its SHA-256.
+      - go run ./scripts/mcpb
+      # The official schema check (needs Node; npx fetches the pinned CLI).
+      - npx --yes {{.MCPB_CLI}} validate dist/mcpb/manifest.json
+
+  bump:
+    desc: 'Set the release version in server.json, mcpb/manifest.json, the Claude plugin manifests and the README image tags: task bump VERSION=x.y.z'
+    cmds:
+      # Only the version fields (and the version in server.json's package
+      # identifiers) change; the release workflow fails a stable tag whose
+      # manifests do not carry its version.
+      - bash scripts/manifest-versions.sh bump "{{.VERSION}}"
+
   run:
     desc: Run vellum locally
     cmds:
@@ -39,7 +70,7 @@ tasks:
         echo "MCP Inspector → http://localhost:6274"
         echo "Transport : stdio (spawns 'vellum --mcp-stdio', no OAuth needed)"
         echo "Vault     : $VELLUM_VAULT_PATH"
-        echo "Tools     : 15 core + 6 curator (VELLUM_CURATOR=on)"
+        echo "Tools     : 17 core + 7 curator (VELLUM_CURATOR=on)"
         echo ""
         npx -y @modelcontextprotocol/inspector go run -ldflags "{{.LDFLAGS}}" ./cmd/vellum --mcp-stdio
 
@@ -58,6 +89,11 @@ tasks:
     desc: Run all tests
     cmds:
       - go test ./...
+
+  payload:
+    desc: Print MCP tool payload sizes per scenario (docs/payload-baseline.md)
+    cmds:
+      - go test -count=1 -run TestToolPayload -v ./internal/mcpserver
 
   lint:
     desc: Run golangci-lint

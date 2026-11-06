@@ -33,20 +33,36 @@ import (
 var version = "dev"
 
 func main() {
-	healthcheck := flag.Bool("healthcheck", false, "probe the running server's /healthz and exit (used by Docker HEALTHCHECK)")
-	showVersion := flag.Bool("version", false, "print version and exit")
-	mcpStdio := flag.Bool("mcp-stdio", false, "serve MCP over stdio instead of HTTP (for local `claude mcp add`)")
-	flag.Parse()
+	// Nothing but -version may write to stdout: in stdio mode it carries
+	// JSON-RPC only, so every message, even a startup error, goes to stderr.
+	opts, err := parseArgs(os.Args[1:], os.Stderr)
+	if errors.Is(err, flag.ErrHelp) {
+		return
+	}
+	if err != nil {
+		os.Exit(2)
+	}
 
-	if *showVersion {
+	if opts.version {
 		fmt.Println(version)
 		return
 	}
 
 	cfg := config.Load()
 
-	if *healthcheck {
+	if opts.healthcheck {
 		os.Exit(runHealthcheck(cfg))
+	}
+
+	cfg.VaultPath, err = resolveVaultPath(opts.vault, os.Getenv("VELLUM_VAULT_PATH"), opts.stdio)
+	if err == nil {
+		// HTTP mode creates its vault as it always has (the Docker volume may
+		// start empty); stdio mode only with an explicit -init.
+		err = ensureVaultDir(cfg.VaultPath, !opts.stdio || opts.initVault)
+	}
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "vellum:", err)
+		os.Exit(1)
 	}
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -64,7 +80,7 @@ func main() {
 		logger.Info("sentry error reporting enabled", "environment", cfg.SentryEnvironment)
 	}
 
-	v, err := openVault(cfg)
+	v, err := vault.New(cfg.VaultPath, vault.WithContextFile(cfg.ContextFile))
 	if err != nil {
 		logger.Error("open vault", "error", err)
 		os.Exit(1)
@@ -93,9 +109,26 @@ func main() {
 		os.Exit(1)
 	}
 	logger.Info("metadata index built", "notes", index.Len(), "took", time.Since(start).String())
+	// Notes changed outside vellum (an editor, git, a second vellum
+	// process) reach the index through a lazy rescan before index reads.
+	if cfg.RescanInvalid != "" {
+		logger.Warn("ignoring VELLUM_RESCAN, using the default",
+			"value", cfg.RescanInvalid, "default", config.DefaultRescan.String())
+	}
+	index.SetRescanInterval(cfg.Rescan)
+	if cfg.Rescan == 0 {
+		logger.Info("index rescan is off (VELLUM_RESCAN=off): changes made outside vellum show after a restart")
+	}
 
 	// One searcher for MCP and the REST API — they share the content cache.
 	searcher := vault.NewScanSearcher(v, index)
+	if err := searcher.SetRanker(cfg.Ranker); err != nil {
+		// VELLUM_RANKER only exists to compare rankers during the BM25F
+		// rollout; a typo there must not keep the server from starting.
+		logger.Warn("ignoring VELLUM_RANKER, using bm25f", "error", err)
+	} else if cfg.Ranker == vault.RankerLegacy {
+		logger.Info("search uses the legacy ranker (VELLUM_RANKER=legacy)")
+	}
 
 	// Public share links (VELLUM_SHARING, off by default). The store is
 	// opened even for the stdio path: a link must keep pointing at its note
@@ -131,8 +164,8 @@ func main() {
 		ShareTools: cfg.ShareTools(),
 	})
 
-	if *mcpStdio {
-		logger.Info("serving MCP over stdio", "vault", cfg.VaultPath)
+	if opts.stdio {
+		logger.Info("serving MCP over stdio", "vault", v.Root(), "notes", index.Len())
 		if err := mcpSrv.Run(context.Background(), &mcp.StdioTransport{}); err != nil {
 			logger.Error("mcp stdio server failed", "error", err)
 			os.Exit(1)
@@ -156,8 +189,20 @@ func main() {
 		}
 		defer authProvider.Close()
 		logger.Info("oauth enabled", "client_id", cfg.ClientID, "issuer", authProvider.Issuer())
-	} else {
-		logger.Warn("AUTH IS DISABLED — /mcp is open to anyone who can reach it")
+	}
+
+	ln, err := listen(cfg)
+	if err != nil {
+		logger.Error("listen", "addr", listenAddr(cfg), "error", err)
+		os.Exit(1)
+	}
+	addr := boundAddr(cfg, ln)
+	switch {
+	case cfg.AuthEnabled:
+	case isLoopback(ln.Addr()):
+		logger.Info("auth is disabled; /mcp is reachable from this machine only", "addr", addr)
+	default:
+		logger.Warn("AUTH IS DISABLED — /mcp on "+addr+" is open to anyone who can reach it", "addr", addr)
 	}
 
 	recorder := activity.New()
@@ -182,7 +227,7 @@ func main() {
 		api.Revoker = authProvider // a nil *auth.Provider would be a non-nil interface
 	}
 	srv := &http.Server{
-		Addr: ":" + cfg.Port,
+		Addr: addr,
 		Handler: httpapi.NewRouter(version, httpapi.Options{
 			MCPHandler:     mcpserver.Handler(mcpSrv),
 			API:            api,
@@ -212,8 +257,8 @@ func main() {
 
 	errCh := make(chan error, 1)
 	go func() {
-		logger.Info("vellum starting", "version", version, "port", cfg.Port, "vault", cfg.VaultPath)
-		errCh <- srv.ListenAndServe()
+		logger.Info("vellum starting", "version", version, "addr", addr, "vault", v.Root(), "notes", index.Len())
+		errCh <- srv.Serve(ln)
 	}()
 
 	stop := make(chan os.Signal, 1)
@@ -235,19 +280,11 @@ func main() {
 	}
 }
 
-// openVault creates the vault directory if needed and opens it.
-func openVault(cfg config.Config) (*vault.Vault, error) {
-	if err := os.MkdirAll(cfg.VaultPath, 0o755); err != nil {
-		return nil, err
-	}
-	return vault.New(cfg.VaultPath)
-}
-
 // runHealthcheck hits the local /healthz endpoint. It exists so the distroless
 // image (no shell, no curl) can use the binary itself as its Docker healthcheck.
 func runHealthcheck(cfg config.Config) int {
 	client := &http.Client{Timeout: 3 * time.Second}
-	resp, err := client.Get("http://localhost:" + cfg.Port + "/healthz")
+	resp, err := client.Get(healthcheckURL(cfg))
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "healthcheck:", err)
 		return 1

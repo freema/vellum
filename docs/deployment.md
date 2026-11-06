@@ -27,6 +27,10 @@ Public URL — substitute your own domain:
 - **`TRUST_PROXY=1` behind Caddy/Traefik/nginx.** Rate limiting keys on
   the client IP; behind a proxy that means reading `X-Forwarded-For`,
   which is only safe (and only done) when this flag is set.
+- **A plain binary listens on `127.0.0.1` only.** A proxy on the same
+  machine reaches it as is. When the proxy runs elsewhere, set
+  `VELLUM_HOST=0.0.0.0` (and `AUTH_ENABLED=true`). The Docker image
+  already sets `VELLUM_HOST=0.0.0.0`, so containers need nothing.
 - **The connector URL must end with `/mcp`.** The bare domain is not the
   MCP endpoint — connecting Claude to `https://host/` instead of
   `https://host/mcp` yields a 404 after OAuth.
@@ -57,7 +61,19 @@ VELLUM_ALLOWED_ORIGINS=https://claude.ai,https://claude.com,https://myapp.exampl
 
 ## Release → server cycle
 
-1. Tag `v*` → GitHub Actions builds the multi-arch image → GHCR.
+1. Tag `v*` → GitHub Actions builds the multi-arch image → GHCR. Once the
+   image is pushed, GoReleaser attaches the binaries (linux, macOS, Windows;
+   amd64 and arm64, web UI embedded) with `checksums.txt` and signed build
+   provenance to the GitHub Release. A tag with a hyphen (`v1.13.0-beta.1`)
+   becomes a pre-release and leaves `:latest` alone. Before tagging, build
+   the same archives locally with `task release-snapshot` (output in `dist/`,
+   nothing is published).
+   A stable tag also pushes `Casks/vellum.rb` to the `freema/homebrew-tap`
+   repo, so `brew upgrade` picks it up; a pre-release leaves the tap alone.
+   The push needs the `TAP_TOKEN` Actions secret (a fine-grained token with
+   Contents read and write on that repo only). Without the secret the
+   release still succeeds and simply skips the tap. The snapshot writes the
+   cask to `dist/homebrew/Casks/vellum.rb` for a look before tagging.
 2. Bump `VELLUM_IMAGE` in the local `.env` (or keep `:latest`).
 3. `task update` (deploy + pull + restart).
 4. Run the smoke test checklist below.

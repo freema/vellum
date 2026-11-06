@@ -134,7 +134,7 @@ var toolKinds = map[string]string{
 	"read_note": "read", "list_notes": "read", "list_tags": "read",
 	"get_backlinks": "read", "list_tasks": "read",
 	"search_notes": "search",
-	"write_note":   "write", "patch_note": "write", "append_to_note": "write", "prepend_to_note": "write",
+	"write_note":   "write", "patch_note": "write", "append_to_note": "write", "prepend_to_note": "write", "replace_in_note": "write",
 	"move_note": "move", "delete_note": "delete",
 	"add_tags": "tag", "remove_tags": "tag", "set_status": "organize",
 	"share_note": "share", "unshare_note": "unshare",

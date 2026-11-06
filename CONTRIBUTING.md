@@ -31,6 +31,8 @@ task run        # run the server locally against ./vault
 task build-full # SPA + Go binary with the UI embedded
 task inspector  # debug the MCP tools in the MCP Inspector — UI at http://localhost:6274
 task e2e        # compose stack with the fixture vault (docs/e2e.md)
+task release-snapshot  # release archives for all platforms into dist/ (nothing published)
+task mcpb       # Claude Desktop bundle dist/vellum.mcpb from a snapshot (needs Node)
 ```
 
 `go build` (no tags) stays node-free; the SPA is only embedded with the
@@ -160,6 +162,40 @@ unlikely to be merged:
 When in doubt, ask in an issue first.
 
 ## License
+
+## Releasing
+
+For maintainers. A release is a pushed `v*` tag: the release workflow builds
+the image, the binaries and the GitHub Release from it.
+
+1. Move the *Unreleased* notes in `CHANGELOG.md` into a section for the new
+   version.
+2. Run `task bump VERSION=x.y.z`. It sets the version in `server.json`
+   (including the image tag and the bundle URL of its packages), in the
+   Claude Desktop bundle manifest (`mcpb/manifest.json`) and in the Claude
+   plugin manifests (`.claude-plugin/marketplace.json`,
+   `plugins/claude/vellum/.claude-plugin/plugin.json`) and in the pinned
+   image tags of the README examples (`ghcr.io/freema/vellum:x.y.z`), and
+   changes nothing else. It needs `jq`.
+3. Commit both changes, then tag that commit and push the tag:
+   `git tag vx.y.z && git push origin vx.y.z`.
+
+A stable tag whose manifests do not carry its version fails the release
+workflow before any image is built, and the error names the file that is
+behind. Run step 2, commit, and tag again. Pre-release tags
+(`v1.14.0-beta.1`) skip that check and need no bump.
+
+Every release, betas included, also gets `vellum.mcpb`: the bundle Claude
+Desktop installs with a double click. It holds the universal macOS binary
+and the Windows amd64 one; `task mcpb` builds the same file locally into
+`dist/` so it can be tried before a tag.
+
+The MCP registry entry (`io.github.freema/vellum`, described by
+`server.json`) is published by the `registry` job of the release workflow,
+for stable tags only, and only while the repository variable
+`MCP_REGISTRY_PUBLISH` is `true`. It logs in with GitHub OIDC, so no secret
+is needed, and it adds the bundle's SHA-256 to `server.json` before
+publishing. A published version cannot be changed afterwards.
 
 By contributing you agree your work is licensed under the project's
 [MIT license](LICENSE).

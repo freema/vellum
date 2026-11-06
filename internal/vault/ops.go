@@ -3,6 +3,7 @@ package vault
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -10,27 +11,101 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // List returns the notes in dir ("" = vault root), optionally recursive.
 // Dotfiles, dot-directories and symlinks are skipped.
 func (v *Vault) List(dir string, recursive bool) ([]NoteInfo, error) {
+	infos, _, err := v.ListPage(dir, recursive, 0, 0)
+	return infos, err
+}
+
+// ListPage is List cut to a window: at most limit notes (0 = no cap)
+// from offset on, in path order, plus the number of notes in the whole
+// listing. Only the notes in the window have their file opened for the
+// title, so a page of a large vault costs a directory walk, not a read of
+// every note.
+func (v *Vault) ListPage(dir string, recursive bool, offset, limit int) ([]NoteInfo, int, error) {
+	return v.ListWith(dir, recursive, ListOptions{Offset: offset, Limit: limit})
+}
+
+// ListOptions picks the order, a modification-time filter and the window
+// of a listing (ListWith). The zero value is List: every note, by path.
+type ListOptions struct {
+	Offset int // skip the first Offset notes of the sorted listing
+	Limit  int // at most Limit notes, 0 = no cap
+	// Since keeps the notes modified at or after it; zero keeps all.
+	Since time.Time
+	// ByModified sorts by modification time, newest first, and notes
+	// modified at the same time by path, so the order is deterministic.
+	ByModified bool
+}
+
+// ListWith is ListPage with a filter and an order (NSO-576): the notes
+// in dir modified since opts.Since, sorted by path or newest change
+// first, cut to the window. The returned total counts the notes that pass
+// the filter. Modification times are the files' own, read in the same
+// walk, so a note edited in another editor sorts by that edit at once.
+func (v *Vault) ListWith(dir string, recursive bool, opts ListOptions) ([]NoteInfo, int, error) {
 	absDir, err := v.resolveDir(dir)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if fi, err := os.Stat(absDir); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("%w: directory %s", ErrNotFound, dir)
+			return nil, 0, fmt.Errorf("%w: directory %s", ErrNotFound, dir)
 		}
-		return nil, err
+		return nil, 0, err
 	} else if !fi.IsDir() {
-		return nil, fmt.Errorf("%w: %s is not a directory", ErrInvalidPath, dir)
+		return nil, 0, fmt.Errorf("%w: %s is not a directory", ErrInvalidPath, dir)
 	}
 
 	var infos []NoteInfo
-	err = filepath.WalkDir(absDir, func(path string, d fs.DirEntry, err error) error {
+	abs := map[string]string{} // vault path -> absolute path, for titles
+	err = v.walkNotes(absDir, recursive, func(rel, path string, fi fs.FileInfo) {
+		if !opts.Since.IsZero() && fi.ModTime().Before(opts.Since) {
+			return
+		}
+		abs[rel] = path
+		infos = append(infos, NoteInfo{
+			Path:    rel,
+			Size:    fi.Size(),
+			ModTime: fi.ModTime(),
+		})
+	})
+	if err != nil {
+		return nil, 0, err
+	}
+	sort.Slice(infos, func(i, j int) bool {
+		if opts.ByModified && !infos[i].ModTime.Equal(infos[j].ModTime) {
+			return infos[i].ModTime.After(infos[j].ModTime)
+		}
+		return infos[i].Path < infos[j].Path
+	})
+	total := len(infos)
+	infos = window(infos, opts.Offset, opts.Limit)
+	for i := range infos {
+		infos[i].Title = titleOf(abs[infos[i].Path])
+	}
+	return infos, total, nil
+}
+
+// walkNotes visits the notes under absDir by the rules every vault scan
+// shares: dotfiles and dot-directories, symlinks and files without a
+// markdown extension are skipped, and subfolders only when recursive. fn
+// gets the vault-relative path, the absolute one and the file's info from
+// the directory walk; no file is opened. List, the index build and
+// Index.Reconcile all walk through here, so the index holds exactly the
+// notes a listing shows. A file or folder that disappears during the walk
+// (a git checkout, an editor's save-by-rename) is skipped, not an error.
+func (v *Vault) walkNotes(absDir string, recursive bool, fn func(rel, abs string, fi fs.FileInfo)) error {
+	rootPrefix := v.root + string(filepath.Separator)
+	return filepath.WalkDir(absDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
+			if path != absDir && errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
 		name := d.Name()
@@ -51,21 +126,18 @@ func (v *Vault) List(dir string, recursive bool) ([]NoteInfo, error) {
 		}
 		fi, err := d.Info()
 		if err != nil {
+			if errors.Is(err, fs.ErrNotExist) {
+				return nil
+			}
 			return err
 		}
-		infos = append(infos, NoteInfo{
-			Path:    v.relPath(path),
-			Title:   titleOf(path),
-			Size:    fi.Size(),
-			ModTime: fi.ModTime(),
-		})
+		rel, ok := strings.CutPrefix(path, rootPrefix) // no allocation per note
+		if !ok {
+			rel = v.relPath(path)
+		}
+		fn(filepath.ToSlash(rel), path, fi)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	sort.Slice(infos, func(i, j int) bool { return infos[i].Path < infos[j].Path })
-	return infos, nil
 }
 
 // CreateDir creates a directory (and any parents) inside the vault. An
@@ -169,6 +241,23 @@ func titleOf(abs string) string {
 func (v *Vault) Read(path string) (*Note, error) {
 	abs, err := v.resolveNote(path)
 	if err != nil {
+		return nil, err
+	}
+	return v.readAbs(abs)
+}
+
+// ReadVisible is Read restricted to the notes the vault scan sees: on top
+// of Read's path rules it refuses a path with a hidden (dot) segment, or
+// one that resolves into a hidden directory through a symlink, with the
+// same guard writes use (checkNotHidden). Read keeps serving such a note so
+// nothing already there is trapped; bulk reads use ReadVisible so they can
+// only reach what List and the index show.
+func (v *Vault) ReadVisible(path string) (*Note, error) {
+	abs, phys, err := v.resolveNotePhysical(path)
+	if err != nil {
+		return nil, err
+	}
+	if err := v.checkNotHidden(path, phys); err != nil {
 		return nil, err
 	}
 	return v.readAbs(abs)
@@ -315,67 +404,17 @@ func (v *Vault) writeAtomic(abs string, data []byte) error {
 // Patch surgically replaces the content under the heading whose text equals
 // section, leaving the heading itself, the frontmatter and the rest of the
 // note untouched. The replaced region ends before the next heading of the
-// same or higher level (or EOF).
+// same or higher level (or EOF). It is PatchSection with PatchReplace.
 func (v *Vault) Patch(path, section, newContent, expectedHash string) error {
-	abs, err := v.resolveNote(path)
-	if err != nil {
-		return err
-	}
-
-	v.mu.Lock()
-	defer v.mu.Unlock()
-
-	note, err := v.readAbs(abs)
-	if err != nil {
-		return err
-	}
-	if expectedHash != "" && note.Hash != expectedHash {
-		return fmt.Errorf("%w: %s", ErrConflict, path)
-	}
-
-	prefix := note.Content[:len(note.Content)-len(note.Body)]
-	patched, err := replaceSection(note.Body, section, newContent)
-	if err != nil {
-		return fmt.Errorf("%w in %s", err, path)
-	}
-	data := prefix + patched
-	if int64(len(data)) > v.maxSize {
-		return fmt.Errorf("%w: %s (%d bytes)", ErrTooLarge, path, len(data))
-	}
-	return v.writeAtomic(abs, []byte(data))
+	_, err := v.PatchSection(path, section, PatchReplace, newContent, expectedHash)
+	return err
 }
 
-// replaceSection swaps the body of the named section. Headings inside fenced
-// code blocks are ignored.
-func replaceSection(body, section, newContent string) (string, error) {
-	lines := strings.SplitAfter(body, "\n")
-	start, end, level := -1, len(lines), 0
-	inFence := false
-	for i, line := range lines {
-		if fenceRe.MatchString(line) {
-			inFence = !inFence
-			continue
-		}
-		if inFence {
-			continue
-		}
-		m := headingRe.FindStringSubmatch(strings.TrimRight(line, "\r\n"))
-		if m == nil {
-			continue
-		}
-		lvl := len(line) - len(strings.TrimLeft(line, "#"))
-		if start == -1 {
-			if strings.EqualFold(strings.TrimSpace(m[1]), strings.TrimSpace(section)) {
-				start, level = i, lvl
-			}
-		} else if lvl <= level {
-			end = i
-			break
-		}
-	}
-	if start == -1 {
-		return "", fmt.Errorf("%w: %q", ErrSectionNotFound, section)
-	}
+// replaceSection swaps the body of the section lines[start:end] (start the
+// heading line, as findSection returns them) for newContent and returns
+// the new body with the index of the replacement's first line and its
+// line count. Its bytes are what patch_note has always written.
+func replaceSection(lines []string, start, end int, newContent string) (body string, first, n int) {
 	replacement := strings.TrimRight(newContent, "\n") + "\n"
 	var b strings.Builder
 	for _, l := range lines[:start+1] {
@@ -388,7 +427,7 @@ func replaceSection(body, section, newContent string) (string, error) {
 	for _, l := range lines[end:] {
 		b.WriteString(l)
 	}
-	return b.String(), nil
+	return b.String(), start + 1, strings.Count(replacement, "\n")
 }
 
 // Append adds content at the end of an existing note.

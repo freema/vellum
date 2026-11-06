@@ -60,6 +60,7 @@ func New(d Deps) *mcp.Server {
 		registerShareTools(server, d)
 	}
 	registerResources(server, d)
+	followOutsideMoves(d)
 	return server
 }
 
@@ -69,18 +70,41 @@ func instructions(d Deps) string {
 	s := `vellum is a personal markdown vault. Notes are vault-relative .md paths like projects/x/note.md.
 
 - New unclassified content: call write_note without a path — it lands in the inbox and the resolved path is returned. Don't invent folder structure; check list_notes first.
-- Edits: prefer patch_note / append_to_note / prepend_to_note over rewriting whole notes. Every write returns the note's content hash — pass it as expected_hash on the next edit of the same note for conflict-safe updates; after a hash-mismatch error, read_note again and retry.
-- search_notes is case-, diacritics- and typo-insensitive; tags act as an AND-filter, and an empty query with tags is a pure tag filter.
+- Edits, smallest first: replace_in_note for a word, sentence or a few lines (exact old_text), patch_note for a whole section or to add to one (operation append, prepend, insert_before, insert_after; section takes a heading path like A > Notes when a name repeats), append_to_note / prepend_to_note to add, write_note to rewrite only when nothing else fits. Every write returns the note's content hash — pass it as expected_hash on the next edit of the same note for conflict-safe updates; after a hash-mismatch error, read_note again and retry.
+- search_notes is case-, diacritics- and typo-insensitive; tags act as an AND-filter, and an empty query with tags is a pure tag filter. It returns 20 notes per call: total, truncated and hint say when more matched (narrow with tags or dir, or page with offset). response_format: concise gives just path, title, score and the line number of the first match per note. Each result has a 0 to 1 relevance score; min_score: 0.3 keeps the clear matches only.
+- list_notes always returns dirs, the direct subfolders with their note counts, also without recursive: list the root first to learn the vault's structure, then list the folder you need (200 notes per call, page with offset). To see what is new, call list_notes with recursive: true, sort: modified and since: 7d (or 24h, 2w, a date).
+- Long notes: ask read_note for the outline first, or use the line number from search_notes as start_line, then read just that section or range (lines count from 1 over the whole file, frontmatter included). The hash is always the whole note's, so it still works as expected_hash.
 - Notes connect via [[wikilinks]]; move_note keeps backlinks resolving. get_backlinks shows both directions.
 - Tasks are notes with status frontmatter: set_status / list_tasks use backlog | in-progress | done.
 - Notes are also exposed as MCP resources (vellum://note/{path}); subscribe to one to receive resources/updated notifications when it changes.`
+	s += "\n- " + folderContextInstruction(d)
 	if d.Curator {
 		s += "\n- Curator tools (suggest_*, find_*) return ranked context only — nothing moves automatically. Read the suggestions, decide, then act via the write/move/tag tools."
 	}
 	if d.ShareTools && d.Shares != nil {
 		s += shareInstructions
 	}
+	if d.Index != nil {
+		// The vault root's description, read once when the server is built
+		// (capped at 500 characters by the index).
+		if desc := d.Index.FolderDescription(""); desc != "" {
+			s += "\n\nThis vault: " + desc
+		}
+	}
 	return s
+}
+
+// folderContextInstruction is the one sentence that teaches the folder
+// description convention (NSO-573) instead of a tool of its own: a tool's
+// schema would cost every session several times these tokens, and a
+// description is written a few times in a vault's life.
+func folderContextInstruction(d Deps) string {
+	name := vault.DefaultContextFile
+	if d.Vault != nil {
+		name = d.Vault.ContextFile()
+	}
+	return "Folders are described by <folder>/" + name + " with a `description:` frontmatter field. " +
+		"Create or update it with write_note (read it first if it exists)."
 }
 
 // hintFalse gives the *bool annotation fields an address.
@@ -125,13 +149,26 @@ func Handler(server *mcp.Server) http.Handler {
 type listNotesIn struct {
 	Dir       string `json:"dir,omitempty" jsonschema:"vault directory to list, empty for the root"`
 	Recursive bool   `json:"recursive,omitempty" jsonschema:"descend into subdirectories"`
+	Limit     int    `json:"limit,omitempty" jsonschema:"cap on returned notes (default 200); total and hint tell when there are more"`
+	Offset    int    `json:"offset,omitempty" jsonschema:"skip the first N notes of the sorted listing, to page through a long listing"`
+	Sort      string `json:"sort,omitempty" jsonschema:"path (default) or modified: newest change first (ties by path), each note with an excerpt; to see what changed recently"`
+	Since     string `json:"since,omitempty" jsonschema:"only notes modified since then: a duration back from now (24h, 7d, 2w) or a date (2026-11-01, local midnight)"`
 }
 type listNotesOut struct {
-	Notes []vault.NoteInfo `json:"notes"`
+	Notes     []vault.NoteInfo `json:"notes"`
+	Dirs      []vault.DirCount `json:"dirs"`      // direct subfolders of dir, with notes beneath each
+	Total     int              `json:"total"`     // notes in the whole listing
+	Truncated bool             `json:"truncated"` // more notes follow this page
+	Hint      string           `json:"hint,omitempty"`
 }
 
 type readNoteIn struct {
-	Path string `json:"path" jsonschema:"vault-relative path of the note, e.g. projects/x/note.md"`
+	Path        string `json:"path" jsonschema:"vault-relative path of the note, e.g. projects/x/note.md"`
+	StartLine   int    `json:"start_line,omitempty" jsonschema:"first line to return, 1-based over the whole file including frontmatter (the line numbers search_notes reports); without max_lines reads to the end"`
+	MaxLines    int    `json:"max_lines,omitempty" jsonschema:"cap on returned lines, for a line range or a section"`
+	Section     string `json:"section,omitempty" jsonschema:"heading text of one section to return: the heading and everything under it up to the next heading of the same or higher level (what patch_note replaces). A heading path such as Project A > Notes tells same-named sections apart; a name matching several headings is an error listing them. Cannot be combined with start_line"`
+	Outline     bool   `json:"outline,omitempty" jsonschema:"return only the headings with their level and line number, plus frontmatter, tags, hash and line count; no content. Overrides the other read options"`
+	LineNumbers bool   `json:"line_numbers,omitempty" jsonschema:"prefix every returned line with its file line number (N: ); off by default so content stays the exact file text"`
 }
 
 type writeNoteIn struct {
@@ -146,10 +183,21 @@ type writeNoteOut struct {
 }
 
 type patchNoteIn struct {
-	Path         string `json:"path" jsonschema:"note to patch"`
-	Section      string `json:"section" jsonschema:"heading text of the section to replace"`
-	Content      string `json:"content" jsonschema:"new content of the section (heading line is kept)"`
+	Path    string `json:"path" jsonschema:"note to patch"`
+	Section string `json:"section" jsonschema:"heading text of the section (case-insensitive), or a heading path to tell same-named sections apart, outermost first: Project A > Notes. A name that matches several headings is an error listing their paths and lines; nothing is written"`
+	Content string `json:"content" jsonschema:"for replace the new content of the section (heading line is kept); for the other operations the markdown to add"`
+	// Operation picks the edit (NSO-575); empty is replace.
+	Operation    string `json:"operation,omitempty" jsonschema:"replace (default): swap the section's content; append: add at the end of the section (after its subsections); prepend: add right under its heading; insert_before: insert before its heading; insert_after: insert after the section's end. Use insert_before/insert_after with content starting with a heading to add a new section. A heading is always set off by one blank line"`
 	ExpectedHash string `json:"expected_hash,omitempty" jsonschema:"optional concurrency guard"`
+}
+
+// patchNoteOut is writeNoteOut plus the file lines the new content
+// occupies (1-based, frontmatter counted, as read_note numbers them).
+type patchNoteOut struct {
+	Path      string `json:"path"`
+	Hash      string `json:"hash"`
+	StartLine int    `json:"startLine"`
+	EndLine   int    `json:"endLine"`
 }
 
 type editNoteIn struct {
@@ -179,10 +227,16 @@ type searchNotesIn struct {
 	Tags       []string `json:"tags,omitempty" jsonschema:"tags that must all be present"`
 	Dir        string   `json:"dir,omitempty" jsonschema:"limit to a vault subtree"`
 	Regex      bool     `json:"regex,omitempty" jsonschema:"treat query as a case-insensitive regular expression"`
-	MaxResults int      `json:"max_results,omitempty" jsonschema:"cap on returned notes (default 50)"`
-}
-type searchNotesOut struct {
-	Results []vault.Result `json:"results"`
+	MaxResults int      `json:"max_results,omitempty" jsonschema:"cap on returned notes (default 20); total and hint tell when more matched"`
+	Offset     int      `json:"offset,omitempty" jsonschema:"skip the first N results, to page through the ranking"`
+	// ResponseFormat, ContextLines and MaxSnippets shape the hits (NSO-572,
+	// see searchNotes in listing.go).
+	ResponseFormat string `json:"response_format,omitempty" jsonschema:"detailed (default): snippets with context lines; concise: per note only path, title and the line number of its first match (no snippet text)"`
+	ContextLines   *int   `json:"context_lines,omitempty" jsonschema:"lines of context around each match (default 2, 0 = the matching line alone)"`
+	MaxSnippets    int    `json:"max_snippets,omitempty" jsonschema:"snippets per note (default 3)"`
+	// MinScore drops weak matches by their BM25F score (NSO-577). The bands
+	// in the description come from the golden set (docs/search-quality.md).
+	MinScore float64 `json:"min_score,omitempty" jsonschema:"drop results whose score is below this (0 to 1, default 0 = keep all). Scores: about 0.7 and up = the terms are in the title, a heading or a tag, or all over the body; 0.4 to 0.7 = mentioned in the body; under 0.3 = weak (a passing mention in a long note, a typo or a part of a longer word). 0.3 keeps the clear matches; leave 0 when a typo or another word form may be all there is. Ignored for regex and pure tag filters, which have no score"`
 }
 
 type listTagsOut struct {
@@ -244,24 +298,34 @@ func registerTools(s *mcp.Server, d Deps) {
 	}
 
 	mcp.AddTool(s, readTool("list_notes", "List notes",
-		"List markdown notes in the vault (optionally recursive).",
+		"List markdown notes in a folder (optionally recursive), sorted by path, at most limit (default 200) per call. Also returns dirs, the direct subfolders with their note counts, even without recursive: list the root to see the vault's structure. For what changed recently use sort: modified (newest first, with an excerpt) and since (7d, 24h, 2026-11-01).",
 	), func(ctx context.Context, req *mcp.CallToolRequest, in listNotesIn) (*mcp.CallToolResult, listNotesOut, error) {
-		notes, err := d.Vault.List(in.Dir, in.Recursive)
-		if err != nil {
-			return nil, listNotesOut{}, err
-		}
-		return nil, listNotesOut{Notes: notes}, nil
+		out, err := listNotes(d, in)
+		return nil, out, err
 	})
 
 	mcp.AddTool(s, readTool("read_note", "Read note",
-		"Read a note: content, frontmatter, tags, links and the content hash used for conflict-safe edits.",
-	), func(ctx context.Context, req *mcp.CallToolRequest, in readNoteIn) (*mcp.CallToolResult, *vault.Note, error) {
+		"Read a note: content, frontmatter, tags, links and the content hash used for conflict-safe edits. For a long note ask for outline first (headings with line numbers), then read one section or a line range (start_line, max_lines); hash is always that of the whole note.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in readNoteIn) (*mcp.CallToolResult, readNoteOut, error) {
+		if err := in.validate(); err != nil {
+			return nil, readNoteOut{}, err
+		}
 		note, err := d.Vault.Read(in.Path)
 		if err != nil {
-			return nil, nil, err
+			return nil, readNoteOut{}, err
 		}
-		return nil, note, nil
+		if !in.partial() {
+			out := newReadNoteOut(note)
+			return textResult(noteText(out)), out, nil
+		}
+		out, text, err := readPart(note, in, d.Index)
+		if err != nil {
+			return nil, readNoteOut{}, err
+		}
+		return textResult(text), out, nil
 	})
+
+	registerReadNotes(s, d) // read_notes, readnotes.go
 
 	mcp.AddTool(s, editTool("write_note", "Write note",
 		"Create or replace a note. Without a path (or with a bare filename) the note lands in the inbox; the resolved path is returned. Pass expected_hash to update safely.",
@@ -282,15 +346,24 @@ func registerTools(s *mcp.Server, d Deps) {
 	})
 
 	mcp.AddTool(s, editTool("patch_note", "Patch section",
-		"Replace the content under one heading, leaving the rest of the note untouched.",
-		true, true, // discards the section's previous content
-	), func(ctx context.Context, req *mcp.CallToolRequest, in patchNoteIn) (*mcp.CallToolResult, writeNoteOut, error) {
-		if err := d.Vault.Patch(in.Path, in.Section, in.Content, in.ExpectedHash); err != nil {
-			return nil, writeNoteOut{}, err
+		"Edit one section, leaving the rest of the note untouched: replace the content under its heading (default), append or prepend to it, or insert a block before or after it. "+
+			"section is the heading text, or a heading path like Project A > Notes when the name occurs more than once. "+
+			"Returns the new hash and the lines the new content occupies.",
+		true, false, // replace discards the section's content; append and inserts add again when repeated
+	), func(ctx context.Context, req *mcp.CallToolRequest, in patchNoteIn) (*mcp.CallToolResult, patchNoteOut, error) {
+		op, err := vault.ParsePatchOp(in.Operation)
+		if err != nil {
+			return nil, patchNoteOut{}, err
+		}
+		res, err := d.Vault.PatchSection(in.Path, in.Section, op, in.Content, in.ExpectedHash)
+		if err != nil {
+			return nil, patchNoteOut{}, err
 		}
 		_ = d.Index.Update(in.Path)
-		return nil, writeNoteOut{Path: in.Path, Hash: rehash(in.Path)}, nil
+		return nil, patchNoteOut{Path: in.Path, Hash: res.Hash, StartLine: res.Lines.First, EndLine: res.Lines.Last}, nil
 	})
+
+	registerReplaceInNote(s, d) // replace_in_note, replace.go
 
 	mcp.AddTool(s, editTool("append_to_note", "Append to note",
 		"Append markdown to the end of a note.",
@@ -339,18 +412,13 @@ func registerTools(s *mcp.Server, d Deps) {
 	})
 
 	mcp.AddTool(s, readTool("search_notes", "Search vault",
-		"Ranked full-text search (title > tag > path > body), case-, diacritics- and typo-insensitive, with optional tag AND-filter and directory scope. Returns snippets with context; empty query lists notes matching the filters.",
+		"Ranked full-text search (BM25F: title, path, headings, tags and body; rare words count more, short notes on the topic beat long ones that mention it), case-, diacritics- and typo-insensitive, matches Czech word forms (faktury finds fakturu), with optional tag AND-filter and directory scope. Every result has a relevance score from 0 to 1; min_score drops weak ones. When no note has every word, notes missing one come back with relaxed: true. Returns up to 20 notes with snippets and context, plus total and a hint when more matched; response_format concise returns only path, title, score and the line number of the first match. Empty query lists notes matching the filters.",
 	), func(ctx context.Context, req *mcp.CallToolRequest, in searchNotesIn) (*mcp.CallToolResult, searchNotesOut, error) {
-		results, err := d.Searcher.Search(in.Query, vault.SearchOpts{
-			Tags:       in.Tags,
-			Dir:        in.Dir,
-			Regex:      in.Regex,
-			MaxResults: in.MaxResults,
-		})
+		out, text, err := searchNotes(d, in)
 		if err != nil {
 			return nil, searchNotesOut{}, err
 		}
-		return nil, searchNotesOut{Results: results}, nil
+		return textResult(text), out, nil
 	})
 
 	mcp.AddTool(s, readTool("list_tags", "List tags",

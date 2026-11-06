@@ -280,7 +280,7 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	limit, _ := strconv.Atoi(q.Get("limit")) // 0 → server default
-	results, err := a.Searcher.Search(q.Get("q"), vault.SearchOpts{
+	page, err := vault.SearchPage(a.Searcher, q.Get("q"), vault.SearchOpts{
 		Tags:       tags,
 		Dir:        q.Get("dir"),
 		MaxResults: limit,
@@ -289,7 +289,11 @@ func (a *API) handleSearch(w http.ResponseWriter, r *http.Request) {
 		apiError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results})
+	out := map[string]any{"results": page.Results}
+	if page.Relaxed {
+		out["relaxed"] = true // no note has every word, these miss one (NSO-578)
+	}
+	writeJSON(w, http.StatusOK, out)
 }
 
 func (a *API) handleTags(w http.ResponseWriter, r *http.Request) {

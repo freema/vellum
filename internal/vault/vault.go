@@ -23,6 +23,9 @@ var (
 	ErrConflict        = errors.New("content hash mismatch")
 	ErrTooLarge        = errors.New("file exceeds maximum size")
 	ErrSectionNotFound = errors.New("section not found")
+	// ErrSectionAmbiguous means a section name matches more than one
+	// heading; nothing is read or written by guess (NSO-575).
+	ErrSectionAmbiguous = errors.New("section is ambiguous")
 )
 
 // DefaultMaxFileSize is the default cap for a single note (10 MB).
@@ -33,6 +36,9 @@ const DefaultMaxFileSize = 10 << 20
 type Vault struct {
 	root    string // absolute path with symlinks resolved
 	maxSize int64
+	// contextFile is the file name of a folder's description note
+	// (NSO-573, contexts.go), DefaultContextFile unless WithContextFile.
+	contextFile string
 
 	// mu makes the check-and-write of ExpectedHash atomic within this process.
 	// There are deliberately no on-disk locks (single-binary design).
@@ -64,9 +70,12 @@ func New(dir string, opts ...Option) (*Vault, error) {
 	if !info.IsDir() {
 		return nil, fmt.Errorf("vault root %s is not a directory", dir)
 	}
-	v := &Vault{root: resolved, maxSize: DefaultMaxFileSize}
+	v := &Vault{root: resolved, maxSize: DefaultMaxFileSize, contextFile: DefaultContextFile}
 	for _, o := range opts {
 		o(v)
+	}
+	if err := ValidateContextFile(v.contextFile); err != nil {
+		return nil, err
 	}
 	return v, nil
 }
@@ -253,6 +262,9 @@ type NoteInfo struct {
 	Title   string    `json:"title"`
 	Size    int64     `json:"size"`
 	ModTime time.Time `json:"modTime"`
+	// Excerpt is the note's first line of body text, from the index. Only
+	// list_notes with sort: modified fills it (NSO-576); empty elsewhere.
+	Excerpt string `json:"excerpt,omitempty"`
 }
 
 // Note is a fully read note.

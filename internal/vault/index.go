@@ -2,10 +2,13 @@ package vault
 
 import (
 	"errors"
+	"io/fs"
 	"path"
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
+	"time"
 	"unicode/utf8"
 )
 
@@ -21,12 +24,20 @@ type Entry struct {
 	Status  string   `json:"status,omitempty"`
 	ModTime int64    `json:"modTime"`
 	Size    int64    `json:"size"`
+
+	// modNano is the file's modification time in nanoseconds. ModTime
+	// keeps its seconds for the JSON views; change detection (Reconcile,
+	// the search cache) needs the full resolution, or an edit within the
+	// same second that keeps the size would go unnoticed.
+	modNano int64
 }
 
 // Index is the in-memory metadata index: tags and backlinks as instant
 // lookups. It is rebuilt from disk once at startup and updated
 // incrementally on every write that goes through the layers above
-// (the vault file layer itself stays dumb).
+// (the vault file layer itself stays dumb). Changes made outside vellum
+// (another editor, git, a second vellum process) are picked up lazily by
+// Reconcile, see SetRescanInterval.
 type Index struct {
 	vault *Vault
 
@@ -36,6 +47,20 @@ type Index struct {
 	forward   map[string]map[string]bool // path -> set of resolved targets
 	backlinks map[string]map[string]bool // path -> set of paths linking to it
 	observers []func(Change)
+
+	// Folder descriptions (NSO-573, contexts.go): folder -> description,
+	// and the parsed description notes it was built from.
+	contexts     map[string]string
+	contextNotes map[string]contextNote
+
+	// Lazy reconcile with the disk (NSO-562, reconcile.go). scanMu lets
+	// one Reconcile run at a time; epoch anchors lastScan on the monotonic
+	// clock, so a wall-clock jump neither stalls nor floods rescans.
+	scanMu      sync.Mutex
+	epoch       time.Time
+	rescanEvery atomic.Int64 // nanoseconds, 0 = off
+	lastScan    atomic.Int64 // nanoseconds since epoch at the last scan
+	rebuilds    int          // rebuildDerived calls, for tests; under mu
 }
 
 // Change is one incremental index mutation, published to OnChange observers.
@@ -43,12 +68,17 @@ type Index struct {
 type Change struct {
 	Path    string
 	Deleted bool
+	// From is set on the update half of a rename that Reconcile inferred
+	// from the disk (a note moved outside vellum): the path the note had
+	// before. Renames through vellum (Rename) leave it empty; their caller
+	// already knows both paths.
+	From string
 }
 
 // OnChange registers an observer called after every incremental mutation
-// (Update/Remove/Rename). Build does not emit — it runs once at startup,
-// before observers exist. Observers run synchronously outside the index
-// lock, so they may read the index but must not block for long.
+// (Update/Remove/Rename/Reconcile). Build does not emit — it runs once at
+// startup, before observers exist. Observers run synchronously outside the
+// index lock, so they may read the index but must not block for long.
 func (ix *Index) OnChange(fn func(Change)) {
 	ix.mu.Lock()
 	defer ix.mu.Unlock()
@@ -72,55 +102,65 @@ func NewIndex(v *Vault) *Index {
 		tags:      map[string]map[string]bool{},
 		forward:   map[string]map[string]bool{},
 		backlinks: map[string]map[string]bool{},
+		epoch:     time.Now(),
 	}
 }
 
 // Build scans the whole vault in one pass. Files are read concurrently;
-// entries and link resolution are computed once at the end.
+// entries and link resolution are computed once at the end. Build does not
+// emit changes: it runs at startup, before observers exist.
 func (ix *Index) Build() error {
-	infos, err := ix.vault.List("", true)
+	var paths []string
+	err := ix.vault.walkNotes(ix.vault.root, true, func(rel, _ string, _ fs.FileInfo) {
+		paths = append(paths, rel)
+	})
 	if err != nil {
 		return err
 	}
+	entries := ix.vault.readEntries(paths)
 
-	type result struct {
-		entry *Entry
+	ix.mu.Lock()
+	ix.entries = entries
+	ix.rebuildDerived()
+	ix.mu.Unlock()
+	ix.markScanned()
+	return nil
+}
+
+// readEntries reads the given notes concurrently into index entries, keyed
+// by path. Unreadable or oversized files are left out: the index is a
+// cache, not the source of truth.
+func (v *Vault) readEntries(paths []string) map[string]*Entry {
+	entries := make(map[string]*Entry, len(paths))
+	if len(paths) == 0 {
+		return entries
 	}
-	jobs := make(chan NoteInfo)
-	results := make(chan result)
+	jobs := make(chan string)
+	results := make(chan *Entry)
 	var wg sync.WaitGroup
-	for w := 0; w < 8; w++ {
+	for w := 0; w < min(8, len(paths)); w++ {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for info := range jobs {
-				if e, err := ix.vault.entryOf(info.Path); err == nil {
-					results <- result{entry: e}
+			for p := range jobs {
+				if e, err := v.entryOf(p); err == nil {
+					results <- e
 				}
-				// Unreadable/oversized files are skipped: the index is a
-				// cache, not the source of truth.
 			}
 		}()
 	}
 	go func() {
-		for _, info := range infos {
-			jobs <- info
+		for _, p := range paths {
+			jobs <- p
 		}
 		close(jobs)
 		wg.Wait()
 		close(results)
 	}()
-
-	entries := map[string]*Entry{}
-	for r := range results {
-		entries[r.entry.Path] = r.entry
+	for e := range results {
+		entries[e.Path] = e
 	}
-
-	ix.mu.Lock()
-	defer ix.mu.Unlock()
-	ix.entries = entries
-	ix.rebuildDerived()
-	return nil
+	return entries
 }
 
 // entryOf reads one note and distills its index entry.
@@ -129,22 +169,40 @@ func (v *Vault) entryOf(path string) (*Entry, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Every string is cloned: the title, excerpt, tags and links are
+	// substrings of the note's content, and an entry holding one would keep
+	// the whole file in memory for as long as the index lives (about 7 KB
+	// per note on a 5,000-note vault, most of the index's heap).
 	e := &Entry{
-		Path:    note.Path,
-		Title:   note.Title,
-		Excerpt: excerptOf(note.Body),
-		Tags:    note.Tags,
-		Links:   note.Links,
+		Path:    strings.Clone(note.Path),
+		Title:   strings.Clone(note.Title),
+		Excerpt: strings.Clone(excerptOf(note.Body)),
+		Tags:    cloneStrings(note.Tags),
+		Links:   cloneStrings(note.Links),
 		ModTime: note.ModTime.Unix(),
 		Size:    note.Size,
+		modNano: note.ModTime.UnixNano(),
 	}
 	if t, ok := note.Frontmatter["type"].(string); ok {
-		e.Type = t
+		e.Type = strings.Clone(t)
 	}
 	if s, ok := note.Frontmatter["status"].(string); ok {
-		e.Status = s
+		e.Status = strings.Clone(s)
 	}
 	return e, nil
+}
+
+// cloneStrings copies a slice and every string in it, so nothing in the
+// copy shares memory with the original (nil stays nil).
+func cloneStrings(ss []string) []string {
+	if ss == nil {
+		return nil
+	}
+	out := make([]string, len(ss))
+	for i, s := range ss {
+		out[i] = strings.Clone(s)
+	}
+	return out
 }
 
 // excerptOf returns the first non-heading, non-blank body text, capped for
@@ -208,9 +266,12 @@ func (ix *Index) Rename(from, to string) error {
 
 // rebuildDerived recomputes tag and link maps from the entries. Pure RAM:
 // no file IO, linear in the number of tags+links, so doing it on every
-// mutation keeps resolution (e.g. wikilink ambiguity) always correct.
+// mutation keeps resolution (e.g. wikilink ambiguity) always correct. The
+// one exception is a folder description note that changed since the last
+// rebuild, which rebuildContexts reads (a small file, rarely).
 // Callers must hold ix.mu.
 func (ix *Index) rebuildDerived() {
+	ix.rebuilds++
 	ix.tags = map[string]map[string]bool{}
 	ix.forward = map[string]map[string]bool{}
 	ix.backlinks = map[string]map[string]bool{}
@@ -247,6 +308,7 @@ func (ix *Index) rebuildDerived() {
 			ix.backlinks[target][p] = true
 		}
 	}
+	ix.rebuildContexts()
 }
 
 // resolveLink maps a raw link target to an indexed path, or "" if the link
@@ -311,6 +373,7 @@ func (ix *Index) Len() int {
 // never mutate an *Entry in place. Used by the search hot path, which sorts
 // by score anyway — All() below stays for callers wanting sorted copies.
 func (ix *Index) snapshot() []*Entry {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	out := make([]*Entry, 0, len(ix.entries))
@@ -322,6 +385,7 @@ func (ix *Index) snapshot() []*Entry {
 
 // All returns a snapshot of all entries, sorted by path.
 func (ix *Index) All() []Entry {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	out := make([]Entry, 0, len(ix.entries))
@@ -340,6 +404,7 @@ type TagCount struct {
 
 // Tags returns all tags with counts, sorted by tag.
 func (ix *Index) Tags() []TagCount {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	out := make([]TagCount, 0, len(ix.tags))
@@ -352,6 +417,7 @@ func (ix *Index) Tags() []TagCount {
 
 // PathsByTag returns the sorted paths carrying a tag.
 func (ix *Index) PathsByTag(tag string) []string {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	return sortedKeys(ix.tags[tag])
@@ -359,6 +425,7 @@ func (ix *Index) PathsByTag(tag string) []string {
 
 // Backlinks returns the sorted paths of notes linking to path.
 func (ix *Index) Backlinks(path string) []string {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	return sortedKeys(ix.backlinks[path])
@@ -366,6 +433,7 @@ func (ix *Index) Backlinks(path string) []string {
 
 // Links returns the sorted resolved outgoing links of a note.
 func (ix *Index) Links(path string) []string {
+	ix.maybeReconcile()
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 	return sortedKeys(ix.forward[path])
