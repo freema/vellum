@@ -17,16 +17,25 @@ type LocationSuggestion struct {
 	SharedTags []string `json:"sharedTags,omitempty"`
 	NoteCount  int      `json:"noteCount"`
 	Reason     string   `json:"reason"`
+	// Description is the folder's own description (NSO-573), if it has one.
+	Description string `json:"description,omitempty"`
 }
 
-// SuggestLocation ranks existing directories by tag overlap with the given
-// content. The inbox is always the fallback candidate.
+// SuggestLocation ranks existing directories by their overlap with the
+// given content: tags shared with the folder's notes, and words shared with
+// the folder's description (folded and split into words as search does).
+// Each shared tag or word counts one; ties go to more shared tags, then to
+// the path. A folder whose notes have no tag in common with the content is
+// still offered when its description matches. The inbox is always the
+// fallback candidate.
 func (ix *Index) SuggestLocation(content string, s Structure) []LocationSuggestion {
 	rawYAML, body := splitFrontmatter(content)
+	fm := parseFrontmatter(rawYAML)
 	contentTags := map[string]bool{}
-	for _, t := range extractTags(parseFrontmatter(rawYAML), body) {
+	for _, t := range extractTags(fm, body) {
 		contentTags[t] = true
 	}
+	var contentWords map[string]string // only computed when a folder is described
 
 	type dirProfile struct {
 		count int
@@ -43,13 +52,19 @@ func (ix *Index) SuggestLocation(content string, s Structure) []LocationSuggesti
 			p = &dirProfile{tags: map[string]int{}}
 			profiles[dir] = p
 		}
-		p.count++
+		if !ix.vault.IsContextNote(e.Path) {
+			p.count++ // the description note is not content of the folder
+		}
 		for _, t := range e.Tags {
 			p.tags[t]++
 		}
 	}
 
-	var out []LocationSuggestion
+	type ranked struct {
+		LocationSuggestion
+		words int
+	}
+	var out []ranked
 	for dir, p := range profiles {
 		var shared []string
 		for t := range contentTags {
@@ -57,18 +72,43 @@ func (ix *Index) SuggestLocation(content string, s Structure) []LocationSuggesti
 				shared = append(shared, t)
 			}
 		}
-		if len(shared) == 0 {
+		desc := ix.FolderDescription(dir)
+		var words []string
+		if desc != "" {
+			if contentWords == nil {
+				contentWords = contextWords(deriveTitle("", fm, body) + "\n" + body)
+			}
+			for folded, w := range contextWords(desc) {
+				if _, ok := contentWords[folded]; ok {
+					words = append(words, w) // as the description spells it
+				}
+			}
+		}
+		if len(shared) == 0 && len(words) == 0 {
 			continue
 		}
 		sort.Strings(shared)
-		out = append(out, LocationSuggestion{
-			Dir:        dir,
-			SharedTags: shared,
-			NoteCount:  p.count,
-			Reason:     "notes in this folder share tags: " + strings.Join(shared, ", "),
-		})
+		sort.Strings(words)
+		var reasons []string
+		if len(shared) > 0 {
+			reasons = append(reasons, "notes in this folder share tags: "+strings.Join(shared, ", "))
+		}
+		if len(words) > 0 {
+			reasons = append(reasons, "the folder description mentions: "+strings.Join(words, ", "))
+		}
+		out = append(out, ranked{LocationSuggestion: LocationSuggestion{
+			Dir:         dir,
+			SharedTags:  shared,
+			NoteCount:   p.count,
+			Reason:      strings.Join(reasons, "; "),
+			Description: desc,
+		}, words: len(words)})
 	}
 	sort.Slice(out, func(i, j int) bool {
+		si, sj := len(out[i].SharedTags)+out[i].words, len(out[j].SharedTags)+out[j].words
+		if si != sj {
+			return si > sj
+		}
 		if len(out[i].SharedTags) != len(out[j].SharedTags) {
 			return len(out[i].SharedTags) > len(out[j].SharedTags)
 		}
@@ -77,11 +117,15 @@ func (ix *Index) SuggestLocation(content string, s Structure) []LocationSuggesti
 	if len(out) > 5 {
 		out = out[:5]
 	}
-	out = append(out, LocationSuggestion{
-		Dir:    s.Inbox,
-		Reason: "fallback: unfiled notes go to the inbox",
+	suggestions := make([]LocationSuggestion, 0, len(out)+1)
+	for _, r := range out {
+		suggestions = append(suggestions, r.LocationSuggestion)
+	}
+	return append(suggestions, LocationSuggestion{
+		Dir:         s.Inbox,
+		Reason:      "fallback: unfiled notes go to the inbox",
+		Description: ix.FolderDescription(s.Inbox),
 	})
-	return out
 }
 
 // TagsContext is what an agent needs to propose tags for a note.
@@ -193,11 +237,15 @@ func (ix *Index) SuggestLinks(v *Vault, notePath string) ([]LinkCandidate, error
 	return out, nil
 }
 
+// The Find* reports leave out folder description notes (NSO-573): they
+// are meant to have no tags, links or folder of their own, and the curator
+// would otherwise report them forever.
+
 // FindUntagged returns notes without any tags.
 func (ix *Index) FindUntagged() []Entry {
 	var out []Entry
 	for _, e := range ix.All() {
-		if len(e.Tags) == 0 {
+		if len(e.Tags) == 0 && !ix.vault.IsContextNote(e.Path) {
 			out = append(out, e)
 		}
 	}
@@ -208,6 +256,9 @@ func (ix *Index) FindUntagged() []Entry {
 func (ix *Index) FindOrphans() []Entry {
 	var out []Entry
 	for _, e := range ix.All() {
+		if ix.vault.IsContextNote(e.Path) {
+			continue
+		}
 		if len(ix.Links(e.Path)) == 0 && len(ix.Backlinks(e.Path)) == 0 {
 			out = append(out, e)
 		}
@@ -222,7 +273,7 @@ func (ix *Index) FindInboxStale(inbox string, maxAge time.Duration) []Entry {
 	prefix := strings.Trim(inbox, "/") + "/"
 	var out []Entry
 	for _, e := range ix.All() {
-		if strings.HasPrefix(e.Path, prefix) && e.ModTime < cutoff {
+		if strings.HasPrefix(e.Path, prefix) && e.ModTime < cutoff && !ix.vault.IsContextNote(e.Path) {
 			out = append(out, e)
 		}
 	}

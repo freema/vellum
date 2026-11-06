@@ -1,0 +1,459 @@
+{
+  "version": 1,
+  "description": "Golden query set for search quality (NSO-568). Grades: 2 = exactly the note the query is after, 1 = related, unlisted = not relevant. Written before any new ranker; change it only with a reason stated in the pull request, never to suit a ranker. See docs/search-quality.md.",
+  "queries": [
+    {
+      "id": "single-kubernetes",
+      "query": "kubernetes",
+      "lang": "en",
+      "kinds": ["single-word"],
+      "relevant": {
+        "reference/tech/kubernetes-cheatsheet.md": 2,
+        "projects/homelab/k3s-cluster.md": 1
+      }
+    },
+    {
+      "id": "single-kvasek",
+      "query": "kvásek",
+      "lang": "cs",
+      "kinds": ["single-word"],
+      "relevant": {
+        "recipes/kvaskovy-chleb.md": 2,
+        "journal/2025/2025-02-14.md": 1
+      }
+    },
+    {
+      "id": "single-invoice",
+      "query": "invoice",
+      "lang": "en",
+      "kinds": ["single-word"],
+      "relevant": {
+        "areas/finance/invoicing-workflow.md": 2,
+        "work/meetings/2026-02-03-finance-sync.md": 1,
+        "projects/billing-api/architecture.md": 1
+      }
+    },
+    {
+      "id": "single-passport",
+      "query": "passport",
+      "lang": "en",
+      "kinds": ["single-word"],
+      "relevant": {
+        "travel/japan-2026/checklist.md": 2,
+        "travel/japan-2026/itinerary.md": 1
+      }
+    },
+    {
+      "id": "single-rozpocet",
+      "query": "rozpočet",
+      "lang": "cs",
+      "kinds": ["single-word"],
+      "relevant": {
+        "areas/finance/rozpocet-2026.md": 2,
+        "areas/home/rekonstrukce-rozpocet.md": 1
+      },
+      "note": "The roof repair and the project rules mention a budget only in passing."
+    },
+    {
+      "id": "multi-restic-backup",
+      "query": "restic backup",
+      "lang": "en",
+      "kinds": ["multi-word"],
+      "relevant": {
+        "reference/tech/restic-backups.md": 2,
+        "projects/homelab/nas-setup.md": 1
+      }
+    },
+    {
+      "id": "multi-oprava-strechy",
+      "query": "oprava střechy",
+      "lang": "cs",
+      "kinds": ["multi-word"],
+      "relevant": {
+        "areas/home/oprava-strechy.md": 2,
+        "areas/home/rekonstrukce-rozpocet.md": 1
+      }
+    },
+    {
+      "id": "multi-postgres-pool",
+      "query": "postgres connection pool",
+      "lang": "en",
+      "kinds": ["multi-word"],
+      "relevant": {
+        "reference/tech/postgres-pooling.md": 2,
+        "projects/billing-api/architecture.md": 1
+      }
+    },
+    {
+      "id": "multi-okr-review",
+      "query": "quarterly okr review",
+      "lang": "en",
+      "kinds": ["multi-word"],
+      "relevant": {
+        "work/okr/2026-q3-review.md": 2,
+        "work/okr/2026-q2-review.md": 2
+      },
+      "note": "The query names no quarter, both reviews are exact answers."
+    },
+    {
+      "id": "multi-sleep-tracking",
+      "query": "sleep tracking",
+      "lang": "en",
+      "kinds": ["multi-word"],
+      "relevant": {
+        "areas/health/sleep-log.md": 2
+      }
+    },
+    {
+      "id": "sentence-tls-rotate",
+      "query": "how do I rotate the TLS certificates on the homelab reverse proxy",
+      "lang": "en",
+      "kinds": ["sentence"],
+      "relevant": {
+        "projects/homelab/caddy-certificates.md": 2,
+        "journal/homelab-log-2025.md": 1
+      }
+    },
+    {
+      "id": "sentence-ucetni-system",
+      "query": "jaký byl závěr porady o výběru nového účetního systému",
+      "lang": "cs",
+      "kinds": ["sentence", "inflection"],
+      "relevant": {
+        "work/meetings/2026-03-12-ucetni-system.md": 2
+      }
+    },
+    {
+      "id": "sentence-database-hosting",
+      "query": "what did we decide about moving the database to managed hosting",
+      "lang": "en",
+      "kinds": ["sentence"],
+      "relevant": {
+        "work/meetings/2026-04-08-database-hosting.md": 2,
+        "projects/billing-api/architecture.md": 1
+      }
+    },
+    {
+      "id": "sentence-kvaskovy-chleb",
+      "query": "recept na kváskový chléb s dlouhým kynutím",
+      "lang": "cs",
+      "kinds": ["sentence", "inflection"],
+      "relevant": {
+        "recipes/kvaskovy-chleb.md": 2
+      }
+    },
+    {
+      "id": "sentence-japan-packing",
+      "query": "list of things to pack for the Japan trip",
+      "lang": "en",
+      "kinds": ["sentence"],
+      "relevant": {
+        "travel/japan-2026/checklist.md": 2,
+        "travel/japan-2026/itinerary.md": 1
+      }
+    },
+    {
+      "id": "inflection-faktury",
+      "query": "faktury",
+      "lang": "cs",
+      "kinds": ["inflection", "single-word"],
+      "relevant": {
+        "areas/finance/dodavatele-platby.md": 2,
+        "work/meetings/2026-03-12-ucetni-system.md": 1
+      },
+      "note": "The notes say fakturu, faktur, faktura, never faktury."
+    },
+    {
+      "id": "inflection-najemni-smlouvy",
+      "query": "nájemní smlouvy",
+      "lang": "cs",
+      "kinds": ["inflection", "multi-word"],
+      "relevant": {
+        "areas/home/najem-byt.md": 2
+      },
+      "note": "The note says nájemní smlouvu and ve smlouvě."
+    },
+    {
+      "id": "inflection-ockovani-psa",
+      "query": "očkování psa",
+      "lang": "cs",
+      "kinds": ["inflection", "multi-word"],
+      "relevant": {
+        "areas/home/pes-max-veterinar.md": 2
+      },
+      "note": "The note says pes, psovi, se psem; psa is a substring of unrelated words (napsat)."
+    },
+    {
+      "id": "inflection-zahrady",
+      "query": "zahrady",
+      "lang": "cs",
+      "kinds": ["inflection", "single-word"],
+      "relevant": {
+        "areas/home/zahrada-jaro.md": 2,
+        "journal/zahradnicky-denik-2025.md": 1,
+        "areas/home/zahony-bez-plevele.md": 1
+      },
+      "note": "The notes say zahrada, zahradě, zahradu, never zahrady."
+    },
+    {
+      "id": "inflection-dovolena-chorvatsko",
+      "query": "dovolená v Chorvatsku",
+      "lang": "cs",
+      "kinds": ["inflection", "multi-word"],
+      "relevant": {
+        "travel/chorvatsko-2024.md": 2
+      },
+      "note": "The note says Chorvatsko, chorvatské, dovolenou."
+    },
+    {
+      "id": "inflection-uctenky",
+      "query": "účtenky",
+      "lang": "cs",
+      "kinds": ["inflection", "single-word"],
+      "relevant": {
+        "areas/finance/archiv-dokladu.md": 2
+      },
+      "note": "The note says účtenku, účtenek, never účtenky."
+    },
+    {
+      "id": "inflection-zalohovani-fotek",
+      "query": "zálohování fotek",
+      "lang": "cs",
+      "kinds": ["inflection", "multi-word"],
+      "relevant": {
+        "projects/homelab/zaloha-fotografii.md": 2,
+        "projects/homelab/nas-setup.md": 1
+      },
+      "note": "The note says záloha, zálohuji, fotky, fotografií."
+    },
+    {
+      "id": "nodiacritics-zarucni-lhuta",
+      "query": "zarucni lhuta pracky",
+      "lang": "cs",
+      "kinds": ["no-diacritics", "multi-word"],
+      "relevant": {
+        "areas/home/spotrebice.md": 2
+      }
+    },
+    {
+      "id": "nodiacritics-skoleni-bozp",
+      "query": "skoleni bezpecnosti prace",
+      "lang": "cs",
+      "kinds": ["no-diacritics", "multi-word"],
+      "relevant": {
+        "work/bozp-skoleni.md": 2
+      }
+    },
+    {
+      "id": "nodiacritics-kvaskovy-chleb",
+      "query": "kvaskovy chleb",
+      "lang": "cs",
+      "kinds": ["no-diacritics", "multi-word"],
+      "relevant": {
+        "recipes/kvaskovy-chleb.md": 2
+      }
+    },
+    {
+      "id": "nodiacritics-rozpocet-koupelny",
+      "query": "rozpocet rekonstrukce koupelny",
+      "lang": "cs",
+      "kinds": ["no-diacritics", "multi-word"],
+      "relevant": {
+        "areas/home/rekonstrukce-rozpocet.md": 2
+      }
+    },
+    {
+      "id": "typo-kubernets",
+      "query": "kubernets",
+      "lang": "en",
+      "kinds": ["typo", "single-word"],
+      "relevant": {
+        "reference/tech/kubernetes-cheatsheet.md": 2,
+        "projects/homelab/k3s-cluster.md": 1
+      }
+    },
+    {
+      "id": "typo-postgress-pooling",
+      "query": "postgress pooling",
+      "lang": "en",
+      "kinds": ["typo", "multi-word"],
+      "relevant": {
+        "reference/tech/postgres-pooling.md": 2
+      }
+    },
+    {
+      "id": "typo-rekonstukce",
+      "query": "rekonstukce koupelny",
+      "lang": "cs",
+      "kinds": ["typo", "multi-word"],
+      "relevant": {
+        "areas/home/rekonstrukce-rozpocet.md": 2
+      }
+    },
+    {
+      "id": "typo-wireguad",
+      "query": "wireguad",
+      "lang": "en",
+      "kinds": ["typo", "single-word"],
+      "relevant": {
+        "reference/tech/wireguard-vpn.md": 2,
+        "journal/homelab-log-2025.md": 1
+      }
+    },
+    {
+      "id": "common-rare-projekt-dotace",
+      "query": "projekt dotace",
+      "lang": "cs",
+      "kinds": ["common-rare", "multi-word"],
+      "relevant": {
+        "areas/finance/dotace-zelena-usporam.md": 2
+      },
+      "note": "projekt is in about 40 notes; the project rules note repeats it and mentions dotace once in passing."
+    },
+    {
+      "id": "common-rare-deploy-rollback",
+      "query": "deploy rollback",
+      "lang": "en",
+      "kinds": ["common-rare", "multi-word"],
+      "relevant": {
+        "reference/tech/rollback-runbook.md": 2
+      },
+      "note": "deploy is in about 40 notes, rollback in one."
+    },
+    {
+      "id": "common-rare-recept-bez-lepku",
+      "query": "recept bez lepku",
+      "lang": "cs",
+      "kinds": ["common-rare", "multi-word"],
+      "relevant": {
+        "recipes/pohankove-palacinky.md": 2
+      },
+      "note": "recept and bez are everywhere in recipes and the journal; the walnut cake lists gluten as an allergen and is not an answer."
+    },
+    {
+      "id": "filename-k3s",
+      "query": "k3s",
+      "lang": "en",
+      "kinds": ["filename-only", "single-word"],
+      "relevant": {
+        "projects/homelab/k3s-cluster.md": 2
+      },
+      "note": "k3s appears only in the file name; the title comes from frontmatter."
+    },
+    {
+      "id": "filename-lisbon",
+      "query": "lisbon",
+      "lang": "en",
+      "kinds": ["filename-only", "single-word"],
+      "relevant": {
+        "travel/lisbon-2025.md": 2
+      },
+      "note": "The trip note is written in Czech (Lisabon); only its file name says lisbon. The café log mentions Lisbon in one line and is not about it."
+    },
+    {
+      "id": "heading-troubleshooting",
+      "query": "troubleshooting",
+      "lang": "en",
+      "kinds": ["heading-only", "single-word"],
+      "relevant": {
+        "reference/tech/wireguard-vpn.md": 2
+      }
+    },
+    {
+      "id": "heading-alergeny",
+      "query": "alergeny",
+      "lang": "cs",
+      "kinds": ["heading-only", "single-word"],
+      "relevant": {
+        "recipes/orechovy-dort.md": 2
+      }
+    },
+    {
+      "id": "tag-taxes",
+      "query": "taxes",
+      "lang": "en",
+      "kinds": ["tag-only", "single-word"],
+      "relevant": {
+        "areas/finance/danove-priznani-2025.md": 2,
+        "areas/finance/ucetnictvi-osvc.md": 1
+      },
+      "note": "Both notes are Czech; taxes is only a tag."
+    },
+    {
+      "id": "tag-woodworking",
+      "query": "woodworking",
+      "lang": "en",
+      "kinds": ["tag-only", "single-word"],
+      "relevant": {
+        "projects/workshop/pracovni-stul.md": 2
+      }
+    },
+    {
+      "id": "long-short-mulcovani",
+      "query": "mulčování",
+      "lang": "cs",
+      "kinds": ["long-vs-short", "single-word"],
+      "relevant": {
+        "areas/home/zahony-bez-plevele.md": 2,
+        "journal/zahradnicky-denik-2025.md": 1
+      },
+      "note": "The short note is about mulching; the long garden diary repeats the word in passing."
+    },
+    {
+      "id": "long-short-espresso",
+      "query": "espresso",
+      "lang": "en",
+      "kinds": ["long-vs-short", "single-word"],
+      "relevant": {
+        "areas/home/coffee/grinder-setup.md": 2,
+        "areas/home/coffee/cafe-visits-2025.md": 1
+      },
+      "note": "The short note is about dialing in espresso; the long café log repeats the word in passing."
+    },
+    {
+      "id": "filter-dir-rozpocet",
+      "query": "rozpočet",
+      "lang": "cs",
+      "kinds": ["filter", "single-word"],
+      "dir": "areas/home",
+      "relevant": {
+        "areas/home/rekonstrukce-rozpocet.md": 2
+      }
+    },
+    {
+      "id": "none-kvantovy-pocitac",
+      "query": "kvantový počítač",
+      "lang": "cs",
+      "kinds": ["no-answer"],
+      "relevant": {}
+    },
+    {
+      "id": "none-helicopter-license",
+      "query": "helicopter pilot license",
+      "lang": "en",
+      "kinds": ["no-answer"],
+      "relevant": {}
+    },
+    {
+      "id": "none-tiskarna",
+      "query": "jak nastavit tiskárnu v kanceláři",
+      "lang": "cs",
+      "kinds": ["no-answer", "sentence"],
+      "relevant": {}
+    },
+    {
+      "id": "none-xylofon",
+      "query": "xylofon",
+      "lang": "cs",
+      "kinds": ["no-answer"],
+      "relevant": {}
+    },
+    {
+      "id": "none-blockchain-audit",
+      "query": "blockchain smart contract audit",
+      "lang": "en",
+      "kinds": ["no-answer"],
+      "relevant": {}
+    }
+  ]
+}

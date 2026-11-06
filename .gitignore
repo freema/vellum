@@ -21,3 +21,6 @@ web/dist/
 .DS_Store
 .idea/
 .vscode/
+
+# GoReleaser output (task release-snapshot)
+/dist/

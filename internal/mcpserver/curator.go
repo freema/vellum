@@ -37,13 +37,30 @@ type noteRef struct {
 	Title string `json:"title"`
 }
 
+type undescribedIn struct {
+	MinNotes int `json:"min_notes,omitempty" jsonschema:"only folders with at least this many notes of their own (default 5)"`
+}
+type undescribedOut struct {
+	Folders   []vault.UndescribedFolder `json:"folders"`
+	Total     int                       `json:"total"`     // undescribed folders in all
+	Truncated bool                      `json:"truncated"` // more follow the first 20
+}
+
+// undescribedDefaultMin and undescribedMax bound find_undescribed_folders:
+// folders of fewer notes rarely need a description, and an agent writes a
+// few descriptions per session, not hundreds.
+const (
+	undescribedDefaultMin = 5
+	undescribedMax        = 20
+)
+
 type inboxStaleIn struct {
 	Days int `json:"days,omitempty" jsonschema:"minimum age in days (default 14)"`
 }
 
 func registerCuratorTools(s *mcp.Server, d Deps) {
 	mcp.AddTool(s, readTool("suggest_location", "Suggest location",
-		"Rank existing vault folders for new content by tag overlap. Returns candidates with reasons; the agent decides.",
+		"Rank existing vault folders for new content by tag overlap and by words shared with the folder description. Returns candidates with reasons and descriptions; the agent decides.",
 	), func(ctx context.Context, req *mcp.CallToolRequest, in suggestLocationIn) (*mcp.CallToolResult, suggestLocationOut, error) {
 		return nil, suggestLocationOut{Suggestions: d.Index.SuggestLocation(in.Content, d.Structure)}, nil
 	})
@@ -55,7 +72,7 @@ func registerCuratorTools(s *mcp.Server, d Deps) {
 		if err != nil {
 			return nil, nil, err
 		}
-		return nil, tc, nil
+		return textResult(tagsContextText(tc)), tc, nil
 	})
 
 	mcp.AddTool(s, readTool("suggest_links", "Suggest links",
@@ -65,7 +82,7 @@ func registerCuratorTools(s *mcp.Server, d Deps) {
 		if err != nil {
 			return nil, suggestLinksOut{}, err
 		}
-		return nil, suggestLinksOut{Candidates: cands}, nil
+		return textResult(linksText(cands)), suggestLinksOut{Candidates: cands}, nil
 	})
 
 	mcp.AddTool(s, readTool("find_untagged", "Find untagged notes",
@@ -89,6 +106,24 @@ func registerCuratorTools(s *mcp.Server, d Deps) {
 		}
 		stale := d.Index.FindInboxStale(d.Structure.Inbox, time.Duration(days)*24*time.Hour)
 		return nil, toFindOut(stale), nil
+	})
+
+	mcp.AddTool(s, readTool("find_undescribed_folders", "Find undescribed folders",
+		"Folders with at least min_notes notes (default 5) but no description note, most notes first, each with sample titles and its most used tags, to propose a description from. Writes nothing.",
+	), func(ctx context.Context, req *mcp.CallToolRequest, in undescribedIn) (*mcp.CallToolResult, undescribedOut, error) {
+		minNotes := in.MinNotes
+		if minNotes <= 0 {
+			minNotes = undescribedDefaultMin
+		}
+		all := d.Index.FindUndescribedFolders(minNotes)
+		out := undescribedOut{Folders: all, Total: len(all)}
+		if len(all) > undescribedMax {
+			out.Folders, out.Truncated = all[:undescribedMax], true
+		}
+		if out.Folders == nil {
+			out.Folders = []vault.UndescribedFolder{}
+		}
+		return nil, out, nil
 	})
 }
 

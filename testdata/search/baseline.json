@@ -1,0 +1,17 @@
+{
+  "comment": "Stored floors for TestSearchQuality (NSO-568). Per ranker: mrr, ndcg10 and recall5 must not drop below these values, noAnswerMeanResults must not rise above. Values are the measured ones truncated to four decimals. Raise them when a ranker gets better, lower them only with a reason in the pull request. See docs/search-quality.md. scan is the default ranker (BM25F since NSO-577, with Czech word forms and the relaxed AND since NSO-578); legacy is the hand-tuned ranker it replaced, kept at its NSO-568 values until it is removed.",
+  "rankers": {
+    "scan": {
+      "mrr": 0.9047,
+      "ndcg10": 0.9106,
+      "recall5": 0.9047,
+      "noAnswerMeanResults": 0
+    },
+    "legacy": {
+      "mrr": 0.7857,
+      "ndcg10": 0.8206,
+      "recall5": 0.8452,
+      "noAnswerMeanResults": 0
+    }
+  }
+}

@@ -75,7 +75,8 @@ A link points at a note, not at a path, so:
 | Moved onto another shared note | The overwritten note's link dies with it |
 | Deleted | Revoked |
 | Its folder deleted | Revoked, along with every other link inside |
-| Deleted on disk behind vellum's back | Answers **410 Gone** until you revoke it |
+| Renamed or moved on disk behind vellum's back | **Follows it** at the next index rescan, when the move is unambiguous: the only note that vanished and the only one that appeared with that file name and size ([search.md](search.md#notes-changed-outside-vellum)). Otherwise it answers **410 Gone** at the old path |
+| Deleted on disk behind vellum's back | Answers **410 Gone** until you revoke it (or a note is back at the path) |
 
 ## The pages a reader sees
 

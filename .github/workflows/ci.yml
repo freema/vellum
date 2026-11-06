@@ -41,3 +41,22 @@ jobs:
           # untouched main. Bump this deliberately, together with the Go
           # version above.
           version: v2.12.2
+
+  # Validates .goreleaser.yaml and the Claude Desktop bundle manifest on
+  # every PR, so a broken release config shows up here and not only when a
+  # tag is pushed.
+  release-config:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: goreleaser/goreleaser-action@v7
+        with:
+          distribution: goreleaser
+          # Same pin as release.yml.
+          version: v2.20.0
+          args: check
+      - name: Validate the MCP bundle manifest
+        env:
+          # Same pin as release.yml and Taskfile.yml.
+          MCPB_CLI: "@anthropic-ai/mcpb@2.1.2"
+        run: npx --yes "$MCPB_CLI" validate mcpb/manifest.json

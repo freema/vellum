@@ -26,8 +26,14 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH go build -trimpath -tags emb
 
 # Stage 3: minimal runtime
 FROM gcr.io/distroless/static-debian12:nonroot
+# The MCP registry lists this image only if the label names the server in
+# server.json.
+LABEL io.modelcontextprotocol.server.name="io.github.freema/vellum"
 COPY --from=build /out/vellum /vellum
+# The binary listens on 127.0.0.1 unless told otherwise; in a container the
+# port must be reachable from outside, so the image listens on all interfaces.
 ENV PORT=8080 \
+    VELLUM_HOST=0.0.0.0 \
     VELLUM_VAULT_PATH=/vault
 EXPOSE 8080
 # distroless has no shell/curl; the binary probes itself (see -healthcheck flag)

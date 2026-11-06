@@ -23,6 +23,7 @@ var consentTools = []consentTool{
 	{"list_tasks", "read", "List task notes and their states"},
 	{"write_note", "write", "Create and edit notes"},
 	{"patch_note", "write", "Replace a single note section"},
+	{"replace_in_note", "write", "Replace exact text in a note"},
 	{"append_to_note", "write", "Append to a note"},
 	{"prepend_to_note", "write", "Prepend to a note"},
 	{"add_tags", "write", "Add frontmatter tags"},

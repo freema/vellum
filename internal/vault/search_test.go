@@ -30,11 +30,12 @@ func TestSearchCaseInsensitiveSubstring(t *testing.T) {
 	if len(results) != 2 {
 		t.Fatalf("results = %v, want 2 files", results)
 	}
-	if results[0].Path != "inbox/apples.md" || results[1].Path != "projects/go/notes.md" {
+	// One body hit each: BM25F puts the shorter note first.
+	if results[0].Path != "projects/go/notes.md" || results[1].Path != "inbox/apples.md" {
 		t.Errorf("paths = %s, %s", results[0].Path, results[1].Path)
 	}
-	if results[0].Snippets[0].Match != "GREAT" {
-		t.Errorf("match = %q, want original casing GREAT", results[0].Snippets[0].Match)
+	if results[1].Snippets[0].Match != "GREAT" {
+		t.Errorf("match = %q, want original casing GREAT", results[1].Snippets[0].Match)
 	}
 }
 
