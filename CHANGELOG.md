@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.1] — 2026-11-06
+
 ### Security
 - Web UI: `react-router` 7.18.1 → 7.18.5
   ([GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2),
@@ -746,7 +748,10 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.12.1...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.13.1...HEAD
+[1.13.1]: https://github.com/freema/vellum/compare/v1.13.0...v1.13.1
+[1.13.0]: https://github.com/freema/vellum/compare/v1.12.2...v1.13.0
+[1.12.2]: https://github.com/freema/vellum/compare/v1.12.1...v1.12.2
 [1.12.1]: https://github.com/freema/vellum/compare/v1.12.0...v1.12.1
 [1.12.0]: https://github.com/freema/vellum/compare/v1.11.0...v1.12.0
 [1.11.0]: https://github.com/freema/vellum/compare/v1.10.0...v1.11.0

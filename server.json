@@ -8,11 +8,11 @@
     "source": "github"
   },
   "websiteUrl": "https://freema.github.io/vellum/",
-  "version": "1.13.0",
+  "version": "1.13.1",
   "packages": [
     {
       "registryType": "oci",
-      "identifier": "ghcr.io/freema/vellum:1.13.0",
+      "identifier": "ghcr.io/freema/vellum:1.13.1",
       "transport": {
         "type": "streamable-http",
         "url": "http://localhost:8080/mcp"
@@ -45,8 +45,8 @@
     },
     {
       "registryType": "mcpb",
-      "identifier": "https://github.com/freema/vellum/releases/download/v1.13.0/vellum.mcpb",
-      "version": "1.13.0",
+      "identifier": "https://github.com/freema/vellum/releases/download/v1.13.1/vellum.mcpb",
+      "version": "1.13.1",
       "transport": {
         "type": "stdio"
       }
