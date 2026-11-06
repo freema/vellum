@@ -6,6 +6,15 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Security
+- Web UI: `react-router` 7.18.1 → 7.18.5
+  ([GHSA-qwww-vcr4-c8h2](https://github.com/advisories/GHSA-qwww-vcr4-c8h2),
+  a CSRF bypass in React Router's RSC mode). The UI is a client-side SPA
+  and does not use that mode, so vellum was not affected; the update
+  clears the advisory. The build tooling (`vite` 8.1.3 → 8.3.6 with its
+  `postcss`, `nanoid` and `source-map-js`) is updated too. It only runs
+  when the UI is built and is not part of the binary.
+
 ## [1.13.0] — 2026-11-06
 
 Notes you can hand to somebody. vellum also runs locally next to your
