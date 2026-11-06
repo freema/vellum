@@ -54,9 +54,8 @@ upgrade when a patch is published.
 
 | Version | Supported |
 |---------|-----------|
-| 1.13.0-beta.x | ✅ (pre-release, fixes ship as the next beta) |
-| 1.12.x  | ✅ |
-| < 1.12  | ❌ (upgrade) |
+| 1.13.x  | ✅ |
+| < 1.13  | ❌ (upgrade) |
 
 Published advisories:
 [github.com/freema/vellum/security/advisories](https://github.com/freema/vellum/security/advisories).
