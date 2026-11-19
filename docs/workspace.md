@@ -90,6 +90,14 @@ tokens.
   before). The flush dedupes the two events so it never double-PUTs with
   a stale hash.
 
+## Copying a note
+
+**Copy** in the note header puts the whole note on the clipboard as
+Markdown: the file as it stands in the editor, frontmatter and unsaved
+keystrokes included, in any of the three view modes. The clipboard API
+needs a secure context (HTTPS or `localhost`); elsewhere the button says
+that the copy failed instead of doing nothing.
+
 ## Vault synchronization (MCP writes show up by themselves)
 
 - The tree and list silently re-fetch every **30 s** and on window
