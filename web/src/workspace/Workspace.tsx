@@ -1844,6 +1844,9 @@ function EditorPanel({
   const [moveMenu, setMoveMenu] = useState(false)
   const [shareMenu, setShareMenu] = useState(false)
   const [confirmDelete, setConfirmDelete] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const copiedTimer = useRef<number | undefined>(undefined)
+  useEffect(() => () => window.clearTimeout(copiedTimer.current), [])
   const saveTimer = useRef<number | undefined>(undefined)
   const rawRef = useRef<HTMLTextAreaElement>(null)
   const titleRef = useRef<HTMLInputElement>(null)
@@ -2199,6 +2202,20 @@ function EditorPanel({
     const next = toggleTaskLine(draft, index)
     if (next !== draft) void commit(next)
   }
+  // The whole note as it stands in the editor — frontmatter included, unsaved
+  // keystrokes too — so a paste elsewhere is the file, not a rendering of it.
+  const copyNote = () => {
+    const failed = () => showToast('Copy failed', 'danger')
+    // No clipboard API outside a secure context (plain http on a LAN).
+    const written = navigator.clipboard?.writeText(draft)
+    if (!written) return failed()
+    void written.then(() => {
+      setCopied(true)
+      window.clearTimeout(copiedTimer.current)
+      copiedTimer.current = window.setTimeout(() => setCopied(false), 1600)
+      showToast('Note copied')
+    }, failed)
+  }
 
   return (
     <main className="ws-editor">
@@ -2231,6 +2248,14 @@ function EditorPanel({
                 </button>
               ))}
             </div>
+            <button
+              className="ws-icon-btn"
+              title="Copy note as Markdown"
+              aria-label="Copy note as Markdown"
+              onClick={copyNote}
+            >
+              <Icon name={copied ? 'check' : 'copy'} size={15} />
+            </button>
             {sharing !== 'off' && (
               <span className="ws-share-wrap">
                 <button
