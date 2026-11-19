@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.13.2] — 2026-11-19
+
+### Added
+- **Copy a note to the clipboard.** A Copy button in the note header puts
+  the whole note on the clipboard as Markdown: the file as it stands in
+  the editor, frontmatter and unsaved changes included, in any view mode.
+
 ## [1.13.1] — 2026-11-06
 
 ### Security
@@ -748,7 +755,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.13.1...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.13.2...HEAD
+[1.13.2]: https://github.com/freema/vellum/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/freema/vellum/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/freema/vellum/compare/v1.12.2...v1.13.0
 [1.12.2]: https://github.com/freema/vellum/compare/v1.12.1...v1.12.2
