@@ -400,6 +400,7 @@ works the same as `vellum mcp`.
 | `VELLUM_CLIENT_SECRET` | (none) | The access key (`openssl rand -hex 32`, min 32 chars) |
 | `VELLUM_ISSUER_URL` | `http://localhost:PORT` | **Public HTTPS URL when behind a proxy**; without it OAuth metadata advertises localhost and clients fail |
 | `TRUST_PROXY` | `false` | Set `1` behind Caddy/Traefik so rate limiting sees real client IPs |
+| `VELLUM_AUTH_STATE_FILE` | (none) | Path of a JSON file that keeps OAuth tokens and registered clients across restarts (written `0600`; keep it **outside** the vault). Unset: tokens live in memory and every restart signs all clients out |
 | `CORS_ORIGINS` | claude.ai, claude.com | Origins receiving CORS headers (localhost always allowed) |
 | `VELLUM_ALLOWED_ORIGINS` | claude.ai, claude.com | Browser origins allowed on `/mcp` + `/api` (same-origin and localhost always pass) |
 | `VELLUM_REDIRECT_URIS` | any | Optional exact OAuth redirect allowlist |

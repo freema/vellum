@@ -6,6 +6,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+- **OAuth sessions can survive a restart.** Set `VELLUM_AUTH_STATE_FILE` to
+  a path outside the vault and vellum keeps access tokens, refresh tokens
+  and dynamically-registered clients there (`0600`, atomic writes).
+  Revoked and rotated-out tokens stay gone. Unset, nothing changes: tokens
+  live in memory and a restart signs every client out.
+
 ## [1.13.2] — 2026-11-19
 
 ### Added
