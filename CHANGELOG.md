@@ -6,6 +6,8 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.14.0] — 2026-11-21
+
 ### Added
 - **OAuth sessions can survive a restart.** Set `VELLUM_AUTH_STATE_FILE` to
   a path outside the vault and vellum keeps access tokens, refresh tokens
@@ -762,7 +764,8 @@ First stable release.
 - Walking skeleton: `/healthz`, distroless Docker image + compose, GitHub
   Actions CI and multi-arch release to GHCR, Taskfile.
 
-[Unreleased]: https://github.com/freema/vellum/compare/v1.13.2...HEAD
+[Unreleased]: https://github.com/freema/vellum/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/freema/vellum/compare/v1.13.2...v1.14.0
 [1.13.2]: https://github.com/freema/vellum/compare/v1.13.1...v1.13.2
 [1.13.1]: https://github.com/freema/vellum/compare/v1.13.0...v1.13.1
 [1.13.0]: https://github.com/freema/vellum/compare/v1.12.2...v1.13.0
