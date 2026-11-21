@@ -103,11 +103,11 @@ func writeAtomic(path string, v any) error {
 	}
 	_, werr := tmp.Write(b)
 	if err := errors.Join(werr, tmp.Close()); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if err := os.Rename(tmp.Name(), path); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	return nil
