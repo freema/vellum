@@ -9,7 +9,9 @@
 // screen requires the owner's VELLUM_CLIENT_SECRET. Authorization-code flow
 // with mandatory PKCE (S256), opaque in-memory tokens. No user database, no
 // external identity provider, no persistence: tokens die with the process,
-// clients silently re-authorize.
+// clients silently re-authorize. Set StateFile
+// (VELLUM_AUTH_STATE_FILE) to keep tokens and registered clients across
+// restarts (persist.go).
 package auth
 
 import (
@@ -50,6 +52,7 @@ type Config struct {
 	IssuerURL    string   // VELLUM_ISSUER_URL — public HTTPS URL behind a proxy
 	RedirectURIs []string // VELLUM_REDIRECT_URIS — empty allows any non-empty URI
 	TrustProxy   bool     // TRUST_PROXY — derive client IP from X-Forwarded-For
+	StateFile    string   // VELLUM_AUTH_STATE_FILE — optional; empty = in-memory only
 }
 
 // TokenInfo is the server-side record of an access token.
@@ -149,6 +152,9 @@ func NewProvider(cfg Config) (*Provider, error) {
 		secret:       cfg.ClientSecret,
 		createdAt:    time.Now(),
 	}
+	if err := p.loadState(); err != nil {
+		return nil, fmt.Errorf("auth state file: %w", err)
+	}
 	go p.reaper()
 	return p, nil
 }
@@ -164,6 +170,7 @@ func (p *Provider) registerClient(redirectURIs []string, public bool) *clientReg
 	}
 	p.mu.Lock()
 	p.clients[reg.id] = reg
+	p.saveLocked()
 	p.mu.Unlock()
 	return reg
 }
@@ -205,6 +212,7 @@ func (p *Provider) reaper() {
 					delete(p.refresh, rt)
 				}
 			}
+			p.saveLocked()
 			p.mu.Unlock()
 		}
 	}
@@ -348,11 +356,13 @@ func (p *Provider) exchangeRefresh(clientID, token string, requested []string) (
 	data, ok := p.refresh[token]
 	if !ok || time.Now().After(data.expiresAt) {
 		delete(p.refresh, token)
+		p.saveLocked()
 		return "", "", nil, errors.New("invalid refresh token")
 	}
 	delete(p.refresh, token) // rotation
 
 	if data.clientID != clientID {
+		p.saveLocked() // the rotated-out token must not come back after a restart
 		return "", "", nil, errors.New("client_id mismatch")
 	}
 	scopes = data.scopes
@@ -377,6 +387,7 @@ func (p *Provider) issueTokensLocked(clientID string, scopes []string) (access, 
 		scopes:    scopes,
 		expiresAt: now.Add(RefreshTokenTTL),
 	}
+	p.saveLocked()
 	return access, refresh
 }
 
@@ -407,6 +418,7 @@ func (p *Provider) revokeToken(token string) {
 	p.mu.Lock()
 	delete(p.tokens, token)
 	delete(p.refresh, token)
+	p.saveLocked()
 	p.mu.Unlock()
 }
 
@@ -442,6 +454,7 @@ func (p *Provider) RevokeClient(clientID string) int {
 			delete(p.codes, c)
 		}
 	}
+	p.saveLocked()
 	return n
 }
 
