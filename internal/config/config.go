@@ -88,12 +88,13 @@ type Config struct {
 	CORSOrigins []string
 
 	// OAuth (PHY-112, env names recycled from openclaw-mcp).
-	AuthEnabled  bool     // AUTH_ENABLED (default false — warn loudly)
-	ClientID     string   // VELLUM_CLIENT_ID (default "vellum")
-	ClientSecret string   // VELLUM_CLIENT_SECRET (>= 32 chars when auth on)
-	IssuerURL    string   // VELLUM_ISSUER_URL (public URL behind a proxy)
-	RedirectURIs []string // VELLUM_REDIRECT_URIS (empty = allow any)
-	TrustProxy   bool     // TRUST_PROXY (behind Caddy/Traefik)
+	AuthEnabled   bool     // AUTH_ENABLED (default false — warn loudly)
+	ClientID      string   // VELLUM_CLIENT_ID (default "vellum")
+	ClientSecret  string   // VELLUM_CLIENT_SECRET (>= 32 chars when auth on)
+	IssuerURL     string   // VELLUM_ISSUER_URL (public URL behind a proxy)
+	RedirectURIs  []string // VELLUM_REDIRECT_URIS (empty = allow any)
+	TrustProxy    bool     // TRUST_PROXY (behind Caddy/Traefik)
+	AuthStateFile string   // VELLUM_AUTH_STATE_FILE (empty = tokens die with the process)
 }
 
 // Load reads configuration from the environment, applying defaults.
@@ -115,12 +116,13 @@ func Load() Config {
 		SentryEnvironment: getenv("SENTRY_ENVIRONMENT", "production"),
 		AllowedOrigins: getlist("VELLUM_ALLOWED_ORIGINS",
 			[]string{"https://claude.ai", "https://claude.com"}),
-		AuthEnabled:  getbool("AUTH_ENABLED", false),
-		ClientID:     getenv("VELLUM_CLIENT_ID", "vellum"),
-		ClientSecret: os.Getenv("VELLUM_CLIENT_SECRET"),
-		IssuerURL:    os.Getenv("VELLUM_ISSUER_URL"),
-		RedirectURIs: getlist("VELLUM_REDIRECT_URIS", nil),
-		TrustProxy:   getbool("TRUST_PROXY", false),
+		AuthEnabled:   getbool("AUTH_ENABLED", false),
+		ClientID:      getenv("VELLUM_CLIENT_ID", "vellum"),
+		ClientSecret:  os.Getenv("VELLUM_CLIENT_SECRET"),
+		IssuerURL:     os.Getenv("VELLUM_ISSUER_URL"),
+		RedirectURIs:  getlist("VELLUM_REDIRECT_URIS", nil),
+		TrustProxy:    getbool("TRUST_PROXY", false),
+		AuthStateFile: os.Getenv("VELLUM_AUTH_STATE_FILE"),
 	}
 	cfg.CORSOrigins = getlist("CORS_ORIGINS", cfg.AllowedOrigins)
 	var ok bool

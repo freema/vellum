@@ -182,13 +182,14 @@ func main() {
 			IssuerURL:    cfg.IssuerURL,
 			RedirectURIs: cfg.RedirectURIs,
 			TrustProxy:   cfg.TrustProxy,
+			StateFile:    cfg.AuthStateFile,
 		})
 		if err != nil {
 			logger.Error("auth configuration invalid", "error", err)
 			os.Exit(1)
 		}
 		defer authProvider.Close()
-		logger.Info("oauth enabled", "client_id", cfg.ClientID, "issuer", authProvider.Issuer())
+		logger.Info("oauth enabled", "client_id", cfg.ClientID, "issuer", authProvider.Issuer(), "state_file", cfg.AuthStateFile != "")
 	}
 
 	ln, err := listen(cfg)
